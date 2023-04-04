@@ -226,3 +226,9 @@ x-pubsubdb-mappings:
       - ["{@array.split}", 0]
       - ["{@array.get}"]
 ```
+
+The generated JSON would as follows (*Note how the field name, `name/first` in the mapping file is translated into nested JSON objects.*):
+
+```json
+{ "name": { "first": "Luke" }}
+```
