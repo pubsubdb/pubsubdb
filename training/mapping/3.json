@@ -1,0 +1,18 @@
+{
+  "step": 3,
+  "title": "Using Transformation Functions with Input Parameters",
+  "examples": [
+    {
+      "purpose": "trim a string using {@string.trim} with a specified character",
+      "example": "```\nx-pubsubdb-mappings:\n  trimmed_text:\n    \"@pipe\":\n      - \"{a.output.data.text}\"\n      - [\"{@string.trim}\", \"-\"]\n```\n\n**Object A:**\n```json\n{\n  \"output\": {\n    \"data\": {\n      \"text\": \"-example-\"\n    }\n  }\n}\n```\n\n**Resulting JSON object:**\n```json\n{\n  \"trimmed_text\": \"example\"\n}\n```"
+    },
+    {
+      "purpose": "replace a substring using {@string.replace} with specified search and replacement values",
+      "example": "```\nx-pubsubdb-mappings:\n  replaced_text:\n    \"@pipe\":\n      - \"{a.output.data.text}\"\n      - [\"{@string.replace}\", \"old\", \"new\"]\n```\n\n**Object A:**\n```json\n{\n  \"output\": {\n    \"data\": {\n      \"text\": \"old_value\"\n    }\n  }\n}\n```\n\n**Resulting JSON object:**\n```json\n{\n  \"replaced_text\": \"new_value\"\n}\n```"
+    },
+    {
+      "purpose": "round a number using {@number.round} with a specified precision",
+      "example": "```\nx-pubsubdb-mappings:\n  rounded_number:\n    \"@pipe\":\n      - \"{a.output.data.number}\"\n      - [\"{@number.round}\", 2]\n```\n\n**Object A:**\n```json\n{\n  \"output\": {\n    \"data\": {\n      \"number\": 123.45678\n    }\n  }\n}\n```\n\n**Resulting JSON object:**\n```json\n{\n  \"rounded_number\": 123.46\n}\n```"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "step": 5,
+  "title": "Conditional Transformations",
+  "examples": [
+    {
+      "purpose": "map a temperature value to a description using {@conditional.ternary} and {@compare.lte}",
+      "example": "yaml\nx-pubsubdb-mappings:\n temperature_description:\n \"@pipe\":\n - [\"{a.output.data.temperature}\", 20]\n - [\"{@compare.lte}\"]\n - [\"cold\", \"warm\"]\n - [\"{@conditional.ternary}\"]\n\n\nObject A:\njson\n{\n \"output\": {\n \"data\": {\n \"temperature\": 15\n }\n }\n}\n\n\nResulting JSON object:\njson\n{\n \"temperature_description\": \"cold\"\n}\n"
+    },
+    {
+      "purpose": "conditionally map a text value using {@conditional.ternary} and {@string.equals}",
+      "example": "yaml\nx-pubsubdb-mappings:\n priority:\n \"@pipe\":\n - [\"{a.output.data.status}\", \"urgent\"]\n - [\"{@string.equals}\"]\n - [\"high\", \"normal\"]\n - [\"{@conditional.ternary}\"]\n\n\nObject A:\njson\n{\n \"output\": {\n \"data\": {\n \"status\": \"urgent\"\n }\n }\n}\n\n\nResulting JSON object:\njson\n{\n \"priority\": \"high\"\n}\n"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "step": 4,
+  "title": "Using Nested Transformation Functions",
+  "examples": [
+    {
+      "purpose": "split a string and then get an element by index using {@string.split} and {@array.get}",
+      "example": "```\nx-pubsubdb-mappings:\n  second_word:\n    \"@pipe\":\n      - \"{a.output.data.text}\"\n      - [\"{@string.split}\", \" \"]\n      - [\"{@array.get}\", 1]\n```\n\n**Object A:**\n```json\n{\n  \"output\": {\n    \"data\": {\n      \"text\": \"hello world\"\n    }\n  }\n}\n```\n\n**Resulting JSON object:**\n```json\n{\n  \"second_word\": \"world\"\n}\n```"
+    },
+    {
+      "purpose": "convert a number to string and then get a character by index using {@number.toString} and {@string.charAt}",
+      "example": "```\nx-pubsubdb-mappings:\n  third_digit:\n    \"@pipe\":\n      - \"{a.output.data.number}\"\n      - [\"{@number.toString}\", 2]\n      - [\"{@string.charAt}\"]\n```\n\n**Object A:**\n```json\n{\n  \"output\": {\n    \"data\": {\n      \"number\": 12345\n    }\n  }\n}\n```\n\n**Resulting JSON object:**\n```json\n{\n  \"third_digit\": \"3\"\n}\n```"
+    }
+  ]
+}
