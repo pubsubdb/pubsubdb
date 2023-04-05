@@ -1,0 +1,70 @@
+openapi: 3.0.3
+components:
+  x-pubsubdb:
+
+    activities:
+      a5:
+        title: Review Order
+        type: trigger
+        settings:
+          schema:
+            $ref: ./schemas.yaml#/a5_settings
+          maps:
+            $ref: ./maps.yaml#/a5_settings
+        input:
+          schema:
+            $ref: ./schemas.yaml#/a5_input
+        output:
+          schema:
+            $ref: ./schemas.yaml#/a5_output
+        return:
+          schema:
+            $ref: ./schemas.yaml#/a5_return
+        errors:
+          schema:
+            $ref: ./schemas.yaml#/a5_errors
+        stats:
+          key: {a1.input.data.object_type}
+          id: {a1.input.data.id}
+          measures:
+            - measure: sum
+              target: {a1.input.data.price}
+            - measure: count
+              target: {a1.input.data.price}
+              operator: ">"
+              value: 100
+            - measure: avg
+              target: {a1.input.data.price}
+      a6:
+        title: Get Approval
+        type: await
+        subtype: order.approve
+        input:
+          schema:
+            $ref: ./schemas.yaml#/a6_input
+        output:
+          schema:
+            $ref: ./schemas.yaml#/a6_output
+        errors:
+          schema:
+            $ref: ./schemas.yaml#/a6_errors
+      a7:
+        title: Return Review
+        type: return
+        input:
+          maps:
+            $ref: ./maps.yaml#/a7_input
+
+    transitions:
+      a5:
+        - to: a6
+      a6:
+        - to: a7
+
+    subscribes:
+      - topic: order.review
+        activity: a5
+
+    publishes: 
+      - topic: order.reviewed
+        activity: a5

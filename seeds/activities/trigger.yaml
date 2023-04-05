@@ -1,0 +1,27 @@
+title: Review Order
+type: trigger
+settings:
+  schema:
+    $ref: './schemas.yaml#/Settings1'
+  maps:
+    $ref: './pipes.yaml#/Settings1'
+input:
+  schema:
+    $ref: './schemas.yaml#/Input1'
+output:
+  schema:
+    $ref: './schemas.yaml#/Output1'
+return:
+  schema:
+    $ref: './schemas.yaml#/Return1'
+errors:
+  schema:
+    $ref: './schemas.yaml#/Error1'
+stats:
+  key: "{activity1.input.data.object_type}"
+  id: "{activity1.input.data.id}"
+  measures:
+    - measure: avg
+      target: {activity1.input.data.price}
+    - measure: count
+      target: {activity1.input.data.price}

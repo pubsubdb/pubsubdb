@@ -1,0 +1,45 @@
+{
+  "id": "psc_123",
+  "metadata": {
+    "some_key": "some_value"
+  },
+  "to": {
+    "id": "adr_123",
+    "name": "JIMBO JONES",
+    "address_line1": "100 KING ST",
+    "address_line2": "APT 123",
+    "address_city": "SAN FRANCISCO",
+    "address_state": "CA",
+    "address_zip": "94107-1702",
+    "address_country": "UNITED STATES",
+    "object": "address"
+  },
+  "from": {
+    "id": "adr_123",
+    "name": "JIMBO JONES",
+    "address_line1": "100 KING ST",
+    "address_line2": "APT 123",
+    "address_city": "SAN FRANCISCO",
+    "address_state": "CA",
+    "address_zip": "94107-1702",
+    "address_country": "UNITED STATES",
+    "object": "address"
+  },
+  "message": "some message",
+  "status": "enqueued",
+  "account_id": "f38882ade3621a4075e7",
+  "full_bleed": 1,
+  "carrier": "USPS",
+  "size": "4x6",
+  "mail_type": "usps_first_class",
+  "target_delivery_date": null,
+  "date_created": "2022-02-09T23:45:01.101Z",
+  "date_modified": "2022-02-09T23:45:31.263Z",
+  "mail_date": "2022-02-09T23:45:31.263Z",
+  "send_date": "2022-02-10T00:45:00.861Z",
+  "cancellation_window_applied": true,
+  "priority": 1,
+  "mail_sort": null,
+  "billing_group_id": "bg_123",
+  "object": "postcard"
+}

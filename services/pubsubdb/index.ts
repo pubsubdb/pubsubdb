@@ -1,49 +1,93 @@
 import { PubSubDBConfig } from '../../typedefs/pubsubdb';
-import { EngineService } from '../engine';
-import { ConnectorService } from '../connector';
+import { ConnectionService } from '../connection';
 import { StoreService } from '../store/store';
+import Activities from './activities';
 
+let instance: PubSubDBService;
+
+/**
+ * PubSubDBService is the main service and serves to orchestrate the activity flow
+ */
 class PubSubDBService {
-  private engine: EngineService | null;
-  private connector: ConnectorService | null;
+  private connection: ConnectionService | null;
   private store: StoreService | null;
+  private cluster = false;
+  
 
-  constructor() {
-    this.engine = null;
-    this.connector = null;
-    this.store = null;
-  }
-
-  init(config: PubSubDBConfig) {
-    this.store = config.store;
-    this.store.init();
-
-    for (const Module of config.modules) {
-      if (Module === EngineService) {
-        this.engine = new EngineService(config.store);
-      } else if (Module === ConnectorService) {
-        this.connector = new ConnectorService();
-      }
-    }
+  /**
+   * initialize pubsubdb. this will initialize the store and the connection. also
+   * subscribe if in cluster mode
+   * @param config 
+   */
+  static async init(config: PubSubDBConfig) {
+    instance = new PubSubDBService();
+    instance.cluster = config.cluster || false;
+    instance.store = config.store;
+    await instance.store.init();
+    instance.connection = new ConnectionService();
+    return instance;
   }
 
   getStore() {
     return this.store;
   }
 
-  // Add other methods here
-  pub(topic: string, data: Record<string, any>) {
-    console.log('getting schema for topic', topic);
-    if (!this.engine) throw new Error('Engine module not initialized; cannot publish');
-    this.engine.pub(topic, data);
+  async getSchema(topic: string): Promise<Record<string, unknown>> {
+    //implement
+    return {};
   }
 
+  /**
+   * get the pubsubdb manifest; this will provide a list of all the topics
+   * that are available, etc.
+   */
+  async getManifest(): Promise<Record<string, unknown>> {
+    const _manifest = await this.store.getManifest();
+    return JSON.parse(_manifest);
+  }
+
+  async start(config: Record<string, string|number|boolean>) {
+    if (this.cluster) {
+      //subscribe to all topics (start creating/updating jobs)
+    }
+  }
+
+  static stop(config: Record<string, string|number|boolean>) {
+    if (instance?.cluster) {
+      //unsubscribe from all topics (stop creating/updating jobs)
+    }
+  }
+
+  /**
+   * 
+   * @param topic 
+   * @param data 
+   */
+  async pub(topic: string, data: Record<string, any>) {
+    console.log('getting schema for topic (engine)', topic);
+    const schema = await this.store.getSchema(topic);
+    console.log('schema', topic, schema);
+    const handler = Activities[schema.type];
+    if (handler) {
+      const activity = new handler(schema, data);
+      await activity.process();
+    }
+  }
+
+  /**
+   * subscribe to a topic
+   * @param topic
+   * @param callback 
+   */
   sub(topic: string, callback: (data: Record<string, any>) => void) {
-    if (!this.engine) throw new Error('Engine module not initialized; cannot subscribe');
-    this.engine.sub(topic, callback);
+    //implement (subscribing is real-time and dies when the container dies...use models for persistent subscriptions)
   }
 
-  // todo: return a job by its id...convenience method for getting job data at any time
+  /**
+   * return a job by its id
+   * @param key 
+   * @returns 
+   */
   get(key: string) {
     return this.store.get(key);
   }

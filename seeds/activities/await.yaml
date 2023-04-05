@@ -1,0 +1,12 @@
+title: Get Approval
+type: await
+subtype: order.approve
+input:
+  schema:
+    $ref: ./schemas.yaml#/a6_input
+output:
+  schema:
+    $ref: ./schemas.yaml#/a6_output
+errors:
+  schema:
+    $ref: ./schemas.yaml#/a6_errors

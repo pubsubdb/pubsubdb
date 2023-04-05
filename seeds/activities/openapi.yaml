@@ -1,0 +1,19 @@
+title: Exec Asana Task
+type: openapi
+# Asana Open API Operation Name (`createTask`)
+openapi: asana.1.createTask
+credentials: asana.1.mycreds
+hook:
+  schema:
+    $ref: ./schemas.yaml#/a2_hook
+input:
+  schema:
+    $ref: /specs/asana/1.yml#/TaskRequest
+  maps:
+    $ref: ./maps.yaml#/a2_input
+output:
+  schema:
+    $ref: /specs/asana/1.yml#/TaskResponse
+errors:
+  schema:
+    $ref: /specs/asana/1.yml#/TaskResponseError

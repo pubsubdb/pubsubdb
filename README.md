@@ -19,7 +19,7 @@ PubSubDB uses standard graph notation to define the activities (nodes) and trans
 Multistep workflows like this are defined using a standard Open API extension. This approach allows PubSubDB to leverage the existing Open API `schema` and `path` definitions when orchestrating API endpoints. For instance, the *input* and *output* schemas for the **[Create Asana Task]** activity are already defined in the Asana Open API specification, and the extension can reference them using a standard `$ref` tag.
 
 ## Graph-Oriented Workflow
-PubSubDB workflows are defined as a *rooted out-trees* which means that it uses graphs with a single root (trigger), from which the `activities` branch out in a tree-like structure, with no cycles. This structure allows for efficient scheduling and execution of tasks and is used in parallel and distributed computing systems.
+PubSubDB workflows are defined as *rooted out-trees* which means we use graphs with a single root (trigger), from which the `activities` branch out in a tree-like structure, with no cycles. This structure allows for efficient scheduling and execution of tasks and is used in parallel and distributed computing systems.
 
 When the graph is deployed, the PubSubDB compiler will subscribe activities to topics, ensuring workflow activities execute in sequence, while still adhering to the principles of a loosely-coupled, event-driven architecture. Design the desired process flow, using top-down semantics that make sense to business units while delivering a system based on the adaptaptive advantages of a publish/subscribe architecture.
 
@@ -140,8 +140,8 @@ activities:
     settings:
       schema:
         $ref: './schemas.yaml#/Settings1'
-      mappings:
-        $ref: './x-mappings.yaml#/Settings1'
+      maps:
+        $ref: './pipes.yaml#/Settings1'
     input:
       schema:
         $ref: './schemas.yaml#/Input1'
@@ -156,7 +156,7 @@ activities:
         $ref: './schemas.yaml#/Error1'
     stats:
       key: "{activity1.input.data.object_type}"
-      id: xx
+      id: "{activity1.input.data.id}"
       measures:
         - measure: avg
           target: {activity1.input.data.price}
@@ -208,16 +208,20 @@ Output1:
       type: integer
       format: int64
       description: Created Task ID.
-
 ```
 
-## Data Mapping
-PubSubDB leverages an OpenAPI extension to define the mapping rules from one activity to another. Mapping rules are driven by the subscriber (the downstream activity). Mapping rules can apply static character data (like a fixed string or number) or can apply data produced by upstream activities. Here is an example of how the `x-pubsubdb-mappings` extension can be used to map upstream data from activities, `a1` and `a2` into activity `a3`. It also includes a couple of static values.
+## Composition
+The simplest graphs are linear, defining a predictable sequence of non cyclical activities. But graphs can be composed to model complex business scenarios and can even be designed to support long-running workflows lasting weeks or months. 
 
-Refer to the [Mapping Overview](./docs/mapping.md) for more information.
+Refer to the [Composable Workflow Overview](./docs/composable_workflow.md) for more information.
+
+## Data Mapping
+PubSubDB apping rules are driven by the subscriber (the downstream activity). Mapping rules can apply static character data (like a fixed string or number) or can apply data produced by upstream activities. Here is an example of how to map upstream data from activities, `a1` and `a2` into activity `a3`. It also includes a static string value for the `type` field ("employee").
+
+Refer to the [Data Mapping Overview](./docs/data_mapping.md) for more information.
 
 ```yaml
-x-pubsubdb-mappings:
+x-maps:
   id: {a1.output.data.id}
   type: employee
   "name/first": 
@@ -227,8 +231,14 @@ x-pubsubdb-mappings:
       - ["{@array.get}"]
 ```
 
-The generated JSON would as follows (*Note how the field name, `name/first` in the mapping file is translated into nested JSON objects.*):
+The generated JSON would be as follows (*Note how the field name, `name/first` in the mapping rules is translated into nested JSON objects.*):
 
 ```json
-{ "name": { "first": "Luke" }}
+{ 
+  "id": "abc",
+  "type": "employee",
+  "name": {
+    "first": "Luke" 
+  }
+}
 ```

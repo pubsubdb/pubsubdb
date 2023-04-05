@@ -1,10 +1,21 @@
 type ActivityConfig = {
   id: string;
-  name: string;
-  description: string;
+  title?: string;
   type: string;
-  icon: string;
-  color: string;
+  subtype: string;
 };
 
-export { ActivityConfig };
+type ActivityData = Record<string, any>;
+type ActivityMetadata = {
+  id: string;
+  job_id: string;
+  type: string;
+  subtype: string;
+};
+
+type ActivityContext = {
+  data: ActivityData;
+  metadata: ActivityMetadata;
+}
+
+export { ActivityConfig, ActivityContext, ActivityData, ActivityMetadata };
