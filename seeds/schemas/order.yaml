@@ -1,0 +1,150 @@
+components:
+  schemas:
+    Address:
+      type: object
+      nullable: true
+      description: A US address.
+      required:
+        - id
+        - name
+        - address_line1
+        - address_line2
+        - address_city
+        - address_state
+        - address_zip
+        - address_country
+        - object
+      properties:
+        id:
+          type: string
+          example: adr_123
+          description: The unique identifier for the address.
+        name:
+          type: string
+          example: JIMBO JONES
+          description: The recipient.
+        address_line1:
+          type: string
+          example: 100 KING ST
+          description: The first line of the recipient's street address.
+        address_line2:
+          type: string
+          example: Apt 12
+          description: The optional second line of the recipient's street address.
+        address_city:
+          type: string
+          example: SAN FRANCISCO
+          description: The city of the recipient's address.
+        address_state:
+          type: string
+          example: CA
+          description: The state of the recipient's address.
+        address_zip:
+          type: string
+          example: 94107-1702
+          description: The ZIP code of the recipient's address.
+        address_country:
+          type: string
+          example: UNITED STATES
+          description: The country of the recipient's address.
+        object:
+          type: string
+          example: address
+          description: The object type for the recipient's address.
+    Postcard:
+      type: object
+      required:
+        - id
+        - object
+        - to
+      properties:
+        id:
+          type: string
+          example: psc_123
+          description: The unique identifier for the postcard.
+        object:
+          type: string
+          example: postcard
+          description: The entity type.
+        metadata:
+          type: object
+          description: Additional metadata associated with the postcard.
+          properties:
+            some_key:
+              type: string
+              example: some_value
+              description: Some name/value pair.
+        to:
+          $ref: '#/components/schemas/Address'
+        from:
+          $ref: '#/components/schemas/Address'
+        message:
+          type: string
+          nullable: true
+          example: some message
+          description: The message to be printed on the postcard.
+        status:
+          type: string
+          example: enqueued
+          description: The status of the postcard.
+        account_id:
+          type: string
+          example: f38d32ade3621a4075e7
+          description: The account identifier associated with the postcard.
+        full_bleed:
+          type: integer
+          example: 1
+          description: A value indicating if the postcard has full bleed printing.
+        carrier:
+          type: string
+          example: USPS
+          description: The shipping carrier for the postcard.
+        size:
+          type: string
+          example: 4x6
+          description: The size of the postcard.
+        mail_type:
+          type: string
+          example: usps_first_class
+          description: The type of mail service for the postcard.
+        target_delivery_date:
+          type: string
+          format: date-time
+          nullable: true
+          description: The targeted delivery date for the postcard.
+        date_created:
+          type: string
+          format: date-time
+          example: '2022-02-09T23:45:01.101Z'
+          description: The date and time the postcard was created.
+        date_modified:
+          type: string
+          format: date-time
+          example: '2022-02-09T23:45:31.263Z'
+          description: The date and time the postcard was last modified.
+        mail_date:
+          type: string
+          format: date-time
+          example: '2022-02-09T23:45:31.263Z'
+          description: The date and time the postcard was mailed.
+        send_date:
+          type: string
+          format: date-time
+          example: '2022-02-10T00:45:00.861Z'
+          description: The date and time the postcard was sent.
+        cancellation_window_applied:
+          type: boolean
+          example: true
+          description: Indicates if the cancellation window has been applied to the postcard.
+        priority:
+          type: integer
+          example: 1
+          description: The priority level of the postcard.
+        mail_sort:
+          type: string
+          nullable: true
+          description: The mail sorting method for the postcard.
+        billing_group_id:
+          type: string
+          example: bg_123
+          description: The billing group identifier associated with the postcard.

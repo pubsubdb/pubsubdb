@@ -4,15 +4,15 @@
   "examples": [
     {
       "purpose": "split a string into an array using {@string.split}",
-      "example": "```\nx-pubsubdb-mappings:\n  tags:\n    \"@pipe\":\n      - \"{a.output.data.tags_string}\"\n      - [\"{@string.split}\", \",\"]\n```\n\n**Object A:**\n```json\n{\n  \"output\": {\n    \"data\": {\n      \"tags_string\": \"apple,banana,cherry\"\n    }\n  }\n}\n```\n\n**Resulting JSON object:**\n```json\n{\n  \"tags\": [\n    \"apple\",\n    \"banana\",\n    \"cherry\"\n  ]\n}\n```"
+      "example": "```\nx-pubsubdb-maps:\n  tags:\n    \"@pipe\":\n      - \"{a.output.data.tags_string}\"\n      - [\"{@string.split}\", \",\"]\n```\n\n**Object A:**\n```json\n{\n  \"output\": {\n    \"data\": {\n      \"tags_string\": \"apple,banana,cherry\"\n    }\n  }\n}\n```\n\n**Resulting JSON object:**\n```json\n{\n  \"tags\": [\n    \"apple\",\n    \"banana\",\n    \"cherry\"\n  ]\n}\n```"
     },
     {
       "purpose": "calculate the sum of two numbers using {@number.add}",
-      "example": "```\nx-pubsubdb-mappings:\n  total:\n    \"@pipe\":\n      - \"{a.output.data.number1}\"\n      - \"{a.output.data.number2}\"\n      - [\"{@number.add}\"]\n```\n\n**Object A:**\n```json\n{\n  \"output\": {\n    \"data\": {\n      \"number1\": 5,\n      \"number2\": 7\n    }\n  }\n}\n```\n\n**Resulting JSON object:**\n```json\n{\n  \"total\": 12\n}\n```"
+      "example": "```\nx-pubsubdb-maps:\n  total:\n    \"@pipe\":\n      - \"{a.output.data.number1}\"\n      - \"{a.output.data.number2}\"\n      - [\"{@number.add}\"]\n```\n\n**Object A:**\n```json\n{\n  \"output\": {\n    \"data\": {\n      \"number1\": 5,\n      \"number2\": 7\n    }\n  }\n}\n```\n\n**Resulting JSON object:**\n```json\n{\n  \"total\": 12\n}\n```"
     },
     {
       "purpose": "Nested pipes",
-      "example": "\\n### Example 3: Nested Pipes\\n\\nX-PubSubDB-Mappings:\\n\\n```yaml\\ninitials:\\n  \\\"@pipe\\\":\\n    - \\\"{a.output.data.full_name}\\\"\\n    - [\\\"{@array.split}\\\", \\\" \\\"]\\n    - \\\"@pipe\\\":\\n      - [\\\"{@array.get}\\\", 0]\\n      - [\\\"{@string.charAt}\\\", 0]\\n    - \\\"@pipe\\\":\\n      - [\\\"{@array.get}\\\", 1]\\n      - [\\\"{@string.charAt}\\\", 0]\\n    - [\\\"{@string.concat}\\\"]\\n```\\n\\n**Object A:**\\n\\n```json\\n{\\n  \\\"output\\\": {\\n    \\\"data\\\": {\\n      \\\"full_name\\\": \\\"John Doe\\\"\\n    }\\n  }\\n}\\n```\\n\\n**Resulting JSON object:**\\n\\n```json\\n{\\n  \\\"initials\\\": \\\"JD\\\"\\n}\\n```"
+      "example": "\\n### Example 3: Nested Pipes\\n\\nx-pubsubdb-maps:\\n\\n```yaml\\ninitials:\\n  \\\"@pipe\\\":\\n    - \\\"{a.output.data.full_name}\\\"\\n    - [\\\"{@array.split}\\\", \\\" \\\"]\\n    - \\\"@pipe\\\":\\n      - [\\\"{@array.get}\\\", 0]\\n      - [\\\"{@string.charAt}\\\", 0]\\n    - \\\"@pipe\\\":\\n      - [\\\"{@array.get}\\\", 1]\\n      - [\\\"{@string.charAt}\\\", 0]\\n    - [\\\"{@string.concat}\\\"]\\n```\\n\\n**Object A:**\\n\\n```json\\n{\\n  \\\"output\\\": {\\n    \\\"data\\\": {\\n      \\\"full_name\\\": \\\"John Doe\\\"\\n    }\\n  }\\n}\\n```\\n\\n**Resulting JSON object:**\\n\\n```json\\n{\\n  \\\"initials\\\": \\\"JD\\\"\\n}\\n```"
     }
   ]
 }

@@ -1,0 +1,107 @@
+openapi: 3.0.3
+components:
+
+  x-pubsubdb:
+    activities:
+      a1:
+        title: Get Approval
+        type: trigger
+        settings:
+          schema:
+            $ref: ./schemas.yaml#/a1_settings
+          maps:
+            $ref: ./maps.yaml#/a1_settings
+        input:
+          schema:
+            $ref: ./schemas.yaml#/Input1
+          maps:
+            $ref: ./maps.yaml#/a1_input
+        output:
+          schema:
+            $ref: ./schemas.yaml#/a1_output
+        return:
+          schema:
+            $ref: ./schemas.yaml#/a1_return
+        errors:
+          schema:
+            $ref: ./schemas.yaml#/a1_errors
+        stats:
+          id: {$self.output.data.id}
+          key: {$self.output.data.object_type}
+          measures:
+            - measure: count
+              target: {$self.output.data.region}
+            - measure: count
+              target: {$self.output.data.division}
+      a2:
+        title: Exec Asana Task
+        type: openapi
+        # Asana Open API Operation Name (`createTask`)
+        openapi: asana.1.createTask
+        credentials: asana.1.mycreds
+        hook:
+          schema:
+            $ref: ./schemas.yaml#/a2_hook
+        input:
+          schema:
+            $ref: /specs/asana/1.yml#/TaskRequest
+          maps:
+            $ref: ./maps.yaml#/a2_input
+        output:
+          schema:
+            $ref: /specs/asana/1.yml#/TaskResponse
+        errors:
+          schema:
+            $ref: /specs/asana/1.yml#/TaskResponseError
+      a3:
+        title: Return True
+        type: return
+        input:
+          # the activity, `a1`, references the `return` schema
+          maps:
+            $ref: './maps.yaml#/a3_input'
+      a4:
+        title: Return False
+        type: return
+        input:
+          maps:
+            $ref: './maps.yaml#/a4_input'
+
+    transitions:
+      a1:
+        - to: a2
+      a2:
+        - to: a3
+          conditions:
+            match:
+              - expected: true
+                actual: {a2.hook.data.approved}
+        - to: a4
+          conditions:
+            gate: or
+            match:
+              - expected: false
+                actual: {a2.hook.data.approved}
+              - expected: false
+                actual: {a1.output.data.price}
+                operator: ">"
+                value: 100
+
+    hooks:
+      - to: a2
+        topic: asana.1.taskUpdated
+        conditions:
+          gate: and
+          match:
+            - expected: {$self.output.data.task_id}
+              actual: {$self.hook.data.task_id}
+            - expected: completed
+            - actual: {$self.hook.data.status}
+
+    subscribes:
+      - topic: order.approve
+        activity: a1
+
+    publishes: 
+      - topic: order.approved
+        activity: a1
