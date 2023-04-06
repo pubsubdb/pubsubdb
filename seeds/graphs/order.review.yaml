@@ -46,10 +46,6 @@ components:
       a5:
         - to: a6
 
-    subscribes:
-      - topic: order.review
-        activity: a5
+    subscribes: order.review
 
-    publishes: 
-      - topic: order.reviewed
-        activity: a5
+    publishes: order.reviewed

@@ -84,7 +84,7 @@ const sound = isDog ? "bark" : "meow";
 The functional approach (used by PubSubDB) is as follows:
 
 ```javascript
-const sound = condition.ternary(isDog, "bark", "meow");
+const sound = ternary(isDog, "bark", "meow");
 ```
 
 ### Example 2) Instance Property Syntax
@@ -98,7 +98,7 @@ const length = someString.length
 On the other hand, the functional approach remains syntactically consistent:
 
 ```javascript
-const length = string.length(someString);
+const length = stringLength(someString);
 ```
 
 ### Example 3) Instance Method Syntax
@@ -112,12 +112,12 @@ const someString = someArray.join(' ');
 The functional approach, by design, remains syntactically consistent:
 
 ```javascript
-const someString = array.join(someArray, ' ');
+const someString = join(someArray, ' ');
 ```
 
 ### Overview of `@pipe`
 
-`@pipe` is the central mechanism for invoking functional transformations. It is executed at runtime as an array of arrays, where each row represents a transformation step. The transformed/resolved data is then used as input for the next step as necessary until all transformations have been run. 
+`@pipe` is the central mechanism for invoking functional transformations. It is executed at runtime as an array of arrays, where each row represents a transformation step. The transformed/resolved data is then used as input for the next step as necessary until all transformations have been run. This pattern works, because it executes all ECMA Script commands as functions with inputs, reducing the semantic variability of the language.
 
 There are three types of data that can be used within `@pipe`:
 1. **Static**: fixed values such as numbers, strings, and booleans.

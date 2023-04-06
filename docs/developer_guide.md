@@ -13,7 +13,10 @@ This guide defines the recommended development process for deploying a PubSubDB 
 8. [Define Statistics](#define-statistics)
 9. [Plan](#plan)
 10. [Deploy](#deploy)
-11. [Execute](#execute-publish)
+11. [Trigger Workflow Job](#trigger-workflow-job)
+12. [Get Job Data](#get-job-data)
+13. [Retrieve Job Metadata](#get-job-metadata)
+14. [Get Aggregat e Job Statistics](#get-job-statistics)
 
 
 ## Define the Business Process
@@ -94,16 +97,18 @@ transitions:
       conditions:
         match:
           - expected: true
-            actual: {a5.output.data.price}
-            operator: "<"
-            value: 100
+            actual: 
+              "@pipe":
+                - ["{a5.output.data.price}", 100]
+                - ["{number.lt}"]
     - to: a7
       conditions:
         match:
           - expected: true
-            actual: {a5.output.data.price}
-            operator: ">="
-            value: 100
+            actual: 
+              "@pipe":
+                - ["{a5.output.data.price}", 100]
+                - ["{number.gte}"]
 ```
 
 ## Define Activity Topics
@@ -133,16 +138,18 @@ transitions:
       conditions:
         match:
           - expected: true
-            actual: {a5.output.data.price}
-            operator: "<"
-            value: 100
+            actual: 
+              "@pipe":
+                - ["{a5.output.data.price}", 100]
+                - ["{number.lt}"]
     - to: a7
       conditions:
         match:
           - expected: true
-            actual: {a5.output.data.price}
-            operator: ">="
-            value: 100
+            actual: 
+              "@pipe":
+                - ["{a5.output.data.price}", 100]
+                - ["{number.gte}"]
 ```
 
 ### TIP: Organizing Files for Maintainability
@@ -208,12 +215,12 @@ PubSubDB is built using the Open API standard. Any Web service with an Open API 
 
 When defining schemas, it's useful to consider the messages being exchanged. Let's start with activity, `a5`, which is the trigger activity for the APPROVE ORDER PRICE flow. The purpose of the flow is to essentially approve an order based upon its price. The message exchange is as follows:
 
-**Expected INCOMING event payload (activity a5)**
+**Expected INCOMING event payload for activity a5**
 ```json
 { "id": "item_123", "price": 55.67 }
 ```
 
-**Expected OUTGOING event payload (activity a5)**
+**Expected OUTGOING event payload for activity a5**
 ```json
 { "id": "item_123", "price": 55.67, "approved": true }
 ```
@@ -367,7 +374,7 @@ activities:
   ...
 ```
 
-The following table lists the key statistics fields and their purpose.
+The following table lists the key statistics fields and their purpose. Note that the `key` and `id` fields can also use a `@pipe` declaration if a complex transformation is necessary to extract their value from the provided payload.
 
 | Field Name       | Description                                                        |
 | ---------------- | ------------------------------------------------------------------ |
@@ -397,7 +404,7 @@ const plan = pubsubdb.deploy('./pubsubdb.yaml');
 //outputs > CHANGED graph, models, compilation errors, potential risk points for data loss
 ```
 
-## Trigger a Workflow Job
+## Trigger Workflow Job
 Publish events to trigger any flow. In this example, the ORDER APPROVAL flow is triggered by publishing the `order.approval.requested` event. The payload should adhere to the `output` schema defined for the activity trigger, `a1`.
 
 ```ts
@@ -405,7 +412,7 @@ import { pubsubdb } from '@pubsubdb/pubsubdb';
 const jobId = pubsubdb.pub('order.approval.requested', { id: 'order_123', price: 47.99 });
 ```
 
-## Get the Job Status
+## Get Job Data
 Retrieve the data for a single workflow using the job ID.
 
 ```ts
@@ -413,7 +420,7 @@ import { pubsubdb } from '@pubsubdb/pubsubdb';
 const job = pubsubdb.get('order_123');
 ```
 
-### Retrieve Job Metadata
+## Get Job Metadata
 Query the status of a single workflow using the job ID.
 
 ```ts
@@ -421,18 +428,102 @@ import { pubsubdb } from '@pubsubdb/pubsubdb';
 const job = pubsubdb.getJobMetadata('order_123');
 ```
 
-### Get Aggregate Job Statistics
-Query for aggregation statistics by providing a time range and measures. In this example, the count for approved orders has been requested for the past 24 hours. The granularity was set to `1h`, so an array with 24 distinct time slices will be returned.
+## Get Job Statistics
+Query for aggregation statistics by providing a time range and measures. In this example, the stats for the `order.approval.price.requested` topic have been requested fr the past 24 hours. The granularity is set to `1h`, so an array with 24 distinct time slices will be returned.
 
 >The count for any target field is distributed across cardinal values. Getting the count for a boolean field will return the total number of both `true` and `false` values.
 
 ```ts
 import { pubsubdb } from '@pubsubdb/pubsubdb';
-const stats = pubsubdb.getJobStatistics('approval.requested', {
+const stats = pubsubdb.getJobStatistics('order.approval.price.requested', {
   key: 'widgetX',
   granularity: '1h',
   range: '24h',
-  end: 'NOW',
-  measures: [{ approved: count }]
+  end: 'NOW'
 });
+```
+
+The specific measures that will be returned are defined by the trigger, `a5`. That activity has sole responsibility for the topic. Accordingly, here are the target meeasures as defined in the workflow for `a5`. 
+
+```yaml
+stats:
+  key: "{activity1.input.data.object_type}"
+  id: "{activity1.input.data.id}"
+  measures:
+    - measure: avg
+      target: {activity1.input.data.price}
+    - measure: count
+      target: {activity1.input.data.object_type}
+```
+
+When the response is returned, the *average* for the `price` field and the *count* for the cardinal `object_type` values will be provided, along withe the 1 hour sub-measures.
+
+
+```json
+{
+  "key": "widgetX",
+  "granularity": "1h",
+  "range": "24h",
+  "end": "NOW",
+  "measures": [
+    {
+      "target": "object_type:widgetA",
+      "type": "count",
+      "value": 70
+    },
+    {
+      "target": "object_type:widgetB",
+      "type": "count",
+      "value": 50
+    },
+    {
+      "target": "price",
+      "type": "avg",
+      "value": 95.50
+    }
+  ],
+  "segments": [
+    {
+      "time": "2023-04-04T00:00:00Z",
+      "measures": [
+        {
+          "target": "object_type:widgetA",
+          "type": "count",
+          "value": 3
+        },
+        {
+          "target": "object_type:widgetB",
+          "type": "count",
+          "value": 2
+        },
+        {
+          "target": "price",
+          "type": "avg",
+          "value": 94.33
+        }
+      ]
+    },
+    {
+      "time": "2023-04-04T01:00:00Z",
+      "measures": [
+        {
+          "target": "object_type:widgetA",
+          "type": "count",
+          "value": 4
+        },
+        {
+          "target": "object_type:widgetB",
+          "type": "count",
+          "value": 2
+        },
+        {
+          "target": "price",
+          "type": "avg",
+          "value": 92.67
+        }
+      ]
+    },
+    ...
+  ]
+}
 ```
