@@ -1,9 +1,10 @@
 # Composable Workflow
-PubSubDB workflows are defined as a *rooted out-trees* which means we use graphs with a single root (trigger), from which the `activities` branch out in a tree-like structure, *with no cycles*. This structure allows for efficient scheduling and execution of tasks and is used in parallel and distributed computing systems.
+PubSubDB workflows are defined as *rooted out-trees* which means we use graphs with a single root (trigger), from which the `activities` branch out in a tree-like structure, *with no cycles*. This structure allows for efficient scheduling and execution of tasks and is used in parallel and distributed computing systems.
 
 When the graph is deployed, the PubSubDB compiler will subscribe activities to topics, ensuring workflow activities execute in sequence, while still adhering to the principles of a loosely-coupled, event-driven architecture.
 
 <small>**PUBSUBDB WORKFLOW DEFINITION FILE**</small>
+
 ```yaml
 activities:
   a1:
