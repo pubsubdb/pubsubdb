@@ -79,13 +79,13 @@ components:
           schema:
             $ref: ./schemas.yaml#/a1_errors
         stats:
-          id: {$self.output.data.id}
-          key: {$self.output.data.object_type}
+          id: "{$self.output.data.id}"
+          key: "{$self.output.data.object_type}"
           measures:
             - measure: count
-              target: {$self.output.data.region}
+              target: "{$self.output.data.region}"
             - measure: count
-              target: {$self.output.data.division}
+              target: "{$self.output.data.division}"
       a2:
         title: Exec Asana Task
         type: openapi
@@ -128,13 +128,13 @@ components:
           conditions:
             match:
               - expected: true
-                actual: {a2.hook.data.approved}
+                actual: "{a2.hook.data.approved}"
         - to: a4
           conditions:
             gate: or
             match:
               - expected: false
-                actual: {a2.hook.data.approved}
+                actual: "{a2.hook.data.approved}"
               - expected: false
                 actual: 
                   "@pipe":
@@ -147,10 +147,10 @@ components:
           conditions:
             gate: and
             match:
-              - expected: {$self.output.data.task_id}
-                actual: {$self.hook.data.task_id}
+              - expected: "{$self.output.data.task_id}"
+                actual: "{$self.hook.data.task_id}"
               - expected: completed
-                actual: {$self.hook.data.status}
+                actual: "{$self.hook.data.status}"
 
     subscribes: order.approve
 
@@ -193,16 +193,16 @@ components:
           schema:
             $ref: ./schemas.yaml#/a5_errors
         stats:
-          key: {a1.input.data.object_type}
+          key: "{a1.input.data.object_type}"
           measures:
             - measure: sum
-              target: {a1.input.data.price}
+              target: "{a1.input.data.price}"
             - measure: count
-              target: {a1.input.data.price}
+              target: "{a1.input.data.price}"
               operator: ">"
               value: 100
             - measure: avg
-              target: {a1.input.data.price}
+              target: "{a1.input.data.price}"
       a6:
         title: Get Approval
         type: await

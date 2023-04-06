@@ -33,16 +33,16 @@ An example graph in YAML, showcasing three activities, is provided below for the
 
 ```yaml
 activities:
-  a1
+  a1:
     title: Get Approval
     type: trigger
-  a2
+  a2:
     title: Get Price Approval
     type: await
-  a3
+  a3:
     title: Return True
     type: return
-  a4
+  a4:
     title: Return False
     type: return
 
@@ -54,24 +54,23 @@ transitions:
     - to: a4
 ```
 
-
 A similar graph showcases the graph for the **Approve Order Price** business process:
 
 ```yaml
 activities:
-  a5
+  a5:
     title: Get Price Approval
     type: trigger
-  a6
+  a6:
     title: Return True
     type: return
-  a7
+  a7:
     title: Return False
     type: return
 transitions:
-  a1:
-    - to: a2
-    - to: a3
+  a5:
+    - to: a6
+    - to: a7
 ```
 
 ## Define Conditional Activities
@@ -81,13 +80,13 @@ Consider the **Approve Order Price** graph with the conditions added to check th
 
 ```yaml
 activities:
-  a5
+  a5:
     title: Get Price Approval
     type: trigger
-  a6
+  a6:
     title: Return True
     type: return
-  a7
+  a7:
     title: Return False
     type: return
 
@@ -122,13 +121,13 @@ subscribes: order.approval.price.requested
 publishes: order.approval.price.responded
 
 activities:
-  a5
+  a5:
     title: Get Price Approval
     type: trigger
-  a6
+  a6:
     title: Return True
     type: return
-  a7
+  a7:
     title: Return False
     type: return
 
@@ -230,9 +229,7 @@ Let's define the necessary schemas for activity, `a5`. Schemas can be cumbersome
 >ChatGPT is an expert at schema design and needs little more than a list of field names: `Create a YAML spec with a field named 'a5' and subfield named 'return'. Append a JSON schema with fields: id, price, approved. Add another subfield named 'output' and include fields: id, price.`
 
 ```yaml
-# ./src/graphs/order.approval.price.requested.yaml
-subscribes: order.approval.price.requested
-publishes: order.approval.price.responded
+# ./src/schemas/order.approval.price.requested.yaml
 
 a5:
   return:
@@ -268,7 +265,7 @@ subscribes: order.approval.price.requested
 publishes: order.approval.price.responded
 
 activities:
-  a5
+  a5:
     title: Get Price Approval
     type: trigger
     output:
@@ -299,13 +296,13 @@ In order to do this, we'll need to add a *mapping rules file* and reference from
 # ./src/maps/order.approval.price.requested.yaml
 a6:
   input:
-    id: {a5.output.data.id}
-    price: {a5.output.data.price}
+    id: "{a5.output.data.id}"
+    price: "{a5.output.data.price}"
     approved: true
 a7:
   input:
-    id: {a5.output.data.id}
-    price: {a5.output.data.price}
+    id: "{a5.output.data.id}"
+    price: "{a5.output.data.price}"
     approved: false
 ```
 
@@ -317,7 +314,7 @@ subscribes: order.approval.price.requested
 publishes: order.approval.price.responded
 
 activities:
-  a5
+  a5:
     title: Get Price Approval
     type: trigger
     output:
@@ -326,14 +323,14 @@ activities:
     return:
       schema:
         $ref: '../schemas/order.approval.price.requested.yaml#/a5/return'
-  a6
+  a6:
     title: Return True
     type: return
     input:
       maps:
         # MAPPING $REF: a6/input
         $ref: '../maps/order.approval.price.requested.yaml#/a6/input'
-  a7
+  a7:
     title: Return False
     type: return
     input:
@@ -354,7 +351,7 @@ subscribes: order.approval.price.requested
 publishes: order.approval.price.responded
 
 activities:
-  a5
+  a5:
     title: Get Price Approval
     type: trigger
     output:
@@ -364,13 +361,13 @@ activities:
       schema:
         $ref: '../schemas/order.approval.price.requested.yaml#/a5/return'
     stats:
-      key: "{activity1.input.data.object_type}"
-      id: "{activity1.input.data.id}"
+      key: "{a5.input.data.object_type}"
+      id: "{a5.input.data.id}"
       measures:
         - measure: avg
-          target: {activity1.input.data.price}
+          target: "{a5.input.data.price}"
         - measure: count
-          target: {activity1.input.data.object_type}
+          target: "{a5.input.data.object_type}"
   ...
 ```
 
@@ -447,17 +444,16 @@ The specific measures that will be returned are defined by the trigger, `a5`. Th
 
 ```yaml
 stats:
-  key: "{activity1.input.data.object_type}"
-  id: "{activity1.input.data.id}"
+  key: "{a5.input.data.object_type}"
+  id: "{a5.input.data.id}"
   measures:
     - measure: avg
-      target: {activity1.input.data.price}
+      target: "{a5.input.data.price}"
     - measure: count
-      target: {activity1.input.data.object_type}
+      target: "{a5.input.data.object_type}"
 ```
 
 When the response is returned, the *average* for the `price` field and the *count* for the cardinal `object_type` values will be provided, along withe the 1 hour sub-measures.
-
 
 ```json
 {

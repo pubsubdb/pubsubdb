@@ -1,0 +1,12 @@
+app:
+  id: myapp
+  version: 1
+  settings:
+    some_boolean: true
+    some:
+      nested:
+        string: hello
+        integer: 2
+  graphs:
+    - $ref: ./graphs/order.approval.requested.yaml
+    - $ref: ./graphs/order.approval.price.requested.yaml

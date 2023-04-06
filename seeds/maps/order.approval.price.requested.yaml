@@ -1,0 +1,10 @@
+a6:
+  input:
+    id: "{a5.output.data.id}"
+    price: "{a5.output.data.price}"
+    approved: true
+a7:
+  input:
+    id: "{a5.output.data.id}"
+    price: "{a5.output.data.price}"
+    approved: false

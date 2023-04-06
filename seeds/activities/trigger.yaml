@@ -22,6 +22,6 @@ stats:
   id: "{activity1.input.data.id}"
   measures:
     - measure: avg
-      target: {activity1.input.data.price}
+      target: "{activity1.input.data.price}"
     - measure: count
-      target: {activity1.input.data.price}
+      target: "{activity1.input.data.price}"
