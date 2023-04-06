@@ -1,0 +1,314 @@
+{
+  "app": {
+    "id": "myapp",
+    "version": 1,
+    "settings": {
+      "some_boolean": true,
+      "some": {
+        "nested": {
+          "string": "hello",
+          "integer": 2
+        }
+      }
+    },
+    "graphs": [
+      {
+        "subscribes": "order.approval.requested",
+        "publishes": "order.approval.responded",
+        "activities": {
+          "a1": {
+            "title": "Get Approval",
+            "type": "trigger",
+            "output": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "The unique identifier for the object."
+                  },
+                  "price": {
+                    "type": "number",
+                    "description": "The price of the item.",
+                    "minimum": 0
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "description": "The type of the order (e.g, widgetA, widgetB)"
+                  }
+                }
+              }
+            },
+            "return": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "The unique identifier for the object."
+                  },
+                  "price": {
+                    "type": "number",
+                    "description": "The price of the item.",
+                    "minimum": 0
+                  },
+                  "approvals": {
+                    "type": "object",
+                    "description": "A hash of all approval facets and their status (price, etc)",
+                    "properties": {
+                      "price": {
+                        "type": "boolean",
+                        "description": "Price approval status; true if approved on this facet."
+                      }
+                    }
+                  },
+                  "approved": {
+                    "type": "boolean",
+                    "description": "Overall approval status of the item."
+                  }
+                }
+              }
+            }
+          },
+          "a2": {
+            "title": "Get Price Approval",
+            "type": "await",
+            "subtype": "order.approval.price.requested",
+            "input": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "The unique identifier for the object."
+                  },
+                  "price": {
+                    "type": "number",
+                    "description": "The price of the item.",
+                    "minimum": 0
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "description": "The type of the order (e.g, widgetA, widgetB)"
+                  }
+                }
+              },
+              "maps": {
+                "id": "{a1.output.data.id}",
+                "price": "{a1.output.data.price}",
+                "object_type": "{a1.output.data.object_type}"
+              }
+            },
+            "output": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "The unique identifier for the object."
+                  },
+                  "price": {
+                    "type": "number",
+                    "description": "The price of the item.",
+                    "minimum": 0
+                  },
+                  "approved": {
+                    "type": "boolean",
+                    "description": "Approval status of the object."
+                  }
+                }
+              }
+            }
+          },
+          "a3": {
+            "title": "Return True",
+            "type": "return",
+            "input": {
+              "maps": {
+                "id": "{a1.output.data.id}",
+                "price": "{a1.output.data.price}",
+                "approvals/price": "{a2.output.data.approved}",
+                "approved": true
+              }
+            }
+          },
+          "a4": {
+            "title": "Return False",
+            "type": "return",
+            "input": {
+              "maps": {
+                "id": "{a1.output.data.id}",
+                "price": "{a1.output.data.price}",
+                "approvals/price": "{a2.output.data.approved}",
+                "approved": false
+              }
+            }
+          }
+        },
+        "transitions": {
+          "a1": [
+            {
+              "to": "a2"
+            }
+          ],
+          "a2": [
+            {
+              "to": "a3",
+              "conditions": {
+                "match": [
+                  {
+                    "expected": true,
+                    "actual": "{a2.output.data.approved}"
+                  }
+                ]
+              }
+            },
+            {
+              "to": "a4",
+              "conditions": {
+                "match": [
+                  {
+                    "expected": false,
+                    "actual": "{a2.output.data.approved}"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "subscribes": "order.approval.price.requested",
+        "publishes": "order.approval.price.responded",
+        "activities": {
+          "a5": {
+            "title": "Get Price Approval",
+            "type": "trigger",
+            "output": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "The unique identifier for the object."
+                  },
+                  "price": {
+                    "type": "number",
+                    "description": "The price of the item.",
+                    "minimum": 0
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "description": "The type of the order (e.g, widgetA, widgetB)"
+                  }
+                }
+              }
+            },
+            "return": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "The unique identifier for the object."
+                  },
+                  "price": {
+                    "type": "number",
+                    "description": "The price of the item.",
+                    "minimum": 0
+                  },
+                  "approved": {
+                    "type": "boolean",
+                    "description": "Approval status of the object."
+                  }
+                }
+              }
+            },
+            "stats": {
+              "key": "{a5.output.data.object_type}",
+              "id": "{a5.input.data.id}",
+              "measures": [
+                {
+                  "measure": "avg",
+                  "target": "{activity1.input.data.price}"
+                },
+                {
+                  "measure": "count",
+                  "target": "{activity1.input.data.object_type}"
+                }
+              ]
+            }
+          },
+          "a6": {
+            "title": "Return True",
+            "type": "return",
+            "input": {
+              "maps": {
+                "id": "{a5.output.data.id}",
+                "price": "{a5.output.data.price}",
+                "approved": true
+              }
+            }
+          },
+          "a7": {
+            "title": "Return False",
+            "type": "return",
+            "input": {
+              "maps": {
+                "id": "{a5.output.data.id}",
+                "price": "{a5.output.data.price}",
+                "approved": false
+              }
+            }
+          }
+        },
+        "transitions": {
+          "a5": [
+            {
+              "to": "a6",
+              "conditions": {
+                "match": [
+                  {
+                    "expected": true,
+                    "actual": {
+                      "@pipe": [
+                        [
+                          "{a5.output.data.price}",
+                          100
+                        ],
+                        [
+                          "{number.lt}"
+                        ]
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "to": "a7",
+              "conditions": {
+                "match": [
+                  {
+                    "expected": true,
+                    "actual": {
+                      "@pipe": [
+                        [
+                          "{a5.output.data.price}",
+                          100
+                        ],
+                        [
+                          "{number.gte}"
+                        ]
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

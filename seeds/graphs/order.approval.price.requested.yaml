@@ -1,0 +1,52 @@
+subscribes: order.approval.price.requested
+publishes: order.approval.price.responded
+
+activities:
+  a5:
+    title: Get Price Approval
+    type: trigger
+    output:
+      schema:
+        $ref: '../schemas/order.approval.price.requested.yaml#/a5/output'
+    return:
+      schema:
+        $ref: '../schemas/order.approval.price.requested.yaml#/a5/return'
+    stats:
+      key: "{a5.output.data.object_type}"
+      id: "{a5.input.data.id}"
+      measures:
+        - measure: avg
+          target: "{activity1.input.data.price}"
+        - measure: count
+          target: "{activity1.input.data.object_type}"
+  a6:
+    title: Return True
+    type: return
+    input:
+      maps:
+        $ref: '../maps/order.approval.price.requested.yaml#/a6/input'
+  a7:
+    title: Return False
+    type: return
+    input:
+      maps:
+        $ref: '../maps/order.approval.price.requested.yaml#/a7/input'
+
+transitions:
+  a5:
+    - to: a6
+      conditions:
+        match:
+          - expected: true
+            actual: 
+              "@pipe":
+                - ["{a5.output.data.price}", 100]
+                - ["{number.lt}"]
+    - to: a7
+      conditions:
+        match:
+          - expected: true
+            actual: 
+              "@pipe":
+                - ["{a5.output.data.price}", 100]
+                - ["{number.gte}"]

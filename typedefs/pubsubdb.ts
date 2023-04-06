@@ -9,9 +9,24 @@ type PubSubDBConfig = {
   cluster?: boolean; //default false if undefined
 }
 
+type PubSubDBManifest = {
+  app: {
+    id: string;
+    version: number;
+    settings: Record<string, any>;
+    graphs: Array<{
+      subscribes: string;
+      publishes: string;
+      activities: Record<string, any>;
+    }>;
+  };
+};
+
+
 export {
   PubSubDB,
   PubSubDBConfig,
   StoreService,
-  RedisStoreService
+  RedisStoreService,
+  PubSubDBManifest
 };
