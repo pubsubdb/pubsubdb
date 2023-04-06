@@ -24,13 +24,9 @@ transitions:
   a2:
     - to: a3
 
-subscribes:
-  - topic: approval.requested
-    activity: a1
+subscribes: approval.requested
 
-publishes: 
-  - topic: approval.responded
-    activity: a1
+publishes: approval.responded
 ```
 
 ## Composition
@@ -140,28 +136,25 @@ components:
               - expected: false
                 actual: {a2.hook.data.approved}
               - expected: false
-                actual: {a1.output.data.price}
-                operator: ">"
-                value: 100
+                actual: 
+                  "@pipe":
+                    - ["{a1.output.data.price}", 100]
+                    - ["{number.gt}"]
 
     hooks:
-      - to: a2
-        topic: asana.1.taskUpdated
-        conditions:
-          gate: and
-          match:
-            - expected: {$self.output.data.task_id}
-              actual: {$self.hook.data.task_id}
-            - expected: completed
-            - actual: {$self.hook.data.status}
+      asana.1.taskUpdated:
+        - to: a2
+          conditions:
+            gate: and
+            match:
+              - expected: {$self.output.data.task_id}
+                actual: {$self.hook.data.task_id}
+              - expected: completed
+                actual: {$self.hook.data.status}
 
-    subscribes:
-      - topic: order.approve
-        activity: a1
+    subscribes: order.approve
 
-    publishes: 
-      - topic: order.approved
-        activity: a1
+    publishes: order.approved
 ```
 
 ### Example | Await
@@ -236,13 +229,9 @@ components:
       a6:
         - to: a7
 
-    subscribes:
-      - topic: order.review
-        activity: a5
+    subscribes: order.review
 
-    publishes: 
-      - topic: order.reviewed
-        activity: a5
+    publishes: order.reviewed
 ```
 
 ## Asana Open API Spec

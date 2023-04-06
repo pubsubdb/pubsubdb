@@ -97,16 +97,18 @@ transitions:
       conditions:
         match:
           - expected: true
-            actual: {a5.output.data.price}
-            operator: "<"
-            value: 100
+            actual: 
+              "@pipe":
+                - ["{a5.output.data.price}", 100]
+                - ["{number.lt}"]
     - to: a7
       conditions:
         match:
           - expected: true
-            actual: {a5.output.data.price}
-            operator: ">="
-            value: 100
+            actual: 
+              "@pipe":
+                - ["{a5.output.data.price}", 100]
+                - ["{number.gte}"]
 ```
 
 ## Define Activity Topics
@@ -136,16 +138,18 @@ transitions:
       conditions:
         match:
           - expected: true
-            actual: {a5.output.data.price}
-            operator: "<"
-            value: 100
+            actual: 
+              "@pipe":
+                - ["{a5.output.data.price}", 100]
+                - ["{number.lt}"]
     - to: a7
       conditions:
         match:
           - expected: true
-            actual: {a5.output.data.price}
-            operator: ">="
-            value: 100
+            actual: 
+              "@pipe":
+                - ["{a5.output.data.price}", 100]
+                - ["{number.gte}"]
 ```
 
 ### TIP: Organizing Files for Maintainability
@@ -211,12 +215,12 @@ PubSubDB is built using the Open API standard. Any Web service with an Open API 
 
 When defining schemas, it's useful to consider the messages being exchanged. Let's start with activity, `a5`, which is the trigger activity for the APPROVE ORDER PRICE flow. The purpose of the flow is to essentially approve an order based upon its price. The message exchange is as follows:
 
-**Expected INCOMING event payload (activity a5)**
+**Expected INCOMING event payload for activity a5**
 ```json
 { "id": "item_123", "price": 55.67 }
 ```
 
-**Expected OUTGOING event payload (activity a5)**
+**Expected OUTGOING event payload for activity a5**
 ```json
 { "id": "item_123", "price": 55.67, "approved": true }
 ```
@@ -370,7 +374,7 @@ activities:
   ...
 ```
 
-The following table lists the key statistics fields and their purpose.
+The following table lists the key statistics fields and their purpose. Note that the `key` and `id` fields can also use a `@pipe` declaration if a complex transformation is necessary to extract their value from the provided payload.
 
 | Field Name       | Description                                                        |
 | ---------------- | ------------------------------------------------------------------ |

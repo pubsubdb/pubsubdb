@@ -7,6 +7,8 @@ let instance: PubSubDBService;
 
 /**
  * PubSubDBService is the main service and serves to orchestrate the activity flow
+ * in the running application. it is responsible for initializing the store and
+ * the connection, and also for subscribing to all topics.
  */
 class PubSubDBService {
   private connection: ConnectionService | null;
@@ -64,9 +66,7 @@ class PubSubDBService {
    * @param data 
    */
   async pub(topic: string, data: Record<string, any>) {
-    console.log('getting schema for topic (engine)', topic);
     const schema = await this.store.getSchema(topic);
-    console.log('schema', topic, schema);
     const handler = Activities[schema.type];
     if (handler) {
       const activity = new handler(schema, data);
