@@ -5,6 +5,7 @@ import { DateHandler } from './date';
 import { JsonHandler } from './json';
 import { MathHandler } from './math';
 import { NumberHandler } from './number';
+import { ObjectHandler } from './object';
 import { StringHandler } from './string';
 import { SymbolHandler } from './symbol';
 import { UnaryHandler } from './unary';
@@ -16,7 +17,8 @@ export default {
   date: new DateHandler(), 
   json: new JsonHandler(), 
   math: new MathHandler(),
-  number: new NumberHandler,
+  number: new NumberHandler(),
+  object: new ObjectHandler(),
   string: new StringHandler(),
   symbol: new SymbolHandler(),
   unary: new UnaryHandler(),
