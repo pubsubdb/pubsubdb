@@ -27,10 +27,10 @@ errors:
   schema:
     $ref: './schemas.yaml#/Error1'
 stats:
-  key: "{activity1.input.data.object_type}"
-  id: "{activity1.input.data.id}"
+  key: "{x.input.data.object_type}"
+  id: "{x.input.data.id}"
   measures:
     - measure: avg
-      target: "{activity1.input.data.price}"
+      target: "{x.input.data.price}"
     - measure: count
-      target: "{activity1.input.data.price}"
+      target: "{x.input.data.price}"

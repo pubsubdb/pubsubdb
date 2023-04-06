@@ -230,11 +230,11 @@
               "measures": [
                 {
                   "measure": "avg",
-                  "target": "{activity1.input.data.price}"
+                  "target": "{a5.input.data.price}"
                 },
                 {
                   "measure": "count",
-                  "target": "{activity1.input.data.object_type}"
+                  "target": "{a5.input.data.object_type}"
                 }
               ]
             }

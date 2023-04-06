@@ -3,8 +3,18 @@
 In this section, various Array functions will be explored, which are available for use in PubSubDB mapping rules. The functions are designed to facilitate the manipulation and transformation of arrays during the mapping process. Although inspired by and familiar to JavaScript developers, they have been adapted to follow a functional approach. Each transformation is a function that expects one or more input parameters from the prior row in the @pipe structure.
 
 **Table of Contents**
-
-- [array.get](#arrayget): Get item at the given index
+- [array.get](#arrayget)
+- [array.indexOf](#arrayindexof)
+- [array.length](#arraylength)
+- [array.map](#arraymap)
+- [array.reverse](#arrayreverse)
+- [array.slice](#arrayslice)
+- [array.some](#arraysome)
+- [array.find](#arrayfind)
+- [array.filter](#arrayfilter)
+- [array.findIndex](#arrayfindindex)
+- [array.join](#arrayjoin)
+- [array.reduce](#arrayreduce)
 
 ## array.get
 
@@ -41,6 +51,7 @@ After executing the mapping rules, the resulting JSON object will be:
   "second_color": "green"
 }
 ```
+
 ## array.indexOf
 
 The `array.indexOf` function returns the first index at which a given element can be found in an array, or -1 if the element is not found. It takes two parameters: the array to search and the element to find.

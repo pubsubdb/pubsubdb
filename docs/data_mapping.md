@@ -9,7 +9,7 @@ This tutorial covers various data mapping functions available in PubSubDB. The f
  - [Boolean Functions](./functions/boolean.md)
  - [Date and Time Functions](./functions/date_time.md)
  - [Conditional Functions](./functions/conditional.md)
- - [Custom Functions](./functions/custom.md)
+ - [Symbol Functions](./functions/symbol.md)
 
 Feel free to explore these function categories and learn more about how to use them effectively in your PubSubDB mapping rules.
 
