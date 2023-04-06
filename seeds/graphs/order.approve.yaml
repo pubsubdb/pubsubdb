@@ -8,23 +8,23 @@ components:
         type: trigger
         settings:
           schema:
-            $ref: ./schemas.yaml#/a1_settings
+            $ref: ../schemas/order.approve.yaml#/a1_settings
           maps:
-            $ref: ./maps.yaml#/a1_settings
+            $ref: ../maps/order.approve.yaml#/a1_settings
         input:
           schema:
-            $ref: ./schemas.yaml#/Input1
+            $ref: ../schemas/order.approve.yaml#/a1_input
           maps:
-            $ref: ./maps.yaml#/a1_input
+            $ref: ../maps/order.approve.yaml#/a1_input
         output:
           schema:
-            $ref: ./schemas.yaml#/a1_output
+            $ref: ../schemas/order.approve.yaml#/a1_output
         return:
           schema:
-            $ref: ./schemas.yaml#/a1_return
+            $ref: ../schemas/order.approve.yaml#/a1_return
         errors:
           schema:
-            $ref: ./schemas.yaml#/a1_errors
+            $ref: ../schemas/order.approve.yaml#/a1_errors
         stats:
           id: {$self.output.data.id}
           key: {$self.output.data.object_type}
@@ -34,38 +34,31 @@ components:
             - measure: count
               target: {$self.output.data.division}
       a2:
-        title: Exec Asana Task
-        type: openapi
-        # Asana Open API Operation Name (`createTask`)
-        openapi: asana.1.createTask
-        credentials: asana.1.mycreds
-        hook:
-          schema:
-            $ref: ./schemas.yaml#/a2_hook
+        title: Get Approval
+        type: await
+        subtype: order.approve
         input:
           schema:
-            $ref: /specs/asana/1.yml#/TaskRequest
-          maps:
-            $ref: ./maps.yaml#/a2_input
+            $ref: ./schemas.yaml#/a2_input
         output:
           schema:
-            $ref: /specs/asana/1.yml#/TaskResponse
+            $ref: ./schemas.yaml#/a2_output
         errors:
           schema:
-            $ref: /specs/asana/1.yml#/TaskResponseError
+            $ref: ./schemas.yaml#/a2_errors
       a3:
         title: Return True
         type: return
         input:
           # the activity, `a1`, references the `return` schema
           maps:
-            $ref: './maps.yaml#/a3_input'
+            $ref: '../maps/order.approve.yaml#/a3_input'
       a4:
         title: Return False
         type: return
         input:
           maps:
-            $ref: './maps.yaml#/a4_input'
+            $ref: '../maps/order.approve.yaml#/a4_input'
 
     transitions:
       a1:

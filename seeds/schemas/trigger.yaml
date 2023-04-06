@@ -1,0 +1,37 @@
+settings:
+  type: object
+  properties:
+    fieldA:
+      type: string
+    fieldB:
+      type: integer
+input:
+  type: object
+  properties:
+    fieldC:
+      type: string
+    fieldD:
+      type: boolean
+output:
+  type: object
+  properties:
+    fieldE:
+      type: number
+    fieldF:
+      type: array
+      items:
+        type: string
+return:
+  type: object
+  properties:
+    fieldG:
+      type: string
+    fieldH:
+      type: integer
+errors:
+  type: object
+  properties:
+    fieldI:
+      type: string
+    fieldJ:
+      type: integer
