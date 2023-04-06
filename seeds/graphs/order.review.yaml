@@ -8,58 +8,43 @@ components:
         type: trigger
         settings:
           schema:
-            $ref: ./schemas.yaml#/a5_settings
+            $ref: '../schemas/order.review.yaml#/settings_a5'
           maps:
-            $ref: ./maps.yaml#/a5_settings
+            $ref: '../maps/order.review.yaml#/settings_a5'
         input:
           schema:
-            $ref: ./schemas.yaml#/a5_input
+            $ref: '../schemas/order.review.yaml#/input_a5'
         output:
           schema:
-            $ref: ./schemas.yaml#/a5_output
+            $ref: '../schemas/order.review.yaml#/output_a5'
         return:
           schema:
-            $ref: ./schemas.yaml#/a5_return
+            $ref: '../schemas/order.review.yaml#/Return1'
         errors:
           schema:
-            $ref: ./schemas.yaml#/a5_errors
+            $ref: '../schemas/order.review.yaml#/Error1'
         stats:
-          key: {a1.input.data.object_type}
-          id: {a1.input.data.id}
+          key: {a5.input.data.object_type}
+          id: {a5.input.data.id}
           measures:
             - measure: sum
-              target: {a1.input.data.price}
+              target: {a5.input.data.price}
             - measure: count
-              target: {a1.input.data.price}
+              target: {a5.input.data.price}
               operator: ">"
               value: 100
             - measure: avg
-              target: {a1.input.data.price}
+              target: {a5.input.data.price}
       a6:
-        title: Get Approval
-        type: await
-        subtype: order.approve
-        input:
-          schema:
-            $ref: ./schemas.yaml#/a6_input
-        output:
-          schema:
-            $ref: ./schemas.yaml#/a6_output
-        errors:
-          schema:
-            $ref: ./schemas.yaml#/a6_errors
-      a7:
         title: Return Review
         type: return
         input:
           maps:
-            $ref: ./maps.yaml#/a7_input
+            $ref: ../schemas/maps/order.review.yaml#/a6_input
 
     transitions:
       a5:
         - to: a6
-      a6:
-        - to: a7
 
     subscribes:
       - topic: order.review

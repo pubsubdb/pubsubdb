@@ -5,15 +5,17 @@ openapi: asana.1.createTask
 credentials: asana.1.mycreds
 hook:
   schema:
-    $ref: ./schemas.yaml#/a2_hook
+    # Asana Open API webhook payload schema
+    $ref: ../schemas/openapi.yaml#/hook
 input:
   schema:
-    $ref: /specs/asana/1.yml#/TaskRequest
+    $ref: ../openapis/asana.1.0.0.yaml#/TaskRequest
   maps:
-    $ref: ./maps.yaml#/a2_input
+    # psdb data mapping file needed to generate the TaskRequest entity defined by the input schema
+    $ref: ../maps/openapi.yaml#/input
 output:
   schema:
-    $ref: /specs/asana/1.yml#/TaskResponse
+    $ref: ../openapis/asana.1.0.0.yaml#/TaskResponse
 errors:
   schema:
-    $ref: /specs/asana/1.yml#/TaskResponseError
+    $ref: ../openapis/asana.1.0.0.yaml#/TaskResponseError

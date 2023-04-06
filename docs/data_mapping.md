@@ -14,7 +14,7 @@ This tutorial covers various data mapping functions available in PubSubDB. The f
 Feel free to explore these function categories and learn more about how to use them effectively in your PubSubDB mapping rules.
 
 ## Quick Start
-This guide will help you quickly get started with data mapping principles, demonstrating how to map data from multiple source objects to a single destination object.
+This section will help you quickly get started with data mapping principles, demonstrating how to map data from multiple source objects to a single destination object.
 
 ### Overview
 In  PubSubDB, the receiver (object C in our example), drives the transformation. It combines and maps the data from objects A and B (the sources). Let's consider the following example:
@@ -49,13 +49,12 @@ Given these source objects, we want to create a new object, C, with the followin
 Most fields can be mapped using a combination of object notation ({}) and static data. We use curly braces to reference and map the data from objects A and B into the corresponding fields of object C. We also include static values for `is_employee`, `company`, and `bonus`:
 
 ```yaml
-x-maps:
-  full_name: "{a.output.data.first_name} {a.output.data.last_name}"
-  email: "{b.output.data.email}"
-  age: "{b.output.data.age}"
-  is_employee: true
-  company: "ACME Corp"
-  bonus: 500
+full_name: "{a.output.data.first_name} {a.output.data.last_name}"
+email: "{b.output.data.email}"
+age: "{b.output.data.age}"
+is_employee: true
+company: "ACME Corp"
+bonus: 500
 ```
 
 With this YAML configuration, PubSubDB's data mapping solution will generate a new object C with the desired structure:
@@ -85,7 +84,7 @@ const sound = isDog ? "bark" : "meow";
 The functional approach (used by PubSubDB) is as follows:
 
 ```javascript
-const sound = condition.ternary(isDog, "bark" : "meow");
+const sound = condition.ternary(isDog, "bark", "meow");
 ```
 
 ### Example 2) Instance Property Syntax
@@ -163,9 +162,9 @@ To better illustrate this concept, let's use a visual representation. Notice how
 Here's how the `@pipe` processes the rows:
 
 1. Resolve the cells in Row 0. They could be *static* or *dynamic* values.
-2. Pass the resolved values from Row 0 as input parameters to the function in cell 1 of Row 1.
-3. Resolve the function in Row 1 with the input parameters, and resolve any following cells.
-4. Pass the resolved values from Row 1 as input parameters to the function in cell 1 of Row 2.
+2. Pass the resolved values from Row 0 as input parameters to the *function* in cell 1 of Row 1.
+3. Resolve the *function* in Row 1 with the input parameters, and resolve any following cells.
+4. Pass the resolved values from Row 1 as input parameters to the *function* in cell 1 of Row 2.
 5. Repeat the process until the last row is processed.
 
 ### Example 1: user_name
@@ -196,7 +195,7 @@ status:
 In this example, we follow the same essential pattern as before. We first provide the age field from object B and the value 40 as inputs. Then, we call the {@number.gte} function using the inputs from row 0, and provide "Senior" and "Junior" as additional inputs. Finally, we call the {@conditional.ternary} function, which sets the status field to "Senior" if the output from row 1 is true, and "Junior" otherwise.
 
 ### Example 3: Nested Pipes
-In this example, we'll demonstrate how to create a `user_initials` field by extracting the first letter of the first and last names and concatenating them. We'll use nested pipes as this is a non-linear mapping transformation with two parallel steps (get the first initial; get the last initial).
+In this example, we'll demonstrate how to create a `user_initials` field by extracting the first letter of the first and last names and concatenating them. We'll use nested pipes as this is a non-linear mapping transformation with two parallel steps: *get the first initial*, *get the last initial*.
 
 The `full_name` is first split into an array of first and last names using the {@array.split} function (note how a single space (" ") is passed as the delimiter when splitting). Next, two nested pipes are utilized to extract the first character of both the first and last names. Within each nested pipe, the {@array.get} function retrieves the respective name (first or last) from the array, followed by the {@string.charAt} function to extract the first character. Lastly, the {@string.concat} function concatenates the initials.
 

@@ -216,19 +216,22 @@ The simplest graphs are linear, defining a predictable sequence of non cyclical 
 Refer to the [Composable Workflow Overview](./docs/composable_workflow.md) for more information.
 
 ## Data Mapping
-PubSubDB apping rules are driven by the subscriber (the downstream activity). Mapping rules can apply static character data (like a fixed string or number) or can apply data produced by upstream activities. Here is an example of how to map upstream data from activities, `a1` and `a2` into activity `a3`. It also includes a static string value for the `type` field ("employee").
+PubSubDB mapping rules are driven by the subscriber (the downstream activity). Mapping rules can apply static character data (like a fixed string or number) or can apply data produced by upstream activities. 
 
-Refer to the [Data Mapping Overview](./docs/data_mapping.md) for more information.
+>Refer to the [Data Mapping Overview](./docs/data_mapping.md) for more information.
+
+Consider the following map rules that describe how to generate a `person` entity with the fields: `id`, `type`, and `name`.
 
 ```yaml
 x-maps:
-  id: {a1.output.data.id}
-  type: employee
-  "name/first": 
-    "@pipe":
-      - ["{a2.output.data.full_name}", " "]
-      - ["{@array.split}", 0]
-      - ["{@array.get}"]
+  person:
+    id: {a1.output.data.id}
+    type: employee
+    "name/first": 
+      "@pipe":
+        - ["{a2.output.data.full_name}", " "]
+        - ["{@array.split}", 0]
+        - ["{@array.get}"]
 ```
 
 The generated JSON would be as follows (*Note how the field name, `name/first` in the mapping rules is translated into nested JSON objects.*):
@@ -242,3 +245,5 @@ The generated JSON would be as follows (*Note how the field name, `name/first` i
   }
 }
 ```
+## Developer Guide
+Refining your current business process, or defining a new one, is a first crucial step in deploying a successful PubSubDB solution. Refer to the [Developer Guide](./docs/developer_guide.md) for more information on the full end-to-end development process.

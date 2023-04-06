@@ -2,21 +2,21 @@ title: Review Order
 type: trigger
 settings:
   schema:
-    $ref: './schemas.yaml#/Settings1'
+    $ref: '../schemas/trigger.yaml#/settings'
   maps:
-    $ref: './pipes.yaml#/Settings1'
+    $ref: '../maps/trigger.yaml#/settings'
 input:
   schema:
-    $ref: './schemas.yaml#/Input1'
+    $ref: '../schemas/trigger.yaml#/input'
 output:
   schema:
-    $ref: './schemas.yaml#/Output1'
+    $ref: '../schemas/trigger.yaml#/output'
 return:
   schema:
-    $ref: './schemas.yaml#/Return1'
+    $ref: '../schemas/trigger.yaml#/return'
 errors:
   schema:
-    $ref: './schemas.yaml#/Error1'
+    $ref: '../schemas/trigger.yaml#/errors'
 stats:
   key: "{activity1.input.data.object_type}"
   id: "{activity1.input.data.id}"
