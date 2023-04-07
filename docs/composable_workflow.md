@@ -16,7 +16,7 @@ activities:
     subtype: asana.1.createTask
   a3:
     title: Save Task ID
-    type: return
+    type: job
 
 transitions:
   a1:
@@ -59,25 +59,15 @@ components:
       a1:
         title: Get Approval
         type: trigger
-        settings:
-          schema:
-            $ref: ./schemas.yaml#/a1_settings
-          maps:
-            $ref: ./maps.yaml#/a1_settings
-        input:
-          schema:
-            $ref: ./schemas.yaml#/Input1
-          maps:
-            $ref: ./maps.yaml#/a1_input
         output:
           schema:
-            $ref: ./schemas.yaml#/a1_output
-        return:
+            $ref: ./schemas.yaml#/a1/output
+        job:
           schema:
-            $ref: ./schemas.yaml#/a1_return
+            $ref: ./schemas.yaml#/a1/job
         errors:
           schema:
-            $ref: ./schemas.yaml#/a1_errors
+            $ref: ./schemas.yaml#/a1/errors
         stats:
           id: "{$self.output.data.id}"
           key: "{$self.output.data.object_type}"
@@ -94,12 +84,12 @@ components:
         credentials: asana.1.mycreds
         hook:
           schema:
-            $ref: ./schemas.yaml#/a2_hook
+            $ref: ./schemas.yaml#/a2/hook
         input:
           schema:
             $ref: /specs/asana/1.yml#/TaskRequest
           maps:
-            $ref: ./maps.yaml#/a2_input
+            $ref: ./maps.yaml#/a2/input
         output:
           schema:
             $ref: /specs/asana/1.yml#/TaskResponse
@@ -108,17 +98,16 @@ components:
             $ref: /specs/asana/1.yml#/TaskResponseError
       a3:
         title: Return True
-        type: return
+        type: job
         input:
-          # the activity, `a1`, references the `return` schema
-          maps:
-            $ref: './maps.yaml#/a3_input'
+          job:
+            $ref: './maps.yaml#/a3/job'
       a4:
         title: Return False
-        type: return
-        input:
+        type: job
+        job:
           maps:
-            $ref: './maps.yaml#/a4_input'
+            $ref: './maps.yaml#/a4/job'
 
     transitions:
       a1:
@@ -139,7 +128,7 @@ components:
                 actual: 
                   "@pipe":
                     - ["{a1.output.data.price}", 100]
-                    - ["{number.gt}"]
+                    - ["{@number.gt}"]
 
     hooks:
       asana.1.taskUpdated:
@@ -173,25 +162,15 @@ components:
       a5:
         title: Review Order
         type: trigger
-        settings:
-          schema:
-            $ref: ./schemas.yaml#/a5_settings
-          maps:
-            $ref: ./maps.yaml#/a5_settings
-        input:
-          schema:
-            $ref: ./schemas.yaml#/a5_input
-          maps:
-            $ref: ./maps.yaml#/a5_input
         output:
           schema:
-            $ref: ./schemas.yaml#/a5_output
-        return:
+            $ref: ./schemas.yaml#/a5/output
+        job:
           schema:
-            $ref: ./schemas.yaml#/a5_return
+            $ref: ./schemas.yaml#/a5/job
         errors:
           schema:
-            $ref: ./schemas.yaml#/a5_errors
+            $ref: ./schemas.yaml#/a5/errors
         stats:
           key: "{a1.input.data.object_type}"
           measures:
@@ -209,19 +188,19 @@ components:
         subtype: order.approve
         input:
           schema:
-            $ref: ./schemas.yaml#/a6_input
+            $ref: ./schemas.yaml#/a6/input
         output:
           schema:
-            $ref: ./schemas.yaml#/a6_output
+            $ref: ./schemas.yaml#/a6/output
         errors:
           schema:
-            $ref: ./schemas.yaml#/a6_errors
+            $ref: ./schemas.yaml#/a6/errors
       a7:
         title: Return Review
-        type: return
-        input:
+        type: job
+        job:
           maps:
-            $ref: ./maps.yaml#/a7_input
+            $ref: ./maps.yaml#/a7/job
 
     transitions:
       a5:

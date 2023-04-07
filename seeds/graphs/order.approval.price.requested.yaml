@@ -8,9 +8,9 @@ activities:
     output:
       schema:
         $ref: '../schemas/order.approval.price.requested.yaml#/a5/output'
-    return:
+    job:
       schema:
-        $ref: '../schemas/order.approval.price.requested.yaml#/a5/return'
+        $ref: '../schemas/order.approval.price.requested.yaml#/a5/job'
     stats:
       key: "{a5.output.data.object_type}"
       id: "{a5.input.data.id}"
@@ -21,16 +21,16 @@ activities:
           target: "{a5.input.data.object_type}"
   a6:
     title: Return True
-    type: return
-    input:
+    type: job
+    job:
       maps:
-        $ref: '../maps/order.approval.price.requested.yaml#/a6/input'
+        $ref: '../maps/order.approval.price.requested.yaml#/a6/job'
   a7:
     title: Return False
-    type: return
-    input:
+    type: job
+    job:
       maps:
-        $ref: '../maps/order.approval.price.requested.yaml#/a7/input'
+        $ref: '../maps/order.approval.price.requested.yaml#/a7/job'
 
 transitions:
   a5:
@@ -41,7 +41,7 @@ transitions:
             actual: 
               "@pipe":
                 - ["{a5.output.data.price}", 100]
-                - ["{number.lt}"]
+                - ["{@number.lt}"]
     - to: a7
       conditions:
         match:
@@ -49,4 +49,4 @@ transitions:
             actual: 
               "@pipe":
                 - ["{a5.output.data.price}", 100]
-                - ["{number.gte}"]
+                - ["{@number.gte}"]

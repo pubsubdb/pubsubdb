@@ -1,7 +1,7 @@
 import { RedisConnection, RedisClientType } from '../../../cache/redis';
 import { RedisJSONStoreService } from '../../../services/store/redisJSON';
 
-describe.only('RedisJSONStoreService', () => {
+describe('RedisJSONStoreService', () => {
   let redisConnection: RedisConnection;
   let redisClient: RedisClientType;
   let redisStoreService: RedisJSONStoreService;
@@ -29,7 +29,7 @@ describe.only('RedisJSONStoreService', () => {
     });
   });
 
-  describe.only('setJob', () => {
+  describe('setJob', () => {
     it('should set the data and metadata for the given job ID', async () => {
       const jobId = 'JOB_ID';
       const data = { data: 'DATA' };

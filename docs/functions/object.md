@@ -75,7 +75,7 @@ The goal is to create a new object with an array of the color values. The `objec
 ```yaml
 color_values:
   "@pipe":
-  - "{a.output.data.colors}"
+  - ["{a.output.data.colors}"]
   - ["{@object.values}"]
 ```
 
@@ -115,7 +115,7 @@ The goal is to create a new object with an array of the key-value pairs. The `ob
 ```yaml
 color_entries:
   "@pipe":
-    - "{a.output.data.colors}"
+    - ["{a.output.data.colors}"]
     - ["{@object.entries}"]
 ```
 
@@ -167,9 +167,7 @@ The goal is to create a new object with the combined color properties. The `obje
 ```yaml
 combined_colors:
   "@pipe":
-    - "{}"
-    - "{a.output.data.colors}"
-    - "{b.output.data.colors}"
+    - ["{@symbol.object}", "{a.output.data.colors}", "{b.output.data.colors}"]
     - ["{@object.assign}"]
 ```
 
@@ -209,7 +207,7 @@ The goal is to create a new object with color properties from the key-value pair
 ```yaml
 color_object:
   "@pipe":
-    - "{a.output.data.pairs}"
+    - ["{a.output.data.pairs}"]
     - ["{@object.fromEntries}"]
 ```
 

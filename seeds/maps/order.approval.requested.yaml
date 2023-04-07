@@ -4,13 +4,13 @@ a2:
     price: "{a1.output.data.price}"
     object_type: "{a1.output.data.object_type}"
 a3:
-  input:
+  job:
     id: "{a1.output.data.id}"
     price: "{a1.output.data.price}"
     approvals/price: "{a2.output.data.approved}"
     approved: true
 a4:
-  input:
+  job:
     id: "{a1.output.data.id}"
     price: "{a1.output.data.price}"
     approvals/price: "{a2.output.data.approved}"

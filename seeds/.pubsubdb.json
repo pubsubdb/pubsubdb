@@ -39,7 +39,7 @@
                 }
               }
             },
-            "return": {
+            "job": {
               "schema": {
                 "type": "object",
                 "properties": {
@@ -122,8 +122,8 @@
           },
           "a3": {
             "title": "Return True",
-            "type": "return",
-            "input": {
+            "type": "job",
+            "job": {
               "maps": {
                 "id": "{a1.output.data.id}",
                 "price": "{a1.output.data.price}",
@@ -134,8 +134,8 @@
           },
           "a4": {
             "title": "Return False",
-            "type": "return",
-            "input": {
+            "type": "job",
+            "job": {
               "maps": {
                 "id": "{a1.output.data.id}",
                 "price": "{a1.output.data.price}",
@@ -186,40 +186,48 @@
             "type": "trigger",
             "output": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "description": "The unique identifier for the object."
-                  },
-                  "price": {
-                    "type": "number",
-                    "description": "The price of the item.",
-                    "minimum": 0
-                  },
-                  "object_type": {
-                    "type": "string",
-                    "description": "The type of the order (e.g, widgetA, widgetB)"
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "The unique identifier for the object."
+                    },
+                    "price": {
+                      "type": "number",
+                      "description": "The price of the item.",
+                      "minimum": 0
+                    },
+                    "object_type": {
+                      "type": "string",
+                      "description": "The type of the order (e.g., widgetA, widgetB)",
+                      "enum": [
+                        "widgetA",
+                        "widgetB"
+                      ]
+                    }
                   }
                 }
               }
             },
-            "return": {
+            "job": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "description": "The unique identifier for the object."
-                  },
-                  "price": {
-                    "type": "number",
-                    "description": "The price of the item.",
-                    "minimum": 0
-                  },
-                  "approved": {
-                    "type": "boolean",
-                    "description": "Approval status of the object."
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "The unique identifier for the object."
+                    },
+                    "price": {
+                      "type": "number",
+                      "description": "The price of the item.",
+                      "minimum": 0
+                    },
+                    "approved": {
+                      "type": "boolean",
+                      "description": "Approval status of the object."
+                    }
                   }
                 }
               }
@@ -241,8 +249,8 @@
           },
           "a6": {
             "title": "Return True",
-            "type": "return",
-            "input": {
+            "type": "job",
+            "job": {
               "maps": {
                 "id": "{a5.output.data.id}",
                 "price": "{a5.output.data.price}",
@@ -252,8 +260,8 @@
           },
           "a7": {
             "title": "Return False",
-            "type": "return",
-            "input": {
+            "type": "job",
+            "job": {
               "maps": {
                 "id": "{a5.output.data.id}",
                 "price": "{a5.output.data.price}",
@@ -277,7 +285,7 @@
                           100
                         ],
                         [
-                          "{number.lt}"
+                          "{@number.lt}"
                         ]
                       ]
                     }
@@ -298,7 +306,7 @@
                           100
                         ],
                         [
-                          "{number.gte}"
+                          "{@number.gte}"
                         ]
                       ]
                     }

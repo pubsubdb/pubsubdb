@@ -1,7 +1,0 @@
-settings:
-  fieldA:
-    "@pipe":
-      - ["['ke', 'bab', 'case']"]
-      - ["{@json.parse}", "-"]
-      - ["{@array.join}"]
-  fieldB: 23

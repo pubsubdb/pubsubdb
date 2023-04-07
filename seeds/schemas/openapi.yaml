@@ -1,7 +1,0 @@
-hook:
-  type: object
-  properties:
-    fieldC:
-      type: string
-    fieldD:
-      type: boolean

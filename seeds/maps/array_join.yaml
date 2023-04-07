@@ -1,5 +1,0 @@
-sentence:
-  "@pipe":
-    - ["['ke', 'bab', 'case']"]
-    - ["{@json.parse}", "-"]
-    - ["{@array.join}"]

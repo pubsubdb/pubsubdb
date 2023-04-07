@@ -26,6 +26,8 @@ describe('index', () => {
     pubSubDB = await PubSubDB.init(config);
   });
 
+  //todo: deploy here
+
   it('should should publish a message', async () => {
     //add schema to db to instance the trigger
     pubSubDB.getStore().setSchema('trigger.test.requested', { type: 'trigger' });

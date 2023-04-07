@@ -2,8 +2,7 @@ import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { JSONSchema } from '@apidevtools/json-schema-ref-parser/dist/lib/types';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { PubSubDBManifest } from '../../typedefs/pubsubdb';
-import { MappingStatements } from '../../typedefs/map';
+import { PubSubDBManifest, StoreService } from '../../typedefs/pubsubdb';
 import { Validator } from './validator';
 import { Segmenter } from './segmenter';
 
@@ -13,6 +12,11 @@ import { Segmenter } from './segmenter';
  * program that is essentially an event bus and a subscription table
  */
 class CompilerService {
+  store: StoreService | null;
+
+  constructor(store: StoreService) {
+    this.store = store;
+  }
 
   //todo: configure to expect a resolved, absolute path to the manifest file
   public async compile(): Promise<void> {
@@ -26,11 +30,11 @@ class CompilerService {
 
       // 2) validate the manifest file
       const validator = new Validator();
-      validator.validate(schema as PubSubDBManifest);
+      validator.validate(schema as PubSubDBManifest, this.store);
 
       //3) segment the manifest file
       const segmenter = new Segmenter();
-      segmenter.segment(schema as PubSubDBManifest);
+      segmenter.segment(schema as PubSubDBManifest, this.store);
 
     } catch(err) {
       console.error(err);

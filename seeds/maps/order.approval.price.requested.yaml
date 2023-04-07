@@ -1,10 +1,10 @@
 a6:
-  input:
+  job:
     id: "{a5.output.data.id}"
     price: "{a5.output.data.price}"
     approved: true
 a7:
-  input:
+  job:
     id: "{a5.output.data.id}"
     price: "{a5.output.data.price}"
     approved: false
