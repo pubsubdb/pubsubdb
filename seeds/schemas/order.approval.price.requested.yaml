@@ -1,32 +1,30 @@
 a5:
   job:
-    schema:
-      type: object
-      properties:
-        id:
-          type: string
-          description: The unique identifier for the object.
-        price:
-          type: number
-          description: The price of the item.
-          minimum: 0
-        approved:
-          type: boolean
-          description: Approval status of the object.
+    type: object
+    properties:
+      id:
+        type: string
+        description: The unique identifier for the object.
+      price:
+        type: number
+        description: The price of the item.
+        minimum: 0
+      approved:
+        type: boolean
+        description: Approval status of the object.
   output:
-    schema:
-      type: object
-      properties:
-        id:
-          type: string
-          description: The unique identifier for the object.
-        price:
-          type: number
-          description: The price of the item.
-          minimum: 0
-        object_type:
-          type: string
-          description: The type of the order (e.g., widgetA, widgetB)
-          enum:
-            - widgetA
-            - widgetB
+    type: object
+    properties:
+      id:
+        type: string
+        description: The unique identifier for the object.
+      price:
+        type: number
+        description: The price of the item.
+        minimum: 0
+      object_type:
+        type: string
+        description: The type of the order (e.g., widgetA, widgetB)
+        enum:
+          - widgetA
+          - widgetB
