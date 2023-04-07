@@ -204,13 +204,13 @@ initials:
   "@pipe":
     - ["{a2.output.data.full_name}", " "]
     - "@pipe":
-      - ["{@array.split}"]
+      - ["{@array.split}", 0]
       - ["{@array.get}", 0]
-      - ["{@string.charAt}", 0]
+      - ["{@string.charAt}"]
     - "@pipe":
-      - ["{@array.split}"]
-      - ["{@array.get}", 1]
-      - ["{@string.charAt}", 0]
+      - ["{@array.split}", 1]
+      - ["{@array.get}", 0]
+      - ["{@string.charAt}"]
     - ["{@string.concat}"]
 ```
 
@@ -251,13 +251,13 @@ x-maps:
     "@pipe":
       - ["{a2.output.data.full_name}", " "]
       - "@pipe":
-          - ["{@array.split}"]
-          - ["{@array.get}", 0]
-          - ["{@string.charAt}", 0]
+        - ["{@array.split}", 0]
+        - ["{@array.get}", 0]
+        - ["{@string.charAt}"]
       - "@pipe":
-          - ["{@array.split}"]
-          - ["{@array.get}", 1]
-          - ["{@string.charAt}", 0]
+        - ["{@array.split}", 1]
+        - ["{@array.get}", 0]
+        - ["{@string.charAt}"]
       - ["{@string.concat}"]
 ```
 
