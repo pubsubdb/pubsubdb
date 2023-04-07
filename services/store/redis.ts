@@ -1,4 +1,4 @@
-import { NAMESPACES as NS } from '../../cache/config';
+import { NAMESPACES as NS } from './namespace';
 import { StoreService } from './store';
 
 class RedisStoreService extends StoreService {

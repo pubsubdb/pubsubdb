@@ -8,9 +8,9 @@ activities:
     output:
       schema:
         $ref: '../schemas/order.approval.requested.yaml#/a1/output'
-    return:
+    job:
       schema:
-        $ref: '../schemas/order.approval.requested.yaml#/a1/return'
+        $ref: '../schemas/order.approval.requested.yaml#/a1/job'
   a2:
     title: Get Price Approval
     type: await
@@ -25,16 +25,16 @@ activities:
         $ref: '../schemas/order.approval.requested.yaml#/a2/output'
   a3:
     title: Return True
-    type: return
-    input:
+    type: job
+    job:
       maps:
-        $ref: '../maps/order.approval.requested.yaml#/a3/input'
+        $ref: '../maps/order.approval.requested.yaml#/a3/job'
   a4:
     title: Return False
-    type: return
-    input:
+    type: job
+    job:
       maps:
-        $ref: '../maps/order.approval.requested.yaml#/a4/input'
+        $ref: '../maps/order.approval.requested.yaml#/a4/job'
 
 transitions:
   a1:

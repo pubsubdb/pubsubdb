@@ -2,7 +2,7 @@ import { Await } from './await';
 import { Iterate } from './iterate';
 import { OpenApi } from './openapi';
 import { Request } from './request';
-import { Return } from './return';
+import { Job } from './job';
 import { Trigger } from './trigger';
 
 export default { 
@@ -10,6 +10,6 @@ export default {
   iterate: Iterate, 
   openapi: OpenApi, 
   request: Request, 
-  return: Return, 
+  job: Job, 
   trigger: Trigger 
 };

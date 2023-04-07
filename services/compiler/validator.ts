@@ -1,17 +1,20 @@
 import { MappingStatements } from "../../typedefs/map";
-import { PubSubDBManifest } from "../../typedefs/pubsubdb";
+import { PubSubDBManifest, StoreService } from "../../typedefs/pubsubdb";
 
 class Validator {
   manifest: PubSubDBManifest | null = null;
   activityIds: string[] = [];
   mappingStatements: MappingStatements = {};
+  store: StoreService | null = null;
 
   /**
    * validate the manifest file
    * @param {PubSubDBManifest} manifest - the full compiled JSON tree with all $refs resolved
    */
-  async validate(manifest: PubSubDBManifest) {
+  async validate(manifest: PubSubDBManifest, store: StoreService) {
     this.manifest = manifest;
+    this.store = store;
+
     this.getMappingStatements();
     this.validateActivityIds();
     this.validateReferencedActivityIds();

@@ -1,5 +1,3 @@
-
-// Custom error classes
 class RestoreJobContextError extends Error {
   constructor() {
     super("Error occurred while restoring job context");

@@ -27,9 +27,9 @@ For purposes of this guide, assume that the business process is as follows, wher
 ![Define the Business Process](./img/business_process.png)
 
 ## Define Activity Graphs
-Understanding the underlying business process gathered from step 1 is crucial, as it forms the foundation for defining the activity flow necessary to achieve it. 
+Understanding the underlying business process gathered from step 1 is crucial, as it forms the foundation for defining the activity flow necessary to achieve it. Let's use standard graph notation to describe the activities.
 
-An example graph in YAML, showcasing three activities, is provided below for the **Approve Order** business process:
+Consider the following graph (in YAML), showcasing four activities for the **Approve Order** business process:
 
 ```yaml
 activities:
@@ -41,10 +41,10 @@ activities:
     type: await
   a3:
     title: Return True
-    type: return
+    type: job
   a4:
     title: Return False
-    type: return
+    type: job
 
 transitions:
   a1:
@@ -63,10 +63,10 @@ activities:
     type: trigger
   a6:
     title: Return True
-    type: return
+    type: job
   a7:
     title: Return False
-    type: return
+    type: job
 transitions:
   a5:
     - to: a6
@@ -74,9 +74,9 @@ transitions:
 ```
 
 ## Define Conditional Activities
-Now, let's consider *conditional* activities that only exectute when their transition condition is met. 
+Now, let's consider *conditional* activities that only exectute when their transition condition is met. It's common in business processes to branch depending upon conditions in the data.
 
-Consider the **Approve Order Price** graph with the conditions added to check the `price` field. The conditions ensure that `a5`  only transitions to `a6` if the  price is less than *100*. The inverse condition is applied to the transition from `a5` to `a7`.
+Consider the **Approve Order Price** graph with conditions now added to check the `price` field. The conditions ensure that `a5`  only transitions to `a6` if the  price is less than *100*. The inverse condition is applied to the transition from `a5` to `a7`.
 
 ```yaml
 activities:
@@ -85,10 +85,10 @@ activities:
     type: trigger
   a6:
     title: Return True
-    type: return
+    type: job
   a7:
     title: Return False
-    type: return
+    type: job
 
 transitions:
   a5:
@@ -99,7 +99,7 @@ transitions:
             actual: 
               "@pipe":
                 - ["{a5.output.data.price}", 100]
-                - ["{number.lt}"]
+                - ["{@number.lt}"]
     - to: a7
       conditions:
         match:
@@ -107,13 +107,13 @@ transitions:
             actual: 
               "@pipe":
                 - ["{a5.output.data.price}", 100]
-                - ["{number.gte}"]
+                - ["{@number.gte}"]
 ```
 
 ## Define Activity Topics
-A well-defined topic space is crucial for the efficient functioning of your workflows. With a solid grounding in the business process, you can effectively describe how to invoke workflows and how one workflow invokes another.
+A well-defined topic space is crucial for the efficient functioning of your workflows. With a solid grounding in the business process, you can effectively describe how outside callers invoke workflows and how one workflow invokes another.
 
-Workflows must subscribe to and publish to exactly one topic respectively. In this example, the APPROVE ORDER PRICE worfklow declares its relevant topics.
+*Workflows must subscribe to and publish to exactly one topic.* In this example, the **Approve Order Price** worfklow declares its relevant topics.
 
 ```yaml
 # ./src/graphs/order.approval.price.requested.yaml
@@ -126,10 +126,10 @@ activities:
     type: trigger
   a6:
     title: Return True
-    type: return
+    type: job
   a7:
     title: Return False
-    type: return
+    type: job
 
 transitions:
   a5:
@@ -140,7 +140,7 @@ transitions:
             actual: 
               "@pipe":
                 - ["{a5.output.data.price}", 100]
-                - ["{number.lt}"]
+                - ["{@number.lt}"]
     - to: a7
       conditions:
         match:
@@ -148,7 +148,7 @@ transitions:
             actual: 
               "@pipe":
                 - ["{a5.output.data.price}", 100]
-                - ["{number.gte}"]
+                - ["{@number.gte}"]
 ```
 
 ### TIP: Organizing Files for Maintainability
@@ -210,13 +210,13 @@ The following table lists all fields and their configuration. The `settings` fie
 ## Define Activity Schemas
 PubSubDB is built using the Open API standard. Any Web service with an Open API spec can be orchestrated by referencing its operation name as it appears in the original spec.  For other activities it is your responsibility to define the schema using the OpenAPI standard. For every activity you define for a workflow, consider the INCOMING and OUTGOING messages for which you  will need a schema. 
 
->The `trigger` activity is unique from other activities in that it doesn't use an **input** schema. Instead, it serves as the front-door for the flow, recieving the event payload and passing to downstream activities. From the perspective of downstream activities, the event payload that triggered the flow is the trigger's **output**. From the perspective of outside callers, it is the trigger's **return** that matters most as it represents the final output produced by the completed workflow. As you review the remainder of this document, keep this distinction in mind (inside vs outside perspectives) when considering an activity's "output".
+>The `trigger` activity is unique from other activities in that it doesn't use an **input** schema. Instead, it serves as the front-door for the flow, recieving the event payload and passing to downstream activities. From the perspective of downstream activities, the event payload that triggered the flow is the trigger's **output**. From the perspective of outside callers, it is the trigger's **job** (i.e., job data) that matters most as it represents the final output produced by the completed workflow. As you review the remainder of this document, keep this distinction in mind (inside vs outside perspectives) when considering an triggers's "output" vs its "job" data.
 
-When defining schemas, it's useful to consider the messages being exchanged. Let's start with activity, `a5`, which is the trigger activity for the APPROVE ORDER PRICE flow. The purpose of the flow is to essentially approve an order based upon its price. The message exchange is as follows:
+When defining schemas, it's useful to consider the messages being exchanged. Let's start with activity, `a5`, which is the trigger activity for the **Approve Order Price** flow. The purpose of the flow is to essentially approve an order based upon its price. The message exchange is as follows:
 
 **Expected INCOMING event payload for activity a5**
 ```json
-{ "id": "item_123", "price": 55.67 }
+{ "id": "item_123", "price": 55.67, "object_type": "widgetA" }
 ```
 
 **Expected OUTGOING event payload for activity a5**
@@ -226,35 +226,43 @@ When defining schemas, it's useful to consider the messages being exchanged. Let
 
 Let's define the necessary schemas for activity, `a5`. Schemas can be cumbersome to hand code, but there is sufficient tooling to make things manageable. 
 
->ChatGPT is an expert at schema design and needs little more than a list of field names: `Create a YAML spec with a field named 'a5' and subfield named 'return'. Append a JSON schema with fields: id, price, approved. Add another subfield named 'output' and include fields: id, price.`
+>ChatGPT is an expert at schema design and needs little more than a list of field names: `Create a YAML spec with a field named 'a5' and subfield named 'job'. Append a JSON schema with fields: id, price, approved. Add another subfield named 'output' and include fields: id, price, object_type (enum: widgetA, widgetB).`
 
 ```yaml
 # ./src/schemas/order.approval.price.requested.yaml
 
-a5:
-  return:
-    type: object
-    properties:
-      id:
-        type: string
-        description: The unique identifier for the object.
-      price:
-        type: number
-        description: The price of the item.
-        minimum: 0
-      approved:
-        type: boolean
-        description: Approval status of the object.
+ a5:
+  job:
+    schema:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The unique identifier for the object.
+        price:
+          type: number
+          description: The price of the item.
+          minimum: 0
+        approved:
+          type: boolean
+          description: Approval status of the object.
   output:
-    type: object
-    properties:
-      id:
-        type: string
-        description: The unique identifier for the object.
-      price:
-        type: number
-        description: The price of the item.
-        minimum: 0
+    schema:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The unique identifier for the object.
+        price:
+          type: number
+          description: The price of the item.
+          minimum: 0
+        object_type:
+          type: string
+          description: The type of the order (e.g., widgetA, widgetB)
+          enum:
+            - widgetA
+            - widgetB
 ```
 
 The workflow must now be updated to reference (`$ref`) the schema we just created. Consider the following  additions to activity, `a5`.
@@ -270,12 +278,10 @@ activities:
     type: trigger
     output:
       schema:
-        # SCHEMA $REF: a5/output
         $ref: '../schemas/order.approval.price.requested.yaml#/a5/output'
-    return:
+    job:
       schema:
-        # SCHEMA $REF: a5/return
-        $ref: '../schemas/order.approval.price.requested.yaml#/a5/return'
+        $ref: '../schemas/order.approval.price.requested.yaml#/a5/job'
 ...
 ```
 
@@ -284,7 +290,7 @@ With the schemas now defined for all activity inputs and outputs, it's now time 
 
 Mapping rules can apply static character data (like a fixed string or number) or can apply data produced by upstream activities. This guide does not cover the range of possibe mapping transformations, but it is a purely functional approach that supports the full ECMA standard. Refer to the [Data Mapping Overview](./data_mapping.md) for more information.
 
-For purposes of this guide, assume that we want the APPROVE ORDER PRICE workflow to return a message payload looking something like the following:
+For purposes of this guide, assume that we want the **Approve Order Price** workflow to return a message payload looking something like the following:
 
 ```json
 { "id": "item_123", "price": 55.67, "approved": true }
@@ -314,36 +320,26 @@ subscribes: order.approval.price.requested
 publishes: order.approval.price.responded
 
 activities:
-  a5:
-    title: Get Price Approval
-    type: trigger
-    output:
-      schema:
-        $ref: '../schemas/order.approval.price.requested.yaml#/a5/output'
-    return:
-      schema:
-        $ref: '../schemas/order.approval.price.requested.yaml#/a5/return'
+...
   a6:
     title: Return True
-    type: return
-    input:
+    type: job
+    job:
       maps:
-        # MAPPING $REF: a6/input
-        $ref: '../maps/order.approval.price.requested.yaml#/a6/input'
+        $ref: '../maps/order.approval.price.requested.yaml#/a6/job'
   a7:
     title: Return False
-    type: return
-    input:
+    type: job
+    job:
       maps:
-        # MAPPING $REF: a7/input
-        $ref: '../maps/order.approval.price.requested.yaml#/a7/input'
+        $ref: '../maps/order.approval.price.requested.yaml#/a7/job'
 ...
 ```
 
 ## Define Statistics
 As workflows are run at scale, novel patterns and insights start to emerge. The benefit of an event-driven architecture is the flexibility it provides when reacting to statistical events and conditions *as they occur in real time*.
 
-Let's extend the APPROVE ORDER PRICE workflow once more and add a `stats` section that will aid in collecting (and reacting to) aggregate statistics.
+Let's extend the **Approve Order Price** workflow once more and add a `stats` section that will aid in collecting (and reacting to) aggregate statistics.
 
 ```yaml
 # ./src/graphs/order.approval.price.requested.yaml
@@ -357,29 +353,82 @@ activities:
     output:
       schema:
         $ref: '../schemas/order.approval.price.requested.yaml#/a5/output'
-    return:
+    job:
       schema:
-        $ref: '../schemas/order.approval.price.requested.yaml#/a5/return'
+        $ref: '../schemas/order.approval.price.requested.yaml#/a5/job'
     stats:
       key: "{a5.input.data.object_type}"
       id: "{a5.input.data.id}"
+      granularity: 1h
       measures:
         - measure: avg
           target: "{a5.input.data.price}"
+        - measure: median
+          target: "{a5.input.data.price}"
         - measure: count
+          target: "{a5.input.data.object_type}"
+        - measure: index
           target: "{a5.input.data.object_type}"
   ...
 ```
 
 The following table lists the key statistics fields and their purpose. Note that the `key` and `id` fields can also use a `@pipe` declaration if a complex transformation is necessary to extract their value from the provided payload.
 
-| Field Name       | Description                                                        |
-| ---------------- | ------------------------------------------------------------------ |
-| stats/key        | The key used to group statistics by a specific attribute.          |
-| stats/id         | The unique identifier for the data point being measured.           |
-| stats/measures   | A list of measures that define the statistical aggregations.       |
+| Field Name        |  Description                                                       |
+| ----------------- | ------------------------------------------------------------------ |
+| stats/key         | The key used to group statistics by a specific field/value.        |
+| stats/id          | The unique identifier for the data point being measured.           |
+| stats/granularity | The minimum time slice for which metrics are tracked (1m limit)    |
+| stats/measures    | A list of measures that define the statistical aggregations.       |
 
->When the `count` measure is collected, all cardinal values will be grouped when providing the value. If there are two unique values for `object_type` across all workflows that run (e.g, widgetA, widgetB), then the system will provide counts for each individually. This is true for boolean fields as well where both `true` and `false` counts are tracked.
+### Measure | Avg
+The `average` measure should only be used to target `number` fields. It returns the mean over the specified job aggregation time period for the target field.
+
+### Measure | Count
+When the `count` measure is collected, all cardinal values will be grouped when providing the value. If there are two unique values for `object_type` across all workflows that run (e.g, widgetA, widgetB), then the system will provide counts for each individually. This is true for boolean fields as well where both `true` and `false` counts are tracked.
+
+### Measure | Median
+When the `median` measure is collected, all values must be collected and retained for the time period. If 1,000 jobs are run, there will be exactly 1,000 values retained. The approach uses a sorted set for values with one set for slice of time per the `granularity` setting for the flow's `stats`.
+
+### Measure | Index
+When the `index` measure is collected, the value of the `id` field will be stored in a sub-index organized by cardinal field values. For example, if a string field ("object_type") is targeted for indexing, two indexes will be created: `object_type:widgetA`, `object_type:widgetB` (assuming these are the enumerated values for this field). 
+
+Consider the following query that returns just those jobs with an `object_type` field with a value of `widgetA`. The max response count default is 1,000, but can be increased. *Note how the time range is required. Include `start` **and** `end` values or use a `range` and pin the direction using `start` **or** `end`.*
+
+```ts
+import { pubsubdb } from '@pubsubdb/pubsubdb';
+const jobs = pubsubdb.getJobs('myapp', 'order.approval.price.requested', {
+  target: '{object_type:widgetA}',
+  fields: ['id', 'price'],
+  range: '1h',
+  start: '2023-05-12T01:00:00Z'
+});
+```
+
+The expected JSON output would be as follows. *Note that the `fields` array is optional all fields will be returned if not provided.*:
+
+```json
+{
+  "target": "{object_type:widgetA}",
+  "fields": ["id", "price"],
+  "start": "2023-05-12T01:00:00Z",
+  "range": "1h",
+  "next_index": 1000,
+  "count": 1000,
+  "total_count": 2672,
+  "jobs": [
+    {
+      "id": "ord_123",
+      "price": 100
+    },
+    {
+      "id": "ord_456",
+      "price": 200
+    },
+    ...
+  ]
+}
+```
 
 ## Plan
 PubSubDB supports full lifecycle management like other data storage solutions. The system is designed to protect the models from arbitrary changes, providing migration and deployment tools to support hot deployments with no downtime. It's possible to plan the migration beforehand to better understand the scope of the change and whether or not a full hot deployment is possible. Provide your app manifest to PubSubDB to generate the plan.
@@ -402,11 +451,11 @@ const plan = pubsubdb.deploy('./pubsubdb.yaml');
 ```
 
 ## Trigger Workflow Job
-Publish events to trigger any flow. In this example, the ORDER APPROVAL flow is triggered by publishing the `order.approval.requested` event. The payload should adhere to the `output` schema defined for the activity trigger, `a1`.
+Publish events to trigger any flow. In this example, the **Approve Order** flow is triggered by publishing the `order.approval.requested` event. The payload should adhere to the `output` schema defined for the activity trigger, `a1`.
 
 ```ts
 import { pubsubdb } from '@pubsubdb/pubsubdb';
-const jobId = pubsubdb.pub('order.approval.requested', { id: 'order_123', price: 47.99 });
+const jobId = pubsubdb.pub('myapp', 'order.approval.requested', { id: 'order_123', price: 47.99 });
 ```
 
 ## Get Job Data
@@ -414,7 +463,7 @@ Retrieve the data for a single workflow using the job ID.
 
 ```ts
 import { pubsubdb } from '@pubsubdb/pubsubdb';
-const job = pubsubdb.get('order_123');
+const job = pubsubdb.get('myapp', 'order_123');
 ```
 
 ## Get Job Metadata
@@ -422,7 +471,7 @@ Query the status of a single workflow using the job ID.
 
 ```ts
 import { pubsubdb } from '@pubsubdb/pubsubdb';
-const job = pubsubdb.getJobMetadata('order_123');
+const job = pubsubdb.getJobMetadata('myapp', 'order_123');
 ```
 
 ## Get Job Statistics
@@ -432,8 +481,8 @@ Query for aggregation statistics by providing a time range and measures. In this
 
 ```ts
 import { pubsubdb } from '@pubsubdb/pubsubdb';
-const stats = pubsubdb.getJobStatistics('order.approval.price.requested', {
-  key: 'widgetX',
+const stats = pubsubdb.getJobStatistics('myapp', 'order.approval.price.requested', {
+  key: 'widgetA',
   granularity: '1h',
   range: '24h',
   end: 'NOW'
@@ -449,7 +498,11 @@ stats:
   measures:
     - measure: avg
       target: "{a5.input.data.price}"
+    - measure: median
+      target: "{a5.input.data.price}"
     - measure: count
+      target: "{a5.input.data.object_type}"
+    - measure: index
       target: "{a5.input.data.object_type}"
 ```
 
@@ -457,7 +510,7 @@ When the response is returned, the *average* for the `price` field and the *coun
 
 ```json
 {
-  "key": "widgetX",
+  "key": "widgetA",
   "granularity": "1h",
   "range": "24h",
   "end": "NOW",

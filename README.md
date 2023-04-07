@@ -60,7 +60,7 @@ Publish events to trigger any flow. In this example, the workflow is triggered b
 
 ```ts
 import { pubsubdb } from '@pubsubdb/pubsubdb';
-const jobId = pubsubdb.pub('order.approval.requested', { id: 'order_123', price: 47.99 });
+const jobId = pubsubdb.pub('myapp', 'order.approval.requested', { id: 'order_123', price: 47.99 });
 ```
 
 ### Get Job Data
@@ -68,7 +68,7 @@ Get the job data for a single workflow using the job ID.
 
 ```ts
 import { pubsubdb } from '@pubsubdb/pubsubdb';
-const job = pubsubdb.get('order_123');
+const job = pubsubdb.get('myapp', 'order_123');
 ```
 
 ### Get Job Metadata
@@ -76,7 +76,7 @@ Get the job metadata for a single workflow using the job ID.
 
 ```ts
 import { pubsubdb } from '@pubsubdb/pubsubdb';
-const job = pubsubdb.getJobMetadata('order_123');
+const job = pubsubdb.getJobMetadata('myapp', 'order_123');
 ```
 
 ### Get Job Statistics
@@ -84,7 +84,7 @@ Query for aggregation statistics by providing a time range and measures. In this
 
 ```ts
 import { pubsubdb } from '@pubsubdb/pubsubdb';
-const stats = pubsubdb.getJobStatistics('order.approval.price.requested', {
+const stats = pubsubdb.getJobStatistics('myapp', 'order.approval.price.requested', {
   key: 'widgetX',
   granularity: '1h',
   range: '24h',
@@ -96,7 +96,7 @@ const stats = pubsubdb.getJobStatistics('order.approval.price.requested', {
 Refer to the [Developer Guide](./docs/developer_guide.md) for more information on the full end-to-end development process, including details about schemas and APIs.
 
 ## Advanced Data Mapping
-Sharing data between activities is central to PubSubDB. Refer to the [Data Mapping Overview](./data_mapping.md) for more information.
+Sharing data between activities is central to PubSubDB. Refer to the [Data Mapping Overview](./docs/data_mapping.md) for more information.
 
 ## Advanced Workflow Composition
-The simplest graphs are linear, defining a predictable sequence of non cyclical activities. But graphs can be composed to model complex business scenarios and can even be designed to support long-running workflows lasting weeks or months. Refer to the [Composable Workflow Guide](./composable_workflow.md) for more information.
+The simplest graphs are linear, defining a predictable sequence of non cyclical activities. But graphs can be composed to model complex business scenarios and can even be designed to support long-running workflows lasting weeks or months. Refer to the [Composable Workflow Guide](./docs/composable_workflow.md) for more information.
