@@ -195,21 +195,22 @@ status:
 In this example, we follow the same essential pattern as before. We first provide the age field from object B and the value 40 as inputs. Then, we call the {@number.gte} function using the inputs from row 0, and provide "Senior" and "Junior" as additional inputs. Finally, we call the {@conditional.ternary} function, which sets the status field to "Senior" if the output from row 1 is true, and "Junior" otherwise.
 
 ### Example 3: Nested Pipes
-In this example, we'll demonstrate how to create a `user_initials` field by extracting the first letter of the first and last names and concatenating them. We'll use nested pipes as this is a non-linear mapping transformation with two parallel steps: *get the first initial*, *get the last initial*.
+In this example, we'll demonstrate how to create a `user_initials` field by extracting the first letter of the first and last names and concatenating them. We'll use *nested pipes* as this is a non-linear mapping transformation with two parallel steps: *get the first initial*, *get the last initial*. Nested pipes support a fan-out/fan-in pattern. Each nested pipe is a fan-out, and its corresponding fan-in will be the first "standard" row that follows and isn't a pipe (in the ruleset below, the nested `pipes` represent the "fan-out", operating in parallel while `string.concat` serves as the "fan-in", combining the results as input parameters).
 
-The `full_name` is first split into an array of first and last names using the {@array.split} function (note how a single space (" ") is passed as the delimiter when splitting). Next, two nested pipes are utilized to extract the first character of both the first and last names. Within each nested pipe, the {@array.get} function retrieves the respective name (first or last) from the array, followed by the {@string.charAt} function to extract the first character. Lastly, the {@string.concat} function concatenates the initials.
+The `full_name` is first split into an array of first and last names using the `{@array.split}` function (note how a single space (" ") is passed as the delimiter when splitting). Next, two nested pipes are utilized to extract the first character of both the first and last names. Within each nested pipe, the `{@array.get}` function retrieves the respective name (`first` or `last`) from the array, followed by the `{@string.charAt}` function to extract the first character. Lastly, the `{@string.concat}` function concatenates the initials.
 
 ```yaml
 initials:
   "@pipe":
     - ["{a2.output.data.full_name}", " "]
-    - ["{@array.split}"]
     - "@pipe":
+      - ["{@array.split}", 0]
       - ["{@array.get}", 0]
-      - ["{@string.charAt}", 0]
+      - ["{@string.charAt}"]
     - "@pipe":
-      - ["{@array.get}", 1]
-      - ["{@string.charAt}", 0]
+      - ["{@array.split}", 1]
+      - ["{@array.get}", 0]
+      - ["{@string.charAt}"]
     - ["{@string.concat}"]
 ```
 
@@ -249,13 +250,14 @@ x-maps:
   initials:
     "@pipe":
       - ["{a2.output.data.full_name}", " "]
-      - ["{@array.split}"]
       - "@pipe":
-          - ["{@array.get}", 0]
-          - ["{@string.charAt}", 0]
+        - ["{@array.split}", 0]
+        - ["{@array.get}", 0]
+        - ["{@string.charAt}"]
       - "@pipe":
-          - ["{@array.get}", 1]
-          - ["{@string.charAt}", 0]
+        - ["{@array.split}", 1]
+        - ["{@array.get}", 0]
+        - ["{@string.charAt}"]
       - ["{@string.concat}"]
 ```
 
