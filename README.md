@@ -96,7 +96,7 @@ const stats = pubsubdb.getJobStatistics('myapp', 'order.approval.price.requested
 Refer to the [Developer Guide](./docs/developer_guide.md) for more information on the full end-to-end development process, including details about schemas and APIs.
 
 ## Advanced Data Mapping
-Sharing data between activities is central to PubSubDB. Refer to the [Data Mapping Overview](./data_mapping.md) for more information.
+Sharing data between activities is central to PubSubDB. Refer to the [Data Mapping Overview](./docs/data_mapping.md) for more information.
 
 ## Advanced Workflow Composition
-The simplest graphs are linear, defining a predictable sequence of non cyclical activities. But graphs can be composed to model complex business scenarios and can even be designed to support long-running workflows lasting weeks or months. Refer to the [Composable Workflow Guide](./composable_workflow.md) for more information.
+The simplest graphs are linear, defining a predictable sequence of non cyclical activities. But graphs can be composed to model complex business scenarios and can even be designed to support long-running workflows lasting weeks or months. Refer to the [Composable Workflow Guide](./docs/composable_workflow.md) for more information.
