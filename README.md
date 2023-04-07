@@ -1,24 +1,28 @@
 # PubSubDB
 ## Overview
-PubSubDB is designed to simplify *integration*, *orchestration*, and *actionable analytics*. It is designed to work with any key/value store (particularly in-memory stores like Redis).
+PubSubDB is a schema-driven solution that simplifies integration, orchestration, and actionable analytics. It allows businesses to use models that actually reflect their needs, reducing the complexity of the integration and orchestration process. PubSubDB works with any key/value store, particularly in-memory stores like *Redis*. 
 
-### Point-to-Point Integration
+With PubSubDB, you can map data between internal systems and external SaaS services using standard Open API specs, design long-running approval processes with complex conditional processing, and gather process-level insights about aggregate processes over time. 
+
+PubSubDB's standard graph notation makes it easy to define multistep workflows and leverage existing Open API `schema` and `path` definitions when orchestrating API endpoints. The system supports full lifecycle management, providing migration and deployment tools to support hot deployments with no downtime. 
+
+Refer to the following guide for more information on how to use PubSubDB to simplify your workflow and data mapping processes.
+
+### Benefit | Point-to-Point Integration
 Map data between internal systems and external SaaS services, using standard Open API specs to define activities. Synchronize data between systems by mapping outputs from upstream activities.
 
-### Workflow Orchestration
+### Benefit | Workflow Orchestration
 Unify the third-party tools used by lines of business (e.g, Asana, Slack) with internal systems. Design long-running approval processes with complex conditional processing.
 
-### Actionable Analytics
+### Benefit | Actionable Analytics
 Design self-referential flows that react to events at scale. Gather process-level insights about aggregate processes over time.
 
-## Schema-Driven Design
+## Usage Examples
 PubSubDB uses standard graph notation to define the activities (nodes) and transitions (edges) between them. Consider the following sequence of 3 activities.
 
 ![Multistep Workflow](./docs/img/workflow.png)
 
 Multistep workflows like this are defined using a standard Open API extension. This approach allows PubSubDB to leverage the existing Open API `schema` and `path` definitions when orchestrating API endpoints. For instance, the *input* and *output* schemas for the **[Create Asana Task]** activity above are already defined in the official Asana Open API specification, and the extension can reference them using a standard `$ref` tag.
-
-## Usage Examples
 
 ### Install
 Install PubSubDB using NPM.
@@ -31,7 +35,7 @@ Pass your Redis client library (e.g, `redis`, `ioredis`) to serve as the backend
 
 ```javascript
 import { PubSubDB, RedisStore } from '../index';
-//provide your Redis client instance to initialize
+
 pubSubDB = await PubSubDB.init({ store: new RedisStore(redisClient)});
 ```
 
@@ -40,9 +44,9 @@ PubSubDB supports full lifecycle management like other data storage solutions. T
 
 ```typescript
 import { pubsubdb } from '@pubsubdb/pubsubdb';
-pubsubdb.init({ /* config */});
+
+pubsubdb.init({ });
 const plan = pubsubdb.plan('./pubsubdb.yaml');
-//returns graph, models, compilation errors, etc
 ```
 
 ### Deploy
@@ -50,9 +54,9 @@ Once you're satisfied with your plan, call deploy to officially compile and depl
 
 ```typescript
 import { pubsubdb } from '@pubsubdb/pubsubdb';
-pubsubdb.init({ /* config */});
-const plan = pubsubdb.deploy('./pubsubdb.yaml');
-//returns CHANGED graph, models, etc
+
+pubsubdb.init({ });
+const status = pubsubdb.deploy('./pubsubdb.yaml');
 ```
 
 ### Trigger Workflow Job
@@ -60,6 +64,7 @@ Publish events to trigger any flow. In this example, the workflow is triggered b
 
 ```ts
 import { pubsubdb } from '@pubsubdb/pubsubdb';
+
 const jobId = pubsubdb.pub('myapp', 'order.approval.requested', { id: 'order_123', price: 47.99 });
 ```
 
@@ -68,15 +73,17 @@ Get the job data for a single workflow using the job ID.
 
 ```ts
 import { pubsubdb } from '@pubsubdb/pubsubdb';
+
 const job = pubsubdb.get('myapp', 'order_123');
 ```
 
 ### Get Job Metadata
-Get the job metadata for a single workflow using the job ID.
+Query the status of a single workflow using the job ID. (*This query desccribes all state transitions for the job and the rate at which each activity was processed.*)
 
 ```ts
 import { pubsubdb } from '@pubsubdb/pubsubdb';
-const job = pubsubdb.getJobMetadata('myapp', 'order_123');
+
+const jobMetadata = pubsubdb.getJobMetadata('myapp', 'order_123');
 ```
 
 ### Get Job Statistics
@@ -84,8 +91,9 @@ Query for aggregation statistics by providing a time range and measures. In this
 
 ```ts
 import { pubsubdb } from '@pubsubdb/pubsubdb';
+
 const stats = pubsubdb.getJobStatistics('myapp', 'order.approval.price.requested', {
-  key: 'widgetX',
+  key: 'widgetA',
   granularity: '1h',
   range: '24h',
   end: 'NOW'

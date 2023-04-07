@@ -74,9 +74,7 @@ transitions:
 ```
 
 ## Define Conditional Activities
-Now, let's consider *conditional* activities that only exectute when their transition condition is met. It's common in business processes to branch depending upon conditions in the data.
-
-Consider the **Approve Order Price** graph with conditions now added to check the `price` field. The conditions ensure that `a5`  only transitions to `a6` if the  price is less than *100*. The inverse condition is applied to the transition from `a5` to `a7`.
+Now, let's review *conditional* activities that only exectute when their transition condition is met. It's common in business processes to branch depending upon conditions in the data. Consider the **Approve Order Price** graph with conditions now added to check the `price` field. The conditions ensure that `a5`  only transitions to `a6` if the  price is less than *100*. The inverse condition is applied to the transition from `a5` to `a7`.
 
 ```yaml
 activities:
@@ -233,39 +231,37 @@ Let's define the necessary schemas for activity, `a5`. Schemas can be cumbersome
 
  a5:
   job:
-    schema:
-      type: object
-      properties:
-        id:
-          type: string
-          description: The unique identifier for the object.
-        price:
-          type: number
-          description: The price of the item.
-          minimum: 0
-        approved:
-          type: boolean
-          description: Approval status of the object.
+    type: object
+    properties:
+      id:
+        type: string
+        description: The unique identifier for the object.
+      price:
+        type: number
+        description: The price of the item.
+        minimum: 0
+      approved:
+        type: boolean
+        description: Approval status of the object.
   output:
-    schema:
-      type: object
-      properties:
-        id:
-          type: string
-          description: The unique identifier for the object.
-        price:
-          type: number
-          description: The price of the item.
-          minimum: 0
-        object_type:
-          type: string
-          description: The type of the order (e.g., widgetA, widgetB)
-          enum:
-            - widgetA
-            - widgetB
+    type: object
+    properties:
+      id:
+        type: string
+        description: The unique identifier for the object.
+      price:
+        type: number
+        description: The price of the item.
+        minimum: 0
+      object_type:
+        type: string
+        description: The type of the order (e.g., widgetA, widgetB)
+        enum:
+          - widgetA
+          - widgetB
 ```
 
-The workflow must now be updated to reference (`$ref`) the schema we just created. Consider the following  additions to activity, `a5`.
+The workflow must now be updated to reference (`$ref`) the schema for activity, `a5`.
 
 ```yaml
 # ./src/graphs/order.approval.price.requested.yaml
@@ -301,18 +297,18 @@ In order to do this, we'll need to add a *mapping rules file* and reference from
 ```yaml
 # ./src/maps/order.approval.price.requested.yaml
 a6:
-  input:
+  job:
     id: "{a5.output.data.id}"
     price: "{a5.output.data.price}"
     approved: true
 a7:
-  input:
+  job:
     id: "{a5.output.data.id}"
     price: "{a5.output.data.price}"
     approved: false
 ```
 
-The corresponding workflow should now be updated so that activities `a6` and `a7`reference (`$ref`) the corresponding mapping rules defined  earlier in this guide.
+The corresponding workflow should now be updated so that activities `a6` and `a7`reference (`$ref`) the corresponding mapping rules.
 
 ```yaml
 # ./src/graphs/order.approval.price.requested.yaml
@@ -435,9 +431,9 @@ PubSubDB supports full lifecycle management like other data storage solutions. T
 
 ```typescript
 import { pubsubdb } from '@pubsubdb/pubsubdb';
-pubsubdb.init({ /* config */});
+
+pubsubdb.init({  });
 const plan = pubsubdb.plan('./pubsubdb.yaml');
-//outputs > graph, models, compilation errors, potential risk points for data loss
 ```
 
 ## Deploy
@@ -445,9 +441,9 @@ Once you're satisfied with your plan, call deploy to officially compile and depl
 
 ```typescript
 import { pubsubdb } from '@pubsubdb/pubsubdb';
-pubsubdb.init({ /* config */});
-const plan = pubsubdb.deploy('./pubsubdb.yaml');
-//outputs > CHANGED graph, models, compilation errors, potential risk points for data loss
+
+pubsubdb.init({  });
+const status = pubsubdb.deploy('./pubsubdb.yaml');
 ```
 
 ## Trigger Workflow Job
@@ -455,6 +451,7 @@ Publish events to trigger any flow. In this example, the **Approve Order** flow 
 
 ```ts
 import { pubsubdb } from '@pubsubdb/pubsubdb';
+
 const jobId = pubsubdb.pub('myapp', 'order.approval.requested', { id: 'order_123', price: 47.99 });
 ```
 
@@ -463,15 +460,17 @@ Retrieve the data for a single workflow using the job ID.
 
 ```ts
 import { pubsubdb } from '@pubsubdb/pubsubdb';
+
 const job = pubsubdb.get('myapp', 'order_123');
 ```
 
 ## Get Job Metadata
-Query the status of a single workflow using the job ID.
+Query the status of a single workflow using the job ID. (*This query desccribes all state transitions for the job and the rate at which each activity was processed.*)
 
 ```ts
 import { pubsubdb } from '@pubsubdb/pubsubdb';
-const job = pubsubdb.getJobMetadata('myapp', 'order_123');
+
+const jobMetadata = pubsubdb.getJobMetadata('myapp', 'order_123');
 ```
 
 ## Get Job Statistics
@@ -481,6 +480,7 @@ Query for aggregation statistics by providing a time range and measures. In this
 
 ```ts
 import { pubsubdb } from '@pubsubdb/pubsubdb';
+
 const stats = pubsubdb.getJobStatistics('myapp', 'order.approval.price.requested', {
   key: 'widgetA',
   granularity: '1h',
@@ -576,3 +576,14 @@ When the response is returned, the *average* for the `price` field and the *coun
   ]
 }
 ```
+
+## Composite Examples
+As a helpful reference, we have provided links to the files that were discussed throughout this guide. 
+
+First, you can find the graph for **Approve Order** in the file [order.approval.requested.yaml](../seeds/graphs/order.approval.requested.yaml). 
+
+Second, the graph for **Approve Order Price** can be found in the file [order.approval.price.requested.yaml](../seeds/graphs/order.approval.price.requested.yaml). 
+
+Lastly, the composite file, which shows the resolved schema with all $refs resolved, is located at [.pubsubdb.json](../seeds/.pubsubdb.json).
+
+In general, the `seeds` directory is a good place to start for better understanding of how to reference the various components in a PubSubDB Application.
