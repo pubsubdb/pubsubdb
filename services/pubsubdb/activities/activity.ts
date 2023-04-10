@@ -1,4 +1,4 @@
-import { ActivityConfig, ActivityData, ActivityMetadata } from "../../../typedefs/activity";
+import { ActivityType, ActivityData, ActivityMetadata } from "../../../typedefs/activity";
 import { JobContext } from "../../../typedefs/job";
 import { RestoreJobContextError, 
          MapInputDataError, 
@@ -7,12 +7,12 @@ import { RestoreJobContextError,
          ExecActivityError } from '../../../modules/errors';
 
 class Activity {
-  config: ActivityConfig;
+  config: ActivityType;
   data: ActivityData;
   metadata: ActivityMetadata;
   context: JobContext;
 
-  constructor(config: ActivityConfig, data: ActivityData, metadata: ActivityMetadata) {
+  constructor(config: ActivityType, data: ActivityData, metadata: ActivityMetadata) {
     this.config = config;
     this.data = data;
     this.metadata = metadata;
@@ -69,4 +69,4 @@ class Activity {
   }
 }
 
-export { Activity, ActivityConfig };
+export { Activity, ActivityType };

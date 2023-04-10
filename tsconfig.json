@@ -17,7 +17,7 @@
     // Uncomment the following line to allow compilation of JavaScript files
     // "allowJs": true,
     // Uncomment the following line to allow importing modules with the .json extension
-    // "resolveJsonModule": true
+     "resolveJsonModule": true
   },
   "include": [
     "**/*.ts"

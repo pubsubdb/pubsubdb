@@ -1,25 +1,26 @@
-import { StringLiteralType } from "typescript";
-
-// StoreService.ts
 abstract class StoreService {
-  abstract getKey(namespace: string, key: string): string;
-  abstract getManifest(): Promise<any>;
-  abstract setManifest(manifest: any): Promise<any>;
-  abstract setJob(jobId: any, data: Record<string, unknown>, metadata: Record<string, unknown>): Promise<any>;
-  abstract getJobMetadata(jobId: string): Promise<any>;
-  abstract getJobData(jobId: string): Promise<any>;
-  abstract getJob(jobId: string): Promise<any>;
-  abstract get(jobId: string): Promise<any>;
-  abstract setActivity(activityId: any, data: Record<string, unknown>, metadata: Record<string, unknown>): Promise<any>;
-  abstract getActivityMetadata(activityId: string): Promise<any>;
-  abstract getActivityData(activityId: string): Promise<any>;
-  abstract getActivity(activityId: string): Promise<any>;
-  abstract getSchema(topic: string): Promise<any>;
-  abstract getSchemas(): Promise<any>;
-  abstract init(): Promise<any>;
-  abstract initSchemaCache(): Promise<any>;
-  abstract setSchema(topic: string, schema: any): Promise<any>;
-  abstract setSchemas(schemas: Record<string, any>): Promise<any>;
+  abstract init(namespace: string, appId: string): Promise<any>;
+  abstract getSettings(bCreate?: boolean): Promise<any>;
+  abstract setSettings(manifest: Record<string, unknown>): Promise<any>;
+  abstract getApps(): Promise<{[appId: string]: any}>;
+  abstract getApp(appId: string): Promise<any>;
+  abstract setApp(appId: string, appVersion: string): Promise<any>;
+  abstract activateAppVersion(appId: string, version: string): Promise<any>;
+  abstract setJob(jobId: any, data: Record<string, unknown>, metadata: Record<string, unknown>, config: any): Promise<any>;
+  abstract getJobMetadata(jobId: string, config: any): Promise<any>;
+  abstract getJobData(jobId: string, config: any): Promise<any>;
+  abstract getJob(jobId: string, config: any): Promise<any>;
+  abstract get(jobId: string, config: any): Promise<any>;
+  abstract setActivity(jobId: string, activityId: any, data: Record<string, unknown>, metadata: Record<string, unknown>, config: any): Promise<any>;
+  abstract getActivityMetadata(jobId: string, activityId: string, config: any): Promise<any>;
+  abstract getActivityData(jobId: string, activityId: string, config: any): Promise<any>;
+  abstract getActivity(jobId: string, activityId: string, config: any): Promise<any>;
+  abstract getSchema(activityId: string, config: any): Promise<any>;
+  abstract getSchemas(config: any): Promise<any>;
+  abstract setSchemas(schemas: Record<string, any>, config: any): Promise<any>;
+  abstract setSubscriptions(subscriptions: Record<string, any>, config: any): Promise<any>;
+  abstract getSubscription(topic: string, config: any): Promise<string | undefined>;
+  abstract setSubscriptionPatterns(subscriptionsPatterns: Record<string, any>, config: any): Promise<any>;
 }
 
 export { StoreService };

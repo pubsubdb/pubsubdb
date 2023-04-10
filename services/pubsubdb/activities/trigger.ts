@@ -1,8 +1,8 @@
 import { ActivityData, ActivityMetadata } from "../../../typedefs/activity";
-import { Activity, ActivityConfig } from "./activity";
+import { Activity, ActivityType } from "./activity";
 
 class Trigger extends Activity {
-  constructor(config: ActivityConfig, data: ActivityData, metadata: ActivityMetadata) {
+  constructor(config: ActivityType, data: ActivityData, metadata: ActivityMetadata) {
     super(config, data, metadata);
   }
 
@@ -23,7 +23,7 @@ class Trigger extends Activity {
     this.context = {
       data: {},
       metadata: {
-        id: this.metadata.id,
+        id: this.metadata.activity_id,
       },
     }
   }
