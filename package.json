@@ -16,7 +16,10 @@
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --fix --ext .ts",
     "start": "ts-node src/index.ts",
-    "test": "NODE_ENV=test jest --detectOpenHandles --forceExit --verbose"
+    "test": "NODE_ENV=test jest --detectOpenHandles --forceExit --verbose",
+    "test:psdb": "NODE_ENV=test jest ./tests/index.test.ts --detectOpenHandles --forceExit --verbose",
+    "test:redis": "NODE_ENV=test jest ./tests/services/store/redis.test.ts --detectOpenHandles --forceExit --verbose",
+    "test:compiler": "NODE_ENV=test jest ./tests/services/compiler/index.test.ts --detectOpenHandles --forceExit --verbose"
   },
   "keywords": [],
   "author": "luke.birdeau@gmail.com",

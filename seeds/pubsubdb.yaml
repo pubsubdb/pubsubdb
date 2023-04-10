@@ -1,5 +1,5 @@
 app:
-  id: myapp
+  id: test-app
   version: 1
   settings:
     some_boolean: true

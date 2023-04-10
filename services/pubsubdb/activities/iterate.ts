@@ -1,8 +1,8 @@
 import { ActivityData, ActivityMetadata } from "../../../typedefs/activity";
-import { Activity, ActivityConfig } from "./activity";
+import { Activity, ActivityType } from "./activity";
 
 class Iterate extends Activity {
-  constructor(config: ActivityConfig, data: ActivityData, metadata: ActivityMetadata) {
+  constructor(config: ActivityType, data: ActivityData, metadata: ActivityMetadata) {
     super(config, data, metadata);
   }
   async restoreJobContext(): Promise<void> {

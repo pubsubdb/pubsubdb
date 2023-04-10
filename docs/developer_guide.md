@@ -393,7 +393,7 @@ Consider the following query that returns just those jobs with an `object_type` 
 
 ```ts
 import { pubsubdb } from '@pubsubdb/pubsubdb';
-const jobs = pubsubdb.getJobs('myapp', 'order.approval.price.requested', {
+const jobs = pubsubdb.getJobs('order.approval.price.requested', {
   target: '{object_type:widgetA}',
   fields: ['id', 'price'],
   range: '1h',
@@ -452,7 +452,7 @@ Publish events to trigger any flow. In this example, the **Approve Order** flow 
 ```ts
 import { pubsubdb } from '@pubsubdb/pubsubdb';
 
-const jobId = pubsubdb.pub('myapp', 'order.approval.requested', { id: 'order_123', price: 47.99 });
+const jobId = pubsubdb.pub('order.approval.requested', { id: 'order_123', price: 47.99 });
 ```
 
 ## Get Job Data
@@ -461,7 +461,7 @@ Retrieve the data for a single workflow using the job ID.
 ```ts
 import { pubsubdb } from '@pubsubdb/pubsubdb';
 
-const job = pubsubdb.get('myapp', 'order_123');
+const job = pubsubdb.get('order_123');
 ```
 
 ## Get Job Metadata
@@ -470,7 +470,7 @@ Query the status of a single workflow using the job ID. (*This query desccribes 
 ```ts
 import { pubsubdb } from '@pubsubdb/pubsubdb';
 
-const jobMetadata = pubsubdb.getJobMetadata('myapp', 'order_123');
+const jobMetadata = pubsubdb.getJobMetadata('order_123');
 ```
 
 ## Get Job Statistics
@@ -481,7 +481,7 @@ Query for aggregation statistics by providing a time range and measures. In this
 ```ts
 import { pubsubdb } from '@pubsubdb/pubsubdb';
 
-const stats = pubsubdb.getJobStatistics('myapp', 'order.approval.price.requested', {
+const stats = pubsubdb.getJobStatistics('order.approval.price.requested', {
   key: 'widgetA',
   granularity: '1h',
   range: '24h',
@@ -584,6 +584,6 @@ First, you can find the graph for **Approve Order** in the file [order.approval.
 
 Second, the graph for **Approve Order Price** can be found in the file [order.approval.price.requested.yaml](../seeds/graphs/order.approval.price.requested.yaml). 
 
-Lastly, the composite file, which shows the resolved schema with all $refs resolved, is located at [.pubsubdb.json](../seeds/.pubsubdb.json).
+Lastly, the composite file, which shows the resolved schema with all $refs resolved, is located at [.pubsubdb.json](../seeds/.pubsubdb.test-app.1.json).
 
 In general, the `seeds` directory is a good place to start for better understanding of how to reference the various components in a PubSubDB Application.

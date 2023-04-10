@@ -1,59 +1,204 @@
-import { NAMESPACES as NS } from './namespace';
+import { PubSubDBApp, PubSubDBApps, PubSubDBSettings } from '../../typedefs/pubsubdb';
+import { KeyStore, KeyStoreParams, KeyType, PSNS } from './keyStore';
+import { Cache } from './cache';
 import { StoreService } from './store';
 
 class RedisStoreService extends StoreService {
-  private redisClient: any;
-  private schemaCache: Record<string, unknown> = {};
+  redisClient: any;
+  cache: Cache;
+  namespace: string;
 
   constructor(redisClient: any) {
     super();
     this.redisClient = redisClient;
-    this.init();
-  }
-
-  async init() {
-    await this.initSchemaCache();
-  }
-
-  async initSchemaCache() {
-    const schemas = {};
-    this.schemaCache = schemas;
   }
 
   /**
-   * returns the key for the given namespace and key for the store
-   * @param namespace 
-   * @param key 
+   * only the engine can call this method; it initializes the local cache. the developer
+   * must have the opportunity to set the cache namespace by init'ing the PSDB instance.
+   * That instance will call this mathod, providing the necessary namespace override
+   * and ensuring no collisions.
+   * @param namespace
+   * @param appId
+   * @returns {Promise<{[appId: string]: PubSubDBApp}>}
+   */
+  async init(namespace = PSNS, appId: string): Promise<{[appId: string]: PubSubDBApp}> {
+    this.namespace = namespace;
+    const settings = await this.getSettings(true);
+    this.cache = new Cache(appId, settings);
+    return await this.getApps();
+  }
+
+  /**
+   * mint a key to access a given entity (KeyType) in the store
+   * @param type 
+   * @param params 
    * @returns 
    */
-  getKey(namespace: string, key = ''): string {
-    return `${namespace}:${key}`;
+  mintKey(type: KeyType, params: KeyStoreParams): string {
+    if (!this.namespace) throw new Error('namespace not set');
+    return KeyStore.mintKey(this.namespace, type, params);
   }
 
   /**
-   * get the manifest from the store; the manifest is the entry point for the entire
-   * pubsubdb data tree and contains the information necessary to resolve all
-   * jobs, activities, schemas, etc
-   * 
-   * @returns {Promise<any>}
+   * invalidates the local cache; would be called if a new version were to be deployed
    */
-  async getManifest(): Promise<any> {
-    const key = this.getKey(NS.PUBSUBDB, 'manifest');
-    const manifest = await this.redisClient.get(key);
-    return JSON.parse(manifest);
+  invalidateCache() {
+    this.cache.invalidate();
   }
 
   /**
-   * get the manifest from the store; the manifest is the entry point for the entire
-   * pubsubdb data tree and contains the information necessary to resolve all
-   * jobs, activities, schemas, etc
+   * get the pubsubdb global settings ({hash}) from the store; 
+   * the settings reveal information about the namespace, the version of the pubsubdb
+   * 
+   * @param {boolean} bCreate - if true, create the settings if they don't exist
+   * @returns {Promise<PubSubDBSettings>}
+   */
+  async getSettings(bCreate = false): Promise<PubSubDBSettings> {
+    let settings = this.cache?.getSettings();
+    if (settings) {
+      return settings;
+    } else {
+      if (bCreate) {
+        const packageJson = await import('../../package.json');
+        const version: string = packageJson.version;
+        settings = { namespace: PSNS, version } as PubSubDBSettings;
+        await this.setSettings(settings);
+        return settings;
+      }
+    }
+    throw new Error('settings not found');
+  }
+
+  /**
+   * sets the pubsubdb global settings ({hash}) in the store;
    * 
    * @param {any} manifest
    * @returns {Promise<any>}
    */
-  async setManifest(manifest: any): Promise<any> {
-    const key = this.getKey(NS.PUBSUBDB, 'manifest');
-    return await this.redisClient.set(key, JSON.stringify(manifest));
+  async setSettings(manifest: PubSubDBSettings): Promise<any> {
+    const params: KeyStoreParams = {};
+    const key = this.mintKey(KeyType.PUBSUBDB, params);
+    return await this.redisClient.hSet(key, manifest);
+  }
+
+  async getApps(): Promise<{[appId: string]: PubSubDBApp}> {
+    let apps: PubSubDBApps = this.cache.getApps();
+    if (apps && Object.keys(apps).length > 0) {
+      return apps;
+    } else {
+      const key = this.mintKey(KeyType.APP, {});
+      const appKeys: string[] = [];
+      let cursor = '0', tuples = [];
+      // Collect app keys using hScan
+      do {
+        const val = await this.redisClient.hScan(key, cursor) as { cursor: string, tuples: string[] };
+        cursor = val.cursor;
+        tuples = val.tuples;
+        for (let i = 0; i < tuples.length; i += 2) {
+          const appId = tuples[i];
+          appKeys.push(appId);
+        }
+      } while (Number(cursor) !== 0);
+      // Create multi to fetch app data
+      const multi = this.redisClient.multi();
+      for (const appKey of appKeys) {
+        multi.hGetAll(appKey);
+      }
+      // Execute multi and process results
+      const multiResults = await multi.exec();
+      apps = {};
+      for (const [index, [err, appData]] of multiResults.entries()) {
+        if (err) {
+          throw err;
+        }
+        const appId = appKeys[index];
+        apps[appId] = JSON.parse(appData) as PubSubDBApp;
+      }
+      this.cache.setApps(apps);
+    }
+    return apps;
+  }  
+
+  /**
+   * gets a specific app manifest revealing all versions and settings and status for
+   * the app.
+   * 
+   * @returns {Promise<any>}
+   */
+  async getApp(id: string): Promise<PubSubDBApp> {
+    let app = this.cache.getApp(id);
+    if (app && Object.keys(app).length > 0) {
+      return app;
+    } else {
+      const params: KeyStoreParams = { appId: id };
+      const key = this.mintKey(KeyType.APP, params);
+      app = await this.redisClient.hGetAll(key);
+      this.cache.setApp(id, app);
+    }
+  }
+
+  async setApp(id: string, version: string): Promise<PubSubDBApp> {
+    const params: KeyStoreParams = { appId: id };
+    const key = this.mintKey(KeyType.APP, params);
+    const versionId = `versions/${version}`;
+    const payload: PubSubDBApp = {
+      id,
+      version,
+      [versionId]: `deployed:${new Date().toISOString()}`,
+    };
+    await this.redisClient.hSet(key, payload);
+    this.cache.setApp(id, payload);
+    return payload;
+  }
+
+  /**
+   * sets/locks the active version for an app; this is used to track the versions of the app that are
+   * currently "active". this is set at deploy time after the segmenter has persisted all models to the store.
+   * 
+   * @param {string} id
+   * @param {string} version
+   * @returns {Promise<any>}
+   */
+  async activateAppVersion(id: string, version: string): Promise<any> {
+    const params: KeyStoreParams = { appId: id };
+    const key = this.mintKey(KeyType.APP, params);
+    const versionId = `versions/${version}`;
+    const app = await this.getApp(id);
+    if (app && app[versionId]) {
+      const payload: PubSubDBApp = {
+        id,
+        version,
+        [versionId]: `activated:${new Date().toISOString()}`,
+        active: true
+      };
+      Object.entries(payload).forEach(([key, value]) => {
+        payload[key] = JSON.stringify(value);
+      });
+      return await this.redisClient.hSet(key, payload);
+    }
+    throw new Error(`Version ${version} does not exist for app ${id}`);
+  }
+
+  /**
+   * registers an app version; this is used to track known versions of the app in any state.
+   * The version is set at compile time for an app BEFORE the segmenter
+   * starts persisting definitions to the store. The corresponding lifecycle method,
+   * `activateAppVersion`, can be called to lock the active version once the segmenter has
+   * verified that all models have been persisted to the store.
+   * 
+   * @param {any} manifest
+   * @returns {Promise<any>}
+   */
+  async registerAppVersion(appId: string, version: string): Promise<any> {
+    const params: KeyStoreParams = { appId };
+    const key = this.mintKey(KeyType.APP, params);
+    const payload: PubSubDBApp = {
+      id: appId,
+      version,
+      [`versions/${version}`]: new Date().toISOString()
+    };
+    return await this.redisClient.hSet(key, payload);
   }
 
   /**
@@ -67,23 +212,26 @@ class RedisStoreService extends StoreService {
    * @param metadata 
    * @returns 
    */
-  async setJob(jobId: string, data: Record<string, unknown>, metadata: Record<string, unknown>): Promise<string> {
+  async setJob(jobId: string, data: Record<string, unknown>, metadata: Record<string, unknown>, appConfig: {id: string, version: string}): Promise<string> {
+    const params: KeyStoreParams = { appId: appConfig.id, jobId };
     const [dataResp, metadataResp] = await this.redisClient.multi()
-      .set(this.getKey(NS.JOB_DATA, jobId), JSON.stringify(data))
-      .set(this.getKey(NS.JOB_METADATA, jobId), JSON.stringify(metadata))
+      .set(this.mintKey(KeyType.JOB_DATA, params), JSON.stringify(data))
+      .set(this.mintKey(KeyType.JOB_METADATA, params), JSON.stringify(metadata))
       //todo: set aggregation stats for the schema (NS.JOB_STATISTICS)
       .exec();
     return jobId;
   }
 
-  async getJobMetadata(jobId: string): Promise<any> {
-    const key = this.getKey(NS.JOB_METADATA, jobId);
+  async getJobMetadata(jobId: string, appConfig: {id: string, version: string}): Promise<any> {
+    const params: KeyStoreParams = { appId: appConfig.id, jobId };
+    const key = this.mintKey(KeyType.JOB_METADATA, params);
     const jobMetadata = await this.redisClient.get(key);
     return JSON.parse(jobMetadata);
   }
 
-  async getJobData(jobId: string): Promise<any> {
-    const key = this.getKey(NS.JOB_DATA, jobId);
+  async getJobData(jobId: string, appConfig: {id: string, version: string}): Promise<any> {
+    const params: KeyStoreParams = { appId: appConfig.id, jobId };
+    const key = this.mintKey(KeyType.JOB_DATA, params);
     const jobData = await this.redisClient.get(key);
     return JSON.parse(jobData);
   }
@@ -93,8 +241,8 @@ class RedisStoreService extends StoreService {
    * @param jobId 
    * @returns 
    */
-  async getJob(jobId: string): Promise<any> {
-    return await this.getJobData(jobId);
+  async getJob(jobId: string, appConfig: {id: string, version: string}): Promise<any> {
+    return await this.getJobData(jobId, appConfig);
   }
 
   /**
@@ -102,32 +250,65 @@ class RedisStoreService extends StoreService {
    * @param jobId 
    * @returns 
    */
-  async get(jobId: string): Promise<any> {
-    return await this.getJobData(jobId);
+  async get(jobId: string, appConfig: {id: string, version: string}): Promise<any> {
+    return await this.getJobData(jobId, appConfig);
   }
 
-  async setActivity(activityId: any, data: Record<string, unknown>, metadata: Record<string, unknown>): Promise<any>  {
+  /**
+   * adds an activity (data), metadata, and aggregation stats to the store; the jobId is provided
+   * @param jobId 
+   * @param activityId 
+   * @param data 
+   * @param metadata 
+   * @param appConfig 
+   * @returns 
+   */
+  async setActivity(jobId: string, activityId: string, data: Record<string, unknown>, metadata: Record<string, unknown>, appConfig: {id: string, version: string}): Promise<any>  {
+    const params: KeyStoreParams = { appId: appConfig.id, jobId, activityId };
     const [dataResp, metadataResp] = await this.redisClient.multi()
-      .set(this.getKey(NS.ACTIVITY_DATA, activityId), JSON.stringify(data))
-      .set(this.getKey(NS.ACTIVITY_METADATA, activityId), JSON.stringify(metadata))
+      .set(this.mintKey(KeyType.JOB_ACTIVITY_DATA, params), JSON.stringify(data))
+      .set(this.mintKey(KeyType.JOB_ACTIVITY_METADATA, params), JSON.stringify(metadata))
       .exec();
     return activityId;
   }
   
-  async getActivityMetadata(activityId: string): Promise<any> {
-    const key = this.getKey(NS.ACTIVITY_METADATA, activityId);
+  /**
+   * gets the activity metadata
+   * @param jobId 
+   * @param activityId 
+   * @param appConfig 
+   * @returns 
+   */
+  async getActivityMetadata(jobId: string, activityId: string, appConfig: {id: string, version: string}): Promise<any> {
+    const params: KeyStoreParams = { appId: appConfig.id, jobId, activityId };
+    const key = this.mintKey(KeyType.JOB_ACTIVITY_METADATA, params);
     const activityMetadata = await this.redisClient.get(key);
     return JSON.parse(activityMetadata);
   }
 
-  async getActivityData(activityId: string): Promise<any> {
-    const key = this.getKey(NS.ACTIVITY_DATA, activityId);
+  /**
+   * gets the activity data
+   * @param jobId 
+   * @param activityId 
+   * @param appConfig 
+   * @returns 
+   */
+  async getActivityData(jobId: string, activityId: string, appConfig: {id: string, version: string}): Promise<any> {
+    const params: KeyStoreParams = { appId: appConfig.id, jobId, activityId };
+    const key = this.mintKey(KeyType.JOB_ACTIVITY_DATA, params);
     const activityData = await this.redisClient.get(key);
     return JSON.parse(activityData);
   }
 
-  async getActivity(activityId: string): Promise<any> {
-    return await this.getActivityData(activityId);
+  /**
+   * convenience method to get the activity data
+   * @param jobId 
+   * @param activityId 
+   * @param appConfig 
+   * @returns 
+   */
+  async getActivity(jobId: string, activityId: string, appConfig: {id: string, version: string}): Promise<any> {
+    return await this.getActivityData(jobId, activityId, appConfig);
   }
 
   /**
@@ -136,13 +317,13 @@ class RedisStoreService extends StoreService {
    * @param topic 
    * @returns 
    */
-  async getSchema(topic: string): Promise<any> {
-    if (this.schemaCache && this.schemaCache[topic]) {
-      return this.schemaCache[topic];
+  async getSchema(activityId: string, appConfig: {id: string, version: string}): Promise<any> {
+    let schema = this.cache.getSchema(appConfig.id, appConfig.version, activityId);
+    if (schema) {
+      return schema
     } else {
-      const key = this.getKey(NS.ACTIVITY_SCHEMAS);
-      const schema = JSON.parse(await this.redisClient.hget(key, topic));
-      return this.schemaCache[topic] = schema;
+      const schemas = await this.getSchemas(appConfig);
+      return schemas[activityId];
     }
   }
 
@@ -150,26 +331,20 @@ class RedisStoreService extends StoreService {
    * Always fetches the schemas from the store and caches them in memory
    * @returns 
    */
-  async getSchemas(): Promise<any> {
-    const key = this.getKey(NS.ACTIVITY_SCHEMAS);
-    const schemas = await this.redisClient.hGetAll(key);
-    Object.entries(schemas).forEach(([key, value]) => {
-      schemas[key] = JSON.parse(value as string);
-    });
-    return this.schemaCache = schemas;
-  }
-
-  /**
-   * Sets the schema for the given topic in the store and in memory
-   * @param topic 
-   * @param schema 
-   * @returns 
-   */
-  async setSchema(topic: string, schema: any): Promise<any> {
-    const key = this.getKey(NS.ACTIVITY_SCHEMAS);
-    const response = await this.redisClient.hSet(key, topic, JSON.stringify(schema));
-    this.schemaCache[topic] = schema;
-    return response;
+  async getSchemas(appConfig: {id: string, version: string}): Promise<any> {
+    let schemas = this.cache.getSchemas(appConfig.id, appConfig.version);
+    if (schemas && Object.keys(schemas).length > 0) {
+      return schemas;
+    } else {
+      const params: KeyStoreParams = { appId: appConfig.id, appVersion: appConfig.version };
+      const key = this.mintKey(KeyType.SCHEMAS, params);
+      schemas = await this.redisClient.hGetAll(key);
+      Object.entries(schemas).forEach(([key, value]) => {
+        schemas[key] = JSON.parse(value as string);
+      });
+      this.cache.setSchemas(appConfig.id, appConfig.version, schemas);
+      return schemas;
+    }
   }
 
   /**
@@ -177,15 +352,83 @@ class RedisStoreService extends StoreService {
    * @param schemas 
    * @returns 
    */
-  async setSchemas(schemas: Record<string, any>): Promise<any> {
-    const key = this.getKey(NS.ACTIVITY_SCHEMAS);
+  async setSchemas(schemas: Record<string, any>, appConfig: {id: string, version: string}): Promise<any> {
+    const params: KeyStoreParams = { appId: appConfig.id, appVersion: appConfig.version };
+    const key = this.mintKey(KeyType.SCHEMAS, params);
     const _schemas = {...schemas};
     Object.entries(_schemas).forEach(([key, value]) => {
       _schemas[key] = JSON.stringify(value);
     });
     const response = await this.redisClient.hSet(key, _schemas);
-    this.schemaCache = schemas;
+    this.cache.setSchemas(appConfig.id, appConfig.version, schemas);
     return response;
+  }
+
+  /**
+   * Registers handlers for public subscriptions for the given topic in the store
+   * @param subscriptions 
+   * @param appConfig 
+   * @returns 
+   */
+  async setSubscriptions(subscriptions: Record<string, any>, appConfig: {id: string, version: string}): Promise<void> {
+    const params: KeyStoreParams = { appId: appConfig.id, appVersion: appConfig.version };
+    const key = this.mintKey(KeyType.SUBSCRIPTIONS, params);
+    const _subscriptions = {...subscriptions};
+    Object.entries(_subscriptions).forEach(([key, value]) => {
+      _subscriptions[key] = JSON.stringify(value);
+    });
+    const response = await this.redisClient.hSet(key, _subscriptions);
+    this.cache.setSubscriptions(appConfig.id, appConfig.version, subscriptions);
+    return response;
+  }
+
+  async getSubscriptions(appConfig: { id: string; version: string }): Promise<Record<string, string>> {
+    let subscriptions = this.cache.getSubscriptions(appConfig.id, appConfig.version);
+    if (subscriptions && Object.keys(subscriptions).length > 0) {
+      return subscriptions;
+    } else {
+      const params: KeyStoreParams = { appId: appConfig.id, appVersion: appConfig.version };
+      const key = this.mintKey(KeyType.SUBSCRIPTIONS, params);
+      subscriptions = await this.redisClient.hGetAll(key) || {};
+      Object.entries(subscriptions).forEach(([key, value]) => {
+        subscriptions[key] = JSON.parse(value as string);
+      });
+      this.cache.setSubscriptions(appConfig.id, appConfig.version, subscriptions);
+      return subscriptions;
+    }
+  }
+
+  async getSubscription(topic: string, appConfig: { id: string; version: string }): Promise<string | undefined> {
+    let subscriptions = await this.getSubscriptions(appConfig);
+    return subscriptions[topic];
+  }
+
+  async setSubscriptionPatterns(subscriptionPatterns: Record<string, any>, appConfig: {id: string, version: string}): Promise<any> {
+    const params: KeyStoreParams = { appId: appConfig.id, appVersion: appConfig.version };
+    const key = this.mintKey(KeyType.SUBSCRIPTION_PATTERNS, params);
+    const _subscriptions = {...subscriptionPatterns};
+    Object.entries(_subscriptions).forEach(([key, value]) => {
+      _subscriptions[key] = JSON.stringify(value);
+    });
+    const response = await this.redisClient.hSet(key, _subscriptions);
+    this.cache.setSubscriptionPatterns(appConfig.id, appConfig.version, subscriptionPatterns);
+    return response;
+  }
+
+  async getSubscriptionPatterns(appConfig: { id: string; version: string }): Promise<any> {
+    let patterns = this.cache.getSubscriptionPatterns(appConfig.id, appConfig.version);
+    if (patterns && Object.keys(patterns).length > 0) {
+      return patterns;
+    } else {
+      const params: KeyStoreParams = { appId: appConfig.id, appVersion: appConfig.version };
+      const key = this.mintKey(KeyType.SUBSCRIPTION_PATTERNS, params);
+      patterns = await this.redisClient.hGetAll(key);
+      Object.entries(patterns).forEach(([key, value]) => {
+        patterns[key] = JSON.parse(value as string);
+      });
+      this.cache.setSubscriptionPatterns(appConfig.id, appConfig.version, patterns);
+      return patterns;
+    }
   }
 }
 
