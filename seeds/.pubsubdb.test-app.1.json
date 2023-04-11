@@ -233,8 +233,20 @@
               "id": "{a5.input.data.id}",
               "measures": [
                 {
+                  "measure": "sum",
+                  "target": "{a5.input.data.price}"
+                },
+                {
                   "measure": "avg",
                   "target": "{a5.input.data.price}"
+                },
+                {
+                  "measure": "mdn",
+                  "target": "{a5.input.data.price}"
+                },
+                {
+                  "measure": "index",
+                  "target": "{a5.input.data.object_type}"
                 },
                 {
                   "measure": "count",

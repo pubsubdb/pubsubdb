@@ -1,4 +1,4 @@
-type ActivityExecutionType = 'trigger' | 'await' | 'job' | 'openapi';
+type ActivityExecutionType = 'trigger' | 'await' | 'job' | 'openapi' | 'request' | 'iterate';
 
 interface ActivityBase {
   title: string;
@@ -13,6 +13,26 @@ interface TriggerActivity extends ActivityBase {
   type: 'trigger';
   stats?: Record<string, any>;
   job?: Record<string, any>;
+  sortedActivityIds?: string[];
+}
+
+interface AwaitActivity extends ActivityBase {
+  type: 'await';
+  eventName: string;
+  timeout: number;
+}
+
+interface OpenAPIActivity extends ActivityBase {
+  type: 'openapi';
+  timeout: number;
+}
+
+interface RequestActivity extends ActivityBase {
+  type: 'request';
+}
+
+interface IterateActivity extends ActivityBase {
+  type: 'iterate';
 }
 
 interface AwaitActivity extends ActivityBase {
@@ -26,13 +46,13 @@ interface JobActivity extends ActivityBase {
   job?: Record<string, any>;
 }
 
-type ActivityType = TriggerActivity | AwaitActivity | JobActivity;
+type ActivityType = TriggerActivity | AwaitActivity | JobActivity | OpenAPIActivity | RequestActivity | IterateActivity;
 
 type ActivityData = Record<string, any>;
 type ActivityMetadata = {
   activity_id: string;
-  type: string;
-  subtype: string;
+  activity_type: string;
+  activity_subtype: string;
   job_id?: string;
 };
 
@@ -41,4 +61,4 @@ type ActivityContext = {
   metadata: ActivityMetadata;
 }
 
-export { ActivityType, ActivityContext, ActivityData, ActivityMetadata, TriggerActivity, AwaitActivity, JobActivity };
+export { ActivityType, ActivityContext, ActivityData, ActivityMetadata, TriggerActivity, AwaitActivity, JobActivity, OpenAPIActivity, RequestActivity, IterateActivity };

@@ -1,3 +1,5 @@
+import { StatsType } from "../../typedefs/stats";
+
 abstract class StoreService {
   abstract init(namespace: string, appId: string): Promise<any>;
   abstract getSettings(bCreate?: boolean): Promise<any>;
@@ -7,6 +9,7 @@ abstract class StoreService {
   abstract setApp(appId: string, appVersion: string): Promise<any>;
   abstract activateAppVersion(appId: string, version: string): Promise<any>;
   abstract setJob(jobId: any, data: Record<string, unknown>, metadata: Record<string, unknown>, config: any): Promise<any>;
+  abstract setJobStats(jobKey: string, jobId: string, stats: StatsType, appConfig: {id: string, version: string}): Promise<string>
   abstract getJobMetadata(jobId: string, config: any): Promise<any>;
   abstract getJobData(jobId: string, config: any): Promise<any>;
   abstract getJob(jobId: string, config: any): Promise<any>;
@@ -21,6 +24,7 @@ abstract class StoreService {
   abstract setSubscriptions(subscriptions: Record<string, any>, config: any): Promise<any>;
   abstract getSubscription(topic: string, config: any): Promise<string | undefined>;
   abstract setSubscriptionPatterns(subscriptionsPatterns: Record<string, any>, config: any): Promise<any>;
+  abstract getSubscriptionPatterns(config: any): Promise<any>;
 }
 
 export { StoreService };

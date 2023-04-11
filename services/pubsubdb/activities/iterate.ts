@@ -1,10 +1,14 @@
-import { ActivityData, ActivityMetadata } from "../../../typedefs/activity";
+import { PubSubDBService } from "..";
+import { ActivityData, ActivityMetadata, IterateActivity } from "../../../typedefs/activity";
 import { Activity, ActivityType } from "./activity";
 
 class Iterate extends Activity {
-  constructor(config: ActivityType, data: ActivityData, metadata: ActivityMetadata) {
-    super(config, data, metadata);
+  config: IterateActivity;
+
+  constructor(config: ActivityType, data: ActivityData, metadata: ActivityMetadata, pubsubdb: PubSubDBService) {
+    super(config, data, metadata, pubsubdb);
   }
+
   async restoreJobContext(): Promise<void> {
     console.log("Iterate restoreJobContext - Do nothing; No context");
   }

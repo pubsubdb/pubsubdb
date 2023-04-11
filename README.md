@@ -1,12 +1,6 @@
 # PubSubDB
 ## Overview
-PubSubDB is a schema-driven solution that simplifies integration, orchestration, and actionable analytics. It allows businesses to use models that actually reflect their needs, reducing the complexity of the integration and orchestration process. PubSubDB works with any key/value store, particularly in-memory stores like *Redis*. 
-
-With PubSubDB, you can map data between internal systems and external SaaS services using standard Open API specs, design long-running approval processes with complex conditional processing, and gather process-level insights about aggregate processes over time. 
-
-PubSubDB's standard graph notation makes it easy to define multistep workflows and leverage existing Open API `schema` and `path` definitions when orchestrating API endpoints. The system supports full lifecycle management, providing migration and deployment tools to support hot deployments with no downtime. 
-
-Refer to the following guide for more information on how to use PubSubDB to simplify your workflow and data mapping processes.
+PubSubDB is a model-driven solution that simplifies integration, orchestration, and actionable analytics. Design your key business workflows using standard graph notation, while PubSubDB handles the implementation. PubSubDB is designed to work with any key/value store, with a reference implementation using *Redis*. Refer to the following guide for more information on how to use PubSubDB to simplify your workflow needs.
 
 ### Benefit | Point-to-Point Integration
 Map data between internal systems and external SaaS services, using standard Open API specs to define activities. Synchronize data between systems by mapping outputs from upstream activities.
@@ -22,7 +16,7 @@ PubSubDB uses standard graph notation to define the activities (nodes) and trans
 
 ![Multistep Workflow](./docs/img/workflow.png)
 
-Multistep workflows like this are defined using a standard Open API extension. This approach allows PubSubDB to leverage the existing Open API `schema` and `path` definitions when orchestrating API endpoints. For instance, the *input* and *output* schemas for the **[Create Asana Task]** activity above are already defined in the official Asana Open API specification, and the extension can reference them using a standard `$ref` tag.
+Multistep workflows like this are defined using a standard Open API extension. This approach allows PubSubDB to leverage the existing Open API definitions when orchestrating API endpoints. For example, the *input* and *output* schemas for the **[Create Asana Task]** activity above are already defined in the official Asana Open API specification, and the extension can reference them using a standard `$ref` tag.
 
 ### Install
 Install PubSubDB using NPM.
@@ -50,13 +44,13 @@ const plan = pubsubdb.plan('./pubsubdb.yaml');
 ```
 
 ### Deploy
-Once you're satisfied with your plan, call deploy to officially compile and deploy the next version of your application.
+Once you're satisfied with your plan, call deploy to officially compile and deploy the next version of your application (pass `true` to immediately activate the deployment).
 
 ```typescript
 import { pubsubdb } from '@pubsubdb/pubsubdb';
 
 pubsubdb.init({ });
-const status = pubsubdb.deploy('./pubsubdb.yaml');
+const status = await pubsubdb.deploy('./pubsubdb.yaml', true);
 ```
 
 ### Trigger Workflow Job
@@ -65,7 +59,12 @@ Publish events to trigger any flow. In this example, the workflow is triggered b
 ```ts
 import { pubsubdb } from '@pubsubdb/pubsubdb';
 
-const jobId = pubsubdb.pub('order.approval.requested', { id: 'order_123', price: 47.99 });
+const payload = {
+  id: 'order_123',
+  price: 47.99,
+  object_type: 'widgetA'
+};
+const jobId = pubsubdb.pub('order.approval.requested', payload);
 ```
 
 ### Get Job Data
@@ -103,8 +102,8 @@ const stats = pubsubdb.getJobStatistics('order.approval.price.requested', {
 ## Developer Guide
 Refer to the [Developer Guide](./docs/developer_guide.md) for more information on the full end-to-end development process, including details about schemas and APIs.
 
-## Model Driven Development
-Refer to the [Model Driven Development](./docs/model_driven_development.md) overview document for details on how the execution model is organized.
+## Intro to Model Driven Development
+[Model Driven Development](./docs/model_driven_development.md) is a proven approach to managing process-oriented tasks. Refer this guide for an overview of key features.
 
 ## Data Mapping
 Sharing data between activities is central to PubSubDB. Refer to the [Data Mapping Overview](./docs/data_mapping.md) for more information.

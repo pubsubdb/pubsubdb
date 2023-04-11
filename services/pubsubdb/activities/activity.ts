@@ -5,17 +5,28 @@ import { RestoreJobContextError,
          SubscribeToResponseError, 
          RegisterTimeoutError, 
          ExecActivityError } from '../../../modules/errors';
+import { PubSubDBService } from "..";
 
+/**
+ * Both the base class for all activities as well as a class that can be used to create a generic activity.
+ * This activity type is useful for precalculating values that might be used repeatedly in a workflow,
+ * allowing downstream activities to use the precalculated values instead of recalculating them.
+ * 
+ * The typical flow for this type of activity is to restore the job context, map in upstream data,
+ * get the list of subscription patterns and then publish to trigger downstream activities.
+ */
 class Activity {
   config: ActivityType;
   data: ActivityData;
   metadata: ActivityMetadata;
   context: JobContext;
+  pubsubdb: PubSubDBService;
 
-  constructor(config: ActivityType, data: ActivityData, metadata: ActivityMetadata) {
+  constructor(config: ActivityType, data: ActivityData, metadata: ActivityMetadata, pubsubdb: PubSubDBService) {
     this.config = config;
     this.data = data;
     this.metadata = metadata;
+    this.pubsubdb = pubsubdb;
   }
 
   async process() {

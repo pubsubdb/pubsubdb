@@ -2,6 +2,7 @@ import { PubSubDBApp, PubSubDBApps, PubSubDBSettings } from '../../typedefs/pubs
 import { KeyStore, KeyStoreParams, KeyType, PSNS } from './keyStore';
 import { Cache } from './cache';
 import { StoreService } from './store';
+import { StatsType } from '../../typedefs/stats';
 
 class RedisStoreService extends StoreService {
   redisClient: any;
@@ -199,6 +200,42 @@ class RedisStoreService extends StoreService {
       [`versions/${version}`]: new Date().toISOString()
     };
     return await this.redisClient.hSet(key, payload);
+  }
+
+  /**
+   * every job that includes a 'stats' field will have its stats aggregated into various
+   * data structures that can be used to query the store for job stats. The `general`
+   * stats are persisted to a HASH; `index` uses LIST; and `median` uses ZSET.
+   * 
+   * @param jobId
+   * @param stats 
+   * @returns 
+   */
+  async setJobStats(jobKey: string, jobId: string, stats: StatsType, appConfig: {id: string, version: string}): Promise<string> {
+    const params: KeyStoreParams = { appId: appConfig.id, jobId };
+    const multi = await this.redisClient.multi();
+
+    const generalStats = stats.general;
+    if (generalStats.length) {
+      //general stats all get stored in the same hash
+      const generalStatsKey = this.mintKey(KeyType.JOB_STATS_GENERAL, params);
+      multi.hSet(generalStatsKey, generalStats);
+    }
+    //index stats are stored in a list
+    const indexStats = stats.index;
+    if (indexStats.length) {
+      //every index stat gets its own list
+      const indexStatsKey = this.mintKey(KeyType.JOB_STATS_INDEX, params);
+      multi.rpush(indexStatsKey, indexStats);
+    }
+    //median stats are stored in a zset
+    const medianStats = stats.median;
+    if (medianStats.length) {
+      //every median stat gets its own zset
+      const medianStatsKey = this.mintKey(KeyType.JOB_STATS_MEDIAN, params);
+      multi.zadd(medianStatsKey, medianStats);
+    }
+    return await multi.exec();
   }
 
   /**

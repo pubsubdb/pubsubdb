@@ -1,7 +1,7 @@
 import { ActivityMetadata } from '../../typedefs/activity';
-import { PubSubDBApp, PubSubDBApps, PubSubDBConfig, PubSubDBSettings } from '../../typedefs/pubsubdb';
+import { PubSubDBApps, PubSubDBConfig, PubSubDBSettings } from '../../typedefs/pubsubdb';
 import { CompilerService } from '../compiler';
-import { ConnectionService } from '../connection';
+import { AdapterService } from '../adapter';
 import { StoreService } from '../store/store';
 import Activities from './activities';
 import { ActivityType } from './activities/activity';
@@ -21,7 +21,7 @@ class PubSubDBService {
   store: StoreService | null;
   apps: PubSubDBApps | null;
   cluster = false;
-  connection: ConnectionService | null;
+  adapterService: AdapterService | null;
 
   static stop(config: Record<string, string|number|boolean>) {
     if (instance?.cluster) {
@@ -76,12 +76,13 @@ class PubSubDBService {
     instance.verifyAppId(config.appId);
     await instance.verifyStore(config.store);
     instance.cluster = config.cluster || false;
-    instance.connection = new ConnectionService();
+    instance.adapterService = new AdapterService();
     return instance;
   }
 
   /**
    * returns a tuple containing the activity id and the activity schema
+   * for the single activity that is subscribed to the provided topic
    * @param {string} topic - for example: 'trigger.test.requested'
    * @returns {Promise<[activityId: string, activity: ActivityType]>}
    */
@@ -132,10 +133,10 @@ class PubSubDBService {
     if (ActivityHandler) {
       const metadata: ActivityMetadata = {
         activity_id: activityId,
-        type: activity.type,
-        subtype: activity.subtype
+        activity_type: activity.type,
+        activity_subtype: activity.subtype
       };
-      const activityHandler = new ActivityHandler(activity, data, metadata);
+      const activityHandler = new ActivityHandler(activity, data, metadata, this);
       await activityHandler.process();
     }
   }
