@@ -1,4 +1,4 @@
-class ConnectionService {
+class AdapterService {
 
   constructor() {
   }
@@ -8,4 +8,4 @@ class ConnectionService {
   }
 }
 
-export { ConnectionService };
+export { AdapterService };

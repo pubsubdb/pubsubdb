@@ -9,6 +9,7 @@ class Deployer {
     this.manifest = manifest;
     this.store = store;
 
+    this.bindSortedActivityIdsToTriggers();
     await this.deployActivitySchemas();
     await this.deploySubscriptions(); 
     await this.deploySubscriptionPatterns();
@@ -23,6 +24,47 @@ class Deployer {
       id: this.manifest.app.id,
       version: this.manifest.app.version,
     };
+  }
+
+  /**
+   * 1) Bind the sorted activity IDs to the trigger activity; this is used when the job
+   * is invoked to determine which activities are executing. Because this is a graph, we
+   * cannot rely on the order of the activities in the manifest file and instead just
+   * alphabetically sort the activities by their ID (ascending) ["a1", "a2", "a3", ...]
+   * and then bind the sorted array to the trigger activity. This is used by the trigger
+   * at runtime to create 15-digit collation integer (99999999999) that can be used to track
+   * the status of the job at the level of the individual activity. A collation value of
+   * 899000000000000 means that the first activity (assume 'a1') is running and the others
+   * are still pending. Remember that this is alphabetical, so it is merely coincidence that
+   * the value was `899*` and not `989*` or `998*`.
+   */
+  bindSortedActivityIdsToTriggers() {
+    const graphs = this.manifest.app.graphs;
+  
+    for (const graph of graphs) {
+      const activities = graph.activities;
+      const triggerActivityId = this.getTriggerActivityId(graph);
+  
+      if (triggerActivityId) {
+        const activityIds = Object.keys(activities);
+        activityIds.sort((a, b) => {
+          return parseInt(a.slice(1)) - parseInt(b.slice(1));
+        });
+  
+        activities[triggerActivityId].sortedActivityIds = activityIds;
+      }
+    }
+  }
+  
+  getTriggerActivityId(graph: PubSubDBGraph): string | null {
+    const activities = graph.activities;
+    for (const activityKey in activities) {
+      const activity = activities[activityKey];
+      if (activity.type === "trigger") {
+        return activityKey;
+      }
+    }
+    return null;
   }
 
   /**

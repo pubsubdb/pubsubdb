@@ -21,12 +21,13 @@ enum KeyType {
 
 //when minting a key, the following parameters are used to create a unique key per entity
 type KeyStoreParams = {
-  appId?: string;
-  appVersion?: string;
-  jobId?: string;
-  activityId?: string;
-  jobKey?: string;
-  dateTime?: string; 
+  appId?: string;       //app id is a uuid for a given pubsubdb app
+  appVersion?: string; //(e.g. "1.0.0", "1", "1.0")
+  jobId?: string;      //a customer-defined id for job; must be unique for the entire app
+  activityId?: string; //activity id is a uuid for a given pubsubdb app
+  jobKey?: string;   //a customer-defined label for a job that serves to categorize events 
+  dateTime?: string; //UTC date time: YYYY-MM-DDTHH:MM (20203-04-12T00:00); serves as a time-series bucket for the job_key
+  facet?: string;    //data path starting at root with values separated by colons (e.g. "object/type:bar")
 };
 
 class KeyStore {
@@ -59,9 +60,11 @@ class KeyStore {
       case KeyType.JOB_STATS_GENERAL:
         return `${namespace}:${params.appId}:job:${params.jobKey}:${params.dateTime}:stats:gen`;
       case KeyType.JOB_STATS_MEDIAN:
-        return `${namespace}:${params.appId}:job:${params.jobKey}:${params.dateTime}:stats:mdn`;
+        //median uses ZSET; must add the attribute being tracked to the Redis key to isolate
+        return `${namespace}:${params.appId}:job:${params.jobKey}:${params.dateTime}:stats:mdn:${params.facet}`;
       case KeyType.JOB_STATS_INDEX:
-        return `${namespace}:${params.appId}:job:${params.jobKey}:${params.dateTime}:stats:idx`;
+        //index uses LIST; must add the attribute being indexed to the Redis key to isolate
+        return `${namespace}:${params.appId}:job:${params.jobKey}:${params.dateTime}:stats:idx:${params.facet}`;
       case KeyType.SCHEMAS:
         return `${namespace}:${params.appId}:vrs:${params.appVersion}:schemas`;
       case KeyType.SUBSCRIPTIONS:

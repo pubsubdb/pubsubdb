@@ -1,6 +1,6 @@
 # Model Driven Development
 
-The PubSubDB model is a modern, JSON-based alternative to WSDL/SOAP, offering a flexible and extensible way to define and manage distributed systems.
+The PubSubDB model is a modern, JSON-based alternative to WSDL/SOAP, offering a flexible and extensible way to define and manage distributed process execution.
 
 ## Table of Contents
 
@@ -36,10 +36,10 @@ The PubSubDB model is a modern, JSON-based alternative to WSDL/SOAP, offering a 
   - [8.2. Price Approval Process](#82-price-approval-process)
 
 ## 1. Introduction
-When engineering solutions for critical business processes, it is essential to adopt a cross-functional approach where *all* stakeholders concentrate on the core models and high-level design. One of the primary benefits of model-driven development lies in its ability to allow developers to prioritize the application's overall design and logic rather than becoming entangled in implementation specifics. Consequently, this leads to accelerated development cycles, enhanced productivity, and better maintainability as the application progresses.
+When engineering solutions for critical business processes, it is essential to adopt a cross-functional approach where *all* stakeholders concentrate on the core models and high-level design. One of the primary benefits of model-driven development lies in its ability to allow team members (engineering, operations, product, etc) to prioritize the application's overall design and logic rather than becoming entangled in implementation specifics. Consequently, this leads to accelerated development cycles, enhanced productivity, and better maintainability as the application progresses, as the required skill is a logical understanding of the business process, not how to express it in code.
 
 ### 1.1. Overview of the Model
-The PubSubDB execution model is a modern, JSON-based alternative to WSDL/SOAP that utilizes graphs, activities (nodes), and transitions (edges) to define an application's behavior and data flow. The model is designed to be flexible, modular, and easy to understand, making it an ideal choice for contemporary applications that need to interact with various services and APIs.
+The PubSubDB execution model utilizes models to define an application's behavior and data flow. The approach is designed to be flexible, modular, and easy to understand.
 
 The primary building blocks are `graphs`, which are essentially a collection of activities (nodes) connected by transitions (edges). Each activity represents a specific task or operation, while transitions define the flow between these activities based on certain conditions. This structure allows the model to accommodate complex workflows and processes that span multiple services or systems.
 
