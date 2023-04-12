@@ -12,6 +12,7 @@ type JobMetadata = {
   app_version: string;
   job_id: string;      //job id
   job_key?: string;    //job key
+  time_series: string  //201203120005 (slice of time)
   job_created: string; //GMT created
   job_updated: string; //GMT updated
   job_status: number;  //15 digit number used for collation (HINCRBY-1: running, HINCRBY-2: completed, HINCRBY-4: skipped)
@@ -23,10 +24,12 @@ type JobMetadata = {
 type JobContext = {
   metadata: JobMetadata;
   data: JobData;
-  input: ActivityData;
-  output: ActivityData;
-  settings: ActivityData;
-  errors: ActivityData;
-}
+  [activityId: symbol]: {
+    input: ActivityData;
+    output: ActivityData;
+    settings: ActivityData;
+    errors: ActivityData;
+  };
+};
 
 export { JobContext, JobData, JobMetadata };

@@ -359,7 +359,7 @@ activities:
       measures:
         - measure: avg
           target: "{a5.input.data.price}"
-        - measure: median
+        - measure: mdn
           target: "{a5.input.data.price}"
         - measure: count
           target: "{a5.input.data.object_type}"
@@ -378,16 +378,19 @@ The following table lists the key statistics fields and their purpose. Note that
 | stats/measures    | A list of measures that define the statistical aggregations.       |
 
 ### Measure | Avg
-The `average` measure should only be used to target `number` fields. It returns the mean over the specified job aggregation time period for the target field.
+The `avg` (average) measure should only be used to target `number` fields. It returns the mean over the specified job aggregation time period for the target field.
+
+### Measure | Sum
+The `sum` measure should only be used to target `number` fields. It returns the sum over the specified job aggregation time period for the target field.
 
 ### Measure | Count
-When the `count` measure is collected, all cardinal values will be grouped when providing the value. If there are two unique values for `object_type` across all workflows that run (e.g, widgetA, widgetB), then the system will provide counts for each individually. This is true for boolean fields as well where both `true` and `false` counts are tracked.
+When the `count` measure is collected, *all cardinal values* will be grouped when providing the value. If there are two unique values for `object_type` across all workflows that run (e.g, widgetA, widgetB), then the system will provide counts for each individually. This is true for boolean fields as well where both `true` and `false` counts are tracked.
 
-### Measure | Median
-When the `median` measure is collected, all values must be collected and retained for the time period. If 1,000 jobs are run, there will be exactly 1,000 values retained. The approach uses a sorted set for values with one set for slice of time per the `granularity` setting for the flow's `stats`.
+### Measure | Mdn
+When the `mdn` (median) measure is collected, all values must be collected and retained for the time period. If 1,000 jobs are run, there will be exactly 1,000 values retained. The approach uses a sorted set for values with one set for slice of time per the `granularity` setting for the flow's `stats`.
 
 ### Measure | Index
-When the `index` measure is collected, the value of the `id` field will be stored in a sub-index organized by cardinal field values. For example, if a string field ("object_type") is targeted for indexing, two indexes will be created: `object_type:widgetA`, `object_type:widgetB` (assuming these are the enumerated values for this field). 
+When the `index` measure is collected, the value of the `id` field will be stored in a sub-index organized *by cardinal field values*. For example, if a string field ("object_type") is targeted for indexing, two indexes will be created: `object_type:widgetA`, `object_type:widgetB` (assuming these are the enumerated values for this field). 
 
 Consider the following query that returns just those jobs with an `object_type` field with a value of `widgetA`. The max response count default is 1,000, but can be increased. *Note how the time range is required. Include `start` **and** `end` values or use a `range` and pin the direction using `start` **or** `end`.*
 
@@ -498,7 +501,7 @@ stats:
   measures:
     - measure: avg
       target: "{a5.input.data.price}"
-    - measure: median
+    - measure: mdn
       target: "{a5.input.data.price}"
     - measure: count
       target: "{a5.input.data.object_type}"

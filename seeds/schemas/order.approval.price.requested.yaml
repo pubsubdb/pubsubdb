@@ -9,6 +9,14 @@ a5:
         type: number
         description: The price of the item.
         minimum: 0
+      object_type:
+        type: string
+        description: The type of the order (e.g., widgetA, widgetB)
+        enum:
+          - widgetA
+          - widgetB
+          - widget
+          - order
       approved:
         type: boolean
         description: Approval status of the object.

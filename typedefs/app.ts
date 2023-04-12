@@ -4,4 +4,9 @@ interface App {
   description: string;
 }
 
-export { App };
+type AppVersion = {
+  version: string;
+  id: string;
+};
+
+export { App, AppVersion };

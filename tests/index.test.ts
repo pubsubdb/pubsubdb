@@ -52,8 +52,15 @@ describe('pubsubdb', () => {
 
   describe('pub()', () => {
     it('should should publish a message', async () => {
-      const payload = { id: 'ord_xxx', price: 59.99, object_type: 'order' }
-      pubSubDB.pub('order.approval.price.requested', payload);
+      let payload: any;
+      for (let i = 0; i < 10; i++) {
+        payload = { 
+          id: `ord_${parseInt((Math.random()*1000000).toString()).toString()}`, 
+          price: 49.99 + i, 
+          object_type: i % 2 ? 'widget' : 'order'
+        }
+        await pubSubDB.pub('order.approval.price.requested', payload);
+      }
     });
   });
 });

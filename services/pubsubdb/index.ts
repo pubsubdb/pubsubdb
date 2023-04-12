@@ -46,6 +46,8 @@ class PubSubDBService {
   verifyAppId(appId: string) {
     if (!appId.match(/^[A-Za-z0-9-]+$/)) {
       throw new Error(`appId ${appId} is invalid`);
+    } else if (appId === 'app') {
+      throw new Error(`appId ${appId} is reserved`);
     } else {
       this.appId = appId;
     }
@@ -131,10 +133,13 @@ class PubSubDBService {
     const [activityId, activity] = await this.getActivity(topic);
     const ActivityHandler = Activities[activity.type];
     if (ActivityHandler) {
+      const utc = new Date().toUTCString();
       const metadata: ActivityMetadata = {
         activity_id: activityId,
         activity_type: activity.type,
-        activity_subtype: activity.subtype
+        activity_subtype: activity.subtype,
+        activity_created: utc,
+        activity_updated: utc
       };
       const activityHandler = new ActivityHandler(activity, data, metadata, this);
       await activityHandler.process();

@@ -11,8 +11,10 @@ activities:
     job:
       schema:
         $ref: '../schemas/order.approval.price.requested.yaml#/a5/job'
+      maps:
+        $ref: '../maps/order.approval.price.requested.yaml#/a5/job'
     stats:
-      key: "{a5.output.data.object_type}"
+      key: "{a5.input.data.object_type}"
       id: "{a5.input.data.id}"
       measures:
         - measure: sum

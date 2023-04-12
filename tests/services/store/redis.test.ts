@@ -42,7 +42,7 @@ describe('RedisStoreService', () => {
     it('should set the data and metadata for the given job ID', async () => {
       const jobId = 'JOB_ID';
       const data = { data: 'DATA' };
-      const metadata = { metadata: 'METADATA' };
+      const metadata = { job_id: jobId };
       const result = await redisStoreService.setJob(jobId, data, metadata, appConfig);
       expect(result).toEqual(jobId);
 
@@ -57,7 +57,7 @@ describe('RedisStoreService', () => {
   describe('getJobMetadata', () => {
     it('should get the metadata for the given job ID', async () => {
       const jobId = 'JOB_ID';
-      const metadata = { metadata: 'METADATA' };
+      const metadata = { job_id: jobId };
       await redisStoreService.setJob(jobId, {}, metadata, appConfig);
       const result = await redisStoreService.getJobMetadata(jobId, appConfig);
       expect(result).toEqual(metadata);
@@ -109,9 +109,7 @@ describe('RedisStoreService', () => {
     it('should retrieve the activity metadata from the store', async () => {
       const jobId = 'job-1';
       const activityId = 'activity-1';
-      const metadata = {
-        someKey: 'someValue',
-      };
+      const metadata = { activity_id: 'activity-1' };
       await redisStoreService.setActivity(jobId, activityId, {}, metadata, appConfig);
       const result = await redisStoreService.getActivityMetadata(jobId, activityId, appConfig);
       expect(result).toEqual(metadata);
@@ -122,9 +120,7 @@ describe('RedisStoreService', () => {
     it('should retrieve the activity data from the store', async () => {
       const jobId = 'job-1';
       const activityId = 'activity-1';
-      const data = {
-        someKey: 'someValue',
-      };
+      const data = { someKey: 'someValue' };
       await redisStoreService.setActivity(jobId, activityId, data, {}, appConfig);
       const result = await redisStoreService.getActivity(jobId, activityId, appConfig);
       expect(result).toEqual(data);
@@ -178,5 +174,4 @@ describe('RedisStoreService', () => {
       expect(result).toEqual(2);
     });
   });
-
 });
