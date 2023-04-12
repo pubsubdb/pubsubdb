@@ -221,15 +221,30 @@
                     "description": "The price of the item.",
                     "minimum": 0
                   },
+                  "object_type": {
+                    "type": "string",
+                    "description": "The type of the order (e.g., widgetA, widgetB)",
+                    "enum": [
+                      "widgetA",
+                      "widgetB",
+                      "widget",
+                      "order"
+                    ]
+                  },
                   "approved": {
                     "type": "boolean",
                     "description": "Approval status of the object."
                   }
                 }
+              },
+              "maps": {
+                "id": "{a5.output.data.id}",
+                "price": "{a5.output.data.price}",
+                "object_type": "{a5.output.data.object_type}"
               }
             },
             "stats": {
-              "key": "{a5.output.data.object_type}",
+              "key": "{a5.input.data.object_type}",
               "id": "{a5.input.data.id}",
               "measures": [
                 {
@@ -260,8 +275,6 @@
             "type": "job",
             "job": {
               "maps": {
-                "id": "{a5.output.data.id}",
-                "price": "{a5.output.data.price}",
                 "approved": true
               }
             }
@@ -271,8 +284,6 @@
             "type": "job",
             "job": {
               "maps": {
-                "id": "{a5.output.data.id}",
-                "price": "{a5.output.data.price}",
                 "approved": false
               }
             }

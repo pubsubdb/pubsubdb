@@ -1,6 +1,8 @@
 import { PubSubDBGraph, PubSubDBManifest } from "../../typedefs/pubsubdb";
 import { StoreService } from '../store/store';
 
+type JsonObject = { [key: string]: any };
+
 class Deployer {
   manifest: PubSubDBManifest | null = null;
   private store: StoreService | null;
@@ -10,6 +12,7 @@ class Deployer {
     this.store = store;
 
     this.bindSortedActivityIdsToTriggers();
+    this.extractDynamicMappingRules();
     await this.deployActivitySchemas();
     await this.deploySubscriptions(); 
     await this.deploySubscriptionPatterns();
@@ -65,6 +68,60 @@ class Deployer {
       }
     }
     return null;
+  }
+
+  /**
+   * 
+   * @returns {string[]} - an array of dynamic mapping rules
+   */
+  extractDynamicMappingRules(): string[] {
+    let dynamicMappingRules: string[] = [];
+    //recursive function to descend into the object and find all dynamic mapping rules
+    function traverse(obj: JsonObject): void {
+      for (const key in obj) {
+        if (typeof obj[key] === 'string') {
+          const stringValue = obj[key] as string;
+          const dynamicMappingRuleMatch = stringValue.match(/^\{[^@].*}$/);
+          if (dynamicMappingRuleMatch) {
+            //NEVER map `input` rules (e.g., {a5.input.data.cat})
+            //activities map to job data and ustream activity `output`
+            //the one exception is the `trigger` activity, which maps to the `input` provided by the event publisher
+            if (stringValue.split('.')[1] !== 'input') {
+              dynamicMappingRules.push(stringValue);
+            }
+          }
+        } else if (typeof obj[key] === 'object' && obj[key] !== null) {
+          traverse(obj[key]);
+        }
+      }
+    }
+    const graphs = this.manifest.app.graphs;
+    for (const graph of graphs) {
+      const activities = graph.activities;
+      for (const activityId in activities) {
+        const activity = activities[activityId];
+        traverse(activity);
+      }
+    }
+    dynamicMappingRules = Array.from(new Set(dynamicMappingRules)).sort();
+    // Group by the first symbol before the period (this is the activity name)
+    const groupedRules: { [key: string]: string[] } = {};
+    for (const rule of dynamicMappingRules) {
+      const group = rule.substring(1).split('.')[0];
+      if (!groupedRules[group]) {
+        groupedRules[group] = [];
+      }
+      groupedRules[group].push(rule);
+    }
+    // Iterate through the graph and add 'dependents' field to each activity
+    for (const graph of graphs) {
+      const activities = graph.activities;
+      for (const activityId in activities) {
+        const activity = activities[activityId];
+        activity.dependents = groupedRules[`${activityId}`] || [];
+      }
+    }
+    return dynamicMappingRules;
   }
 
   /**

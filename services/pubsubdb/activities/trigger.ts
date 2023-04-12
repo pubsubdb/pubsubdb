@@ -11,8 +11,12 @@ import {
   ActivityType,
   TriggerActivity } from "../../../typedefs/activity";
 import { StatsType, Stat } from '../../../typedefs/stats';
+import { MapperService } from '../../mapper';
 import { Pipe } from "../../pipe";
+import { SerializerService } from '../../store/serializer';
 import { Activity } from "./activity";
+
+type FlattenedDataObject = { [key: string]: string };
 
 class Trigger extends Activity {
   config: TriggerActivity;
@@ -29,8 +33,9 @@ class Trigger extends Activity {
       await this.createContext();
       await this.mapJobData();
       await this.mapOutputData();
-      await this.saveContext();
-      await this.saveStats();
+      await this.saveActivity(); //save output activity data used by downstream
+      await this.saveContext();  //save the job data and metadata
+      await this.saveStats();    //save job stats to aggregation hash
       await this.pub();
     } catch (error) {
       if (error instanceof RestoreJobContextError) {
@@ -54,7 +59,6 @@ class Trigger extends Activity {
    * @returns {Promise<void>} A promise that resolves when the job is created.
    */
   async createContext(): Promise<void> {
-    //create the initial job context
     const utc = new Date().toUTCString();
     const appConfig = this.pubsubdb.getAppConfig();
     this.context = {
@@ -62,27 +66,27 @@ class Trigger extends Activity {
         ...this.metadata,
         app_id: appConfig.id,
         app_version: appConfig.version,
-        job_id: null,  //job id
-        job_key: null, //job key
+        job_id: null,
+        job_key: null,
         job_created: utc,
         job_updated: utc,
+        time_series: this.getTimeSeriesStamp(),
         job_status: this.createCollationKey(),
       },
-      data: { }, //job data (would get created if any map statements were present)
-      input: { data: this.data },
-      output: { data: {} },
-      settings: { data: {} },
-      errors: { data: {} },
+      data: {}, //job data will be added in the next step if it exists
+      [this.metadata.activity_id]: { 
+        input: { data: this.data },
+        output: { data: {} },
+        settings: { data: {} },
+        errors: { data: {} },
+       },
     };
-    //add job id and key to the job context (they are generated using the context and then added to it)
+    //must first initialize the job context before we can get the job id and key
     this.context.metadata.job_id = await this.getJobId();
     this.context.metadata.job_key = await this.getJobKey();
-    //resolve the job stats (if any)
   }
 
   /**
-   * Because this is a graph, we
-   * cannot rely on the order of the activities in the manifest file and instead just
    * alphabetically sort the activities by their ID (ascending) ["a1", "a2", "a3", ...]
    * and then bind the sorted array to the trigger activity. This is used by the trigger
    * at runtime to create 15-digit collation integer (99999999999) that can be used to track
@@ -97,7 +101,7 @@ class Trigger extends Activity {
     const val = Math.pow(10, length) - 1; //e.g, 999, 99999, 9999999, etc
     const numberAsString = val.toString();
     const targetLength = 15;
-    const paddedNumber = numberAsString + "0".repeat(targetLength - length);
+    const paddedNumber = numberAsString + '0'.repeat(targetLength - length);
     return parseInt(paddedNumber, 10);
   }
 
@@ -109,11 +113,9 @@ class Trigger extends Activity {
     const stats = this.config.stats;
     const jobId = stats?.id;
     if (jobId) {
-      console.log(`job id dynprop for trigger ${this.metadata.activity_id}: ${jobId}`);
-      const pipe = new Pipe([jobId], this.data);
+      const pipe = new Pipe([[jobId]], this.context);
       return await pipe.process();
     } else {
-      console.log(`no job id dynprop for trigger ${this.metadata.activity_id}`);
       //todo: create synchronizer service to coordinate cache invalidation, new app deployments, etc
       return `${Date.now().toString()}.${parseInt((Math.random() * 1000).toString(), 10)}`;
     }
@@ -123,41 +125,68 @@ class Trigger extends Activity {
     const stats = this.config.stats;
     const jobKey = stats?.key;
     if (jobKey) {
-      console.log(`trigger job key found: ${this.metadata.activity_id}: ${jobKey}`);
-      const pipe = new Pipe([jobKey], this.data);
+      const pipe = new Pipe([[jobKey]], this.context);
       return await pipe.process();
     } else {
-      console.log(`trigger job key NOT found: ${this.metadata.activity_id}`);
       //todo: use server-assigned instance id to assign the random number slot at startup (001-999)
       return `${Date.now().toString()}.${parseInt((Math.random() * 1000).toString(), 10)}`;
     }
   }
 
   /**
-   * Triggers produce two types of data: `job meta/data` and `trigger output data`. 
-   * Job meta/data is defined by the trigger and represents the job context for the flow.
-   * A flow does not need to have job data. If there is no input provided to the flow
-   * when invoked, then no data will be proviided to downstream activities. And
-   * if the schema def for the trigger does not specify a `job` field that defines job data
-   * for the completed job, then the flow will not have any job data either.
-   * @returns {Promise<void>} A promise that resolves when the input data mapping is done.
+   * If the job returns data, and the trigger includes a map ruleset to seed it with the
+   * incoming event payload, then map the data per the ruleset..
+   * @returns {Promise<void>}
    */
   async mapJobData(): Promise<void> {
-    return;
+    if(this.config.job?.maps) {
+      const mapper = new MapperService(this.config.job.maps, this.context);
+      this.context.data = await mapper.mapRules();
+    }
   }
 
   /**
-   * If a trigger schema def includes a 'job' field with a `schema` and a `map`, it means the fields
-   * listed should be mapped from the incoming event payload to the job data. 
-   * @returns {Promise<void>} A promise that resolves when the input data mapping is done.
+   * only map those fields of data in the payload that are specified in the downstream mapping rules for other activities
+   * @returns {Promise<void>}
    */
   async mapOutputData(): Promise<void> {
-    return;
+    const aid = this.metadata.activity_id;
+    const filteredData: FlattenedDataObject = {};
+    //flatten the payload to make comparison easier
+    const toFlatten = { [aid]: { output: { data: this.data } } };
+    const rulesSet = new Set(this.config.dependents.map(rule => rule.slice(1, -1).replace(/\./g, '/')));
+    const flattenedData = SerializerService.flattenHierarchy(toFlatten);
+    for (const [key, value] of Object.entries(flattenedData)) {
+      if (rulesSet.has(key)) {
+        filteredData[key as string] = value as string;
+      }
+    }
+    //expand the payload now that we've removed those fields not specified by downstream mapping rules
+    const restoredData = SerializerService.restoreHierarchy(filteredData);
+    if (restoredData[aid]) {
+      this.context[aid].output.data = restoredData[aid].output.data;
+    }
   }
 
   async saveContext(): Promise<void> {
     const jobId = this.context.metadata.job_id;
-    await this.pubsubdb.store.setJob(jobId, this.context.data, this.metadata, { id: 'test-app', version: '1' });
+    await this.pubsubdb.store.setJob(jobId, this.context.data, this.context.metadata, this.pubsubdb.getAppConfig());
+  }
+
+  /**
+   * saves activity data; (NOTE: This data represents a subset of the incoming event payload.
+   * those fields that are not specified in the mapping rules for other activities will not be saved.)
+   */
+  async saveActivity(): Promise<void> {
+    const jobId = this.context.metadata.job_id;
+    const activityId = this.metadata.activity_id;
+    await this.pubsubdb.store.setActivity(
+      jobId,
+      activityId,
+      this.context[activityId].output.data,
+      { ...this.metadata, job_id: jobId, job_key: this.context.metadata.job_key },
+      this.pubsubdb.getAppConfig()
+    );
   }
 
   resolveStats(): StatsType {
@@ -167,45 +196,76 @@ class Trigger extends Activity {
       index: [],
       median: []
     }
+    stats.general.push({ metric: 'count', target: 'count', value: 1 });
     for (const measure of s.measures) {
-      switch (measure.measure) {
-        case 'sum':
-          stats.general.push({ metric: 'sum', target: measure.target, value: 0 });
-          break;
-        case 'avg':
-          stats.general.push({ metric: 'avg', target: measure.target, value: 0 });
-          break;
-        case 'count':
-          stats.general.push({ metric: 'count', target: measure.target, value: 0 });
-          break;
-        case 'mdn':
-          stats.median.push({ metric: 'mdn', target: measure.target, value: 0 });
-          break;
-        case 'index':
-          stats.index.push({ metric: 'index', target: measure.target, value: 0 });
-          break;
+      const metric = this.resolveMetric({ metric: measure.measure, target: measure.target });
+      if (this.isGeneralMetric(measure.measure)) {
+        stats.general.push(metric);
+      } else if (this.isMedianMetric(measure.measure)) {
+        stats.median.push(metric);
+      } else if (this.isIndexMetric(measure.measure)) {
+        stats.index.push(metric);
       }
     }
     return stats;
   }
 
-  resolveMetric({metric, target, value}): Stat {
-    const pipe = new Pipe([target], this.context.data);
-    const resolvedValue = pipe.process().toString(); //values are used for redis keys, so they must be strings
+  isGeneralMetric(metric: string): boolean {
+    return metric === 'sum' || metric === 'avg' || metric === 'count';
+  }
+
+  isMedianMetric(metric: string): boolean {
+    return metric === 'mdn';
+  }
+
+  isIndexMetric(metric: string): boolean {
+    return metric === 'index';
+  }
+
+  resolveMetric({metric, target}): Stat {
+    const pipe = new Pipe([[target]], this.context);
+    const resolvedValue = pipe.process().toString();
     const resolvedTarget = this.resolveTarget(metric, target, resolvedValue);
     if (metric === 'index') {
       return { metric, target: resolvedTarget, value: this.context.metadata.job_id };
     } else if (metric === 'count') {
       return { metric, target: resolvedTarget, value: 1 };
     }
-    return { metric, target: resolvedTarget, value: resolvedValue };
+    return { metric, target: resolvedTarget, value: resolvedValue } as Stat;
+  }
+
+  isCardinalMetric(metric: string): boolean {
+    //these metrics isolate the metric based on value cardinality
+    return metric === 'index' || metric === 'count';
   }
 
   resolveTarget(metric: string, target: string, resolvedValue: string): string {
-    //trim the curly braces from target, replace periods with forward slashes.
     const trimmedTarget = target.substring(1, target.length - 1).replace(/\./g, '/');
-    const resolvedTarget = `${metric}/${trimmedTarget}/${resolvedValue}`;
+    let resolvedTarget;
+    if (this.isCardinalMetric(metric)) {
+      resolvedTarget = `${metric}:${trimmedTarget}:${resolvedValue}`;
+    } else {
+      resolvedTarget = `${metric}:${trimmedTarget}`;
+    }
     return resolvedTarget;
+  }
+
+  /**
+   * returns the time series stamp for the current time based on the granularity setting
+   * @returns {string} e.g. 202302280000
+   */
+  getTimeSeriesStamp(): string {
+    const now = new Date();
+    const granularity = this.config.stats.granularity || '1h';
+    const granularityUnit = granularity.slice(-1);
+    const granularityValue = parseInt(granularity.slice(0, -1), 10);
+    if (granularityUnit === 'm') {
+      const minute = Math.floor(now.getMinutes() / granularityValue) * granularityValue;
+      now.setUTCMinutes(minute, 0, 0);
+    } else if (granularityUnit === 'h') {
+      now.setUTCMinutes(0, 0, 0);
+    }
+    return now.toISOString().replace(/:\d\d\..+|-|T/g, '').replace(':','');
   }
     
   /**
@@ -213,11 +273,11 @@ class Trigger extends Activity {
    * Stats are persisted to a hash, list, or zset depending on the type of aggregation.
    */
   async saveStats(): Promise<void> {
-    const m = this.context.metadata;
-    if (m.job_key) {
+    if (this.context.metadata.job_key) {
       await this.pubsubdb.store.setJobStats(
-        m.job_key,
-        m.job_id,
+        this.context.metadata.job_key,
+        this.context.metadata.job_id,
+        this.context.metadata.time_series,
         this.resolveStats(),
         this.pubsubdb.getAppConfig()
       );

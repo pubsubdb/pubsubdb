@@ -7,6 +7,7 @@ interface ActivityBase {
   input?: Record<string, any>;
   output?: Record<string, any>;
   settings?: Record<string, any>;
+  dependents?: string[];
 }
 
 interface TriggerActivity extends ActivityBase {
@@ -54,6 +55,8 @@ type ActivityMetadata = {
   activity_type: string;
   activity_subtype: string;
   job_id?: string;
+  activity_created: string; //GMT created
+  activity_updated: string; //GMT updated
 };
 
 type ActivityContext = {

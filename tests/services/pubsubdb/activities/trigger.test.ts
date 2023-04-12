@@ -39,6 +39,8 @@ describe("Trigger class", () => {
       activity_id: "a1",
       activity_type: "trigger",
       activity_subtype: "async",
+      activity_created: "2021-01-01T00:00:00.000Z",
+      activity_updated: "2021-01-01T00:00:00.000Z",
     };
 
     // Create Trigger instance

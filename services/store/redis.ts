@@ -3,6 +3,8 @@ import { KeyStore, KeyStoreParams, KeyType, PSNS } from './keyStore';
 import { Cache } from './cache';
 import { StoreService } from './store';
 import { StatsType } from '../../typedefs/stats';
+import { SerializerService } from './serializer';
+import { AppVersion } from '../../typedefs/app';
 
 class RedisStoreService extends StoreService {
   redisClient: any;
@@ -207,33 +209,34 @@ class RedisStoreService extends StoreService {
    * data structures that can be used to query the store for job stats. The `general`
    * stats are persisted to a HASH; `index` uses LIST; and `median` uses ZSET.
    * 
+   * @param jobKey
    * @param jobId
+   * @param dateTime 
    * @param stats 
+   * @param appVersion
    * @returns 
    */
-  async setJobStats(jobKey: string, jobId: string, stats: StatsType, appConfig: {id: string, version: string}): Promise<string> {
-    const params: KeyStoreParams = { appId: appConfig.id, jobId };
+  async setJobStats(jobKey: string, jobId: string, dateTime: string, stats: StatsType, appVersion: AppVersion): Promise<string> {
+    const params: KeyStoreParams = { appId: appVersion.id, jobId, jobKey, dateTime };
     const multi = await this.redisClient.multi();
-
-    const generalStats = stats.general;
-    if (generalStats.length) {
-      //general stats all get stored in the same hash
+    //general
+    if (stats.general.length) {
       const generalStatsKey = this.mintKey(KeyType.JOB_STATS_GENERAL, params);
-      multi.hSet(generalStatsKey, generalStats);
+      for (const { target, value } of stats.general) {
+        multi.HINCRBYFLOAT(generalStatsKey, target, value);
+      }
     }
-    //index stats are stored in a list
-    const indexStats = stats.index;
-    if (indexStats.length) {
-      //every index stat gets its own list
-      const indexStatsKey = this.mintKey(KeyType.JOB_STATS_INDEX, params);
-      multi.rpush(indexStatsKey, indexStats);
+    //index
+    for (const { target, value } of stats.index) {
+      const indexParams = { ...params, facet: target };
+      const indexStatsKey = this.mintKey(KeyType.JOB_STATS_INDEX, indexParams);
+      multi.RPUSH(indexStatsKey, value.toString());
     }
-    //median stats are stored in a zset
-    const medianStats = stats.median;
-    if (medianStats.length) {
-      //every median stat gets its own zset
-      const medianStatsKey = this.mintKey(KeyType.JOB_STATS_MEDIAN, params);
-      multi.zadd(medianStatsKey, medianStats);
+    //median
+    for (const { target, value } of stats.median) {
+      const medianParams = { ...params, facet: target };
+      const medianStatsKey = this.mintKey(KeyType.JOB_STATS_MEDIAN, medianParams);
+      multi.ZADD(medianStatsKey, { score: value.toString(), value: value.toString() });
     }
     return await multi.exec();
   }
@@ -249,28 +252,44 @@ class RedisStoreService extends StoreService {
    * @param metadata 
    * @returns 
    */
-  async setJob(jobId: string, data: Record<string, unknown>, metadata: Record<string, unknown>, appConfig: {id: string, version: string}): Promise<string> {
-    const params: KeyStoreParams = { appId: appConfig.id, jobId };
-    const [dataResp, metadataResp] = await this.redisClient.multi()
-      .set(this.mintKey(KeyType.JOB_DATA, params), JSON.stringify(data))
-      .set(this.mintKey(KeyType.JOB_METADATA, params), JSON.stringify(metadata))
-      //todo: set aggregation stats for the schema (NS.JOB_STATISTICS)
-      .exec();
+  async setJob(jobId: string, data: Record<string, unknown>, metadata: Record<string, unknown>, appVersion: AppVersion): Promise<string> {
+    const hashKey = this.mintKey(KeyType.JOB_DATA, { appId: appVersion.id, jobId });
+    const hashData = SerializerService.flattenHierarchy({ m: metadata, d: data});
+    const response = await this.redisClient.HSET(hashKey, hashData);
     return jobId;
   }
 
-  async getJobMetadata(jobId: string, appConfig: {id: string, version: string}): Promise<any> {
-    const params: KeyStoreParams = { appId: appConfig.id, jobId };
-    const key = this.mintKey(KeyType.JOB_METADATA, params);
-    const jobMetadata = await this.redisClient.get(key);
-    return JSON.parse(jobMetadata);
-  }
-
-  async getJobData(jobId: string, appConfig: {id: string, version: string}): Promise<any> {
-    const params: KeyStoreParams = { appId: appConfig.id, jobId };
+  async getJobMetadata(jobId: string, appVersion: AppVersion): Promise<any> {
+    const metadataFields = ['m/activity_id', 'm/activity_type', 'm/activity_subtype', 'm/job_created', 'm/job_updated', 'm/job_id', 'm/job_key', 'm/time_series', 'm/job_status'];
+    const params: KeyStoreParams = { appId: appVersion.id, jobId };
     const key = this.mintKey(KeyType.JOB_DATA, params);
-    const jobData = await this.redisClient.get(key);
-    return JSON.parse(jobData);
+    const arrMetadata = await this.redisClient.HMGET(key, metadataFields);
+    //iterate to create an object where the keys are the metadata fields and values are jobMetadata
+    const objMetadata = metadataFields.reduce((acc, field, index) => {
+      if (arrMetadata[index] === null) return acc; //skip null values (which are optional fields
+      acc[field] = arrMetadata[index];
+      return acc;
+    }, {});
+    const metadata = SerializerService.restoreHierarchy(objMetadata);
+    return metadata.m;
+  }
+
+  /**
+   * gets the job data;
+   * 1) returns `undefined` if the job does not exist at all
+   * 2) returns `null` if the job exists, but no data was stored 
+   *    (which can happen if no `job` map rules existed on the trigger)
+   * 
+   * @param jobId 
+   * @param appVersion 
+   * @returns 
+   */
+  async getJobData(jobId: string, appVersion: AppVersion): Promise<any> {
+    const params: KeyStoreParams = { appId: appVersion.id, jobId };
+    const key = this.mintKey(KeyType.JOB_DATA, params);
+    const jobData = await this.redisClient.HGETALL(key);
+    const data = SerializerService.restoreHierarchy(jobData);
+    return data.d ? data. d : (data.m ? null : undefined);
   }
 
   /**
@@ -278,8 +297,8 @@ class RedisStoreService extends StoreService {
    * @param jobId 
    * @returns 
    */
-  async getJob(jobId: string, appConfig: {id: string, version: string}): Promise<any> {
-    return await this.getJobData(jobId, appConfig);
+  async getJob(jobId: string, appVersion: AppVersion): Promise<any> {
+    return await this.getJobData(jobId, appVersion);
   }
 
   /**
@@ -287,8 +306,8 @@ class RedisStoreService extends StoreService {
    * @param jobId 
    * @returns 
    */
-  async get(jobId: string, appConfig: {id: string, version: string}): Promise<any> {
-    return await this.getJobData(jobId, appConfig);
+  async get(jobId: string, appVersion: AppVersion): Promise<any> {
+    return await this.getJobData(jobId, appVersion);
   }
 
   /**
@@ -297,55 +316,67 @@ class RedisStoreService extends StoreService {
    * @param activityId 
    * @param data 
    * @param metadata 
-   * @param appConfig 
+   * @param appVersion 
    * @returns 
    */
-  async setActivity(jobId: string, activityId: string, data: Record<string, unknown>, metadata: Record<string, unknown>, appConfig: {id: string, version: string}): Promise<any>  {
-    const params: KeyStoreParams = { appId: appConfig.id, jobId, activityId };
-    const [dataResp, metadataResp] = await this.redisClient.multi()
-      .set(this.mintKey(KeyType.JOB_ACTIVITY_DATA, params), JSON.stringify(data))
-      .set(this.mintKey(KeyType.JOB_ACTIVITY_METADATA, params), JSON.stringify(metadata))
-      .exec();
+  async setActivity(jobId: string, activityId: string, data: Record<string, unknown>, metadata: Record<string, unknown>, appVersion: AppVersion): Promise<string>  {
+    const hashKey = this.mintKey(KeyType.JOB_ACTIVITY_DATA, { appId: appVersion.id, jobId, activityId });
+    const hashData = SerializerService.flattenHierarchy({ m: metadata, d: data});
+    const response = await this.redisClient.HSET(hashKey, hashData);
     return activityId;
   }
   
   /**
-   * gets the activity metadata
+   * gets the activity metadata; returns undefined if the activity does not exist; can happen
+   * if the activity was garbage collected
    * @param jobId 
    * @param activityId 
-   * @param appConfig 
-   * @returns 
+   * @param appVersion 
+   * @returns {undefined|Record<string, any>}
    */
-  async getActivityMetadata(jobId: string, activityId: string, appConfig: {id: string, version: string}): Promise<any> {
-    const params: KeyStoreParams = { appId: appConfig.id, jobId, activityId };
-    const key = this.mintKey(KeyType.JOB_ACTIVITY_METADATA, params);
-    const activityMetadata = await this.redisClient.get(key);
-    return JSON.parse(activityMetadata);
+  async getActivityMetadata(jobId: string, activityId: string, appVersion: AppVersion): Promise<any> {
+    const metadataFields = ['m/activity_id', 'm/activity_type', 'm/activity_subtype', 'm/activity_created', 'm/activity_updated', 'm/job_id', 'm/job_key'];
+    const params: KeyStoreParams = { appId: appVersion.id, jobId, activityId };
+    const key = this.mintKey(KeyType.JOB_ACTIVITY_DATA, params);
+    const arrMetadata = await this.redisClient.HMGET(key, metadataFields);
+    //iterate to create an object where the keys are the metadata fields and values are jobMetadata
+    const objMetadata = metadataFields.reduce((acc, field, index) => {
+      if (arrMetadata[index] === null) return acc; //skip null values (which are optional fields
+      acc[field] = arrMetadata[index];
+      return acc;
+    }, {});
+    const metadata = SerializerService.restoreHierarchy(objMetadata);
+    return metadata.m;
   }
 
   /**
-   * gets the activity data
+   * gets the activity data;
+   * 1) returns `undefined` if the activity does not exist at all
+   * 2) returns `null` if the activity exists, but no data was stored 
+   *    (which can happen if no downstream activities are mapped to its output)
+   * 
    * @param jobId 
    * @param activityId 
-   * @param appConfig 
-   * @returns 
+   * @param appVersion 
+   * @returns {undefined|null|Record<string, any>}
    */
-  async getActivityData(jobId: string, activityId: string, appConfig: {id: string, version: string}): Promise<any> {
-    const params: KeyStoreParams = { appId: appConfig.id, jobId, activityId };
+  async getActivityData(jobId: string, activityId: string, appVersion: AppVersion): Promise<any> {
+    const params: KeyStoreParams = { appId: appVersion.id, jobId, activityId };
     const key = this.mintKey(KeyType.JOB_ACTIVITY_DATA, params);
-    const activityData = await this.redisClient.get(key);
-    return JSON.parse(activityData);
+    const activityData = await this.redisClient.HGETALL(key);
+    const data = SerializerService.restoreHierarchy(activityData);
+    return data.d ? data. d : (data.m ? null : undefined);
   }
 
   /**
    * convenience method to get the activity data
    * @param jobId 
    * @param activityId 
-   * @param appConfig 
+   * @param appVersion 
    * @returns 
    */
-  async getActivity(jobId: string, activityId: string, appConfig: {id: string, version: string}): Promise<any> {
-    return await this.getActivityData(jobId, activityId, appConfig);
+  async getActivity(jobId: string, activityId: string, appVersion: AppVersion): Promise<any> {
+    return await this.getActivityData(jobId, activityId, appVersion);
   }
 
   /**
@@ -354,12 +385,12 @@ class RedisStoreService extends StoreService {
    * @param topic 
    * @returns 
    */
-  async getSchema(activityId: string, appConfig: {id: string, version: string}): Promise<any> {
-    let schema = this.cache.getSchema(appConfig.id, appConfig.version, activityId);
+  async getSchema(activityId: string, appVersion: AppVersion): Promise<any> {
+    let schema = this.cache.getSchema(appVersion.id, appVersion.version, activityId);
     if (schema) {
       return schema
     } else {
-      const schemas = await this.getSchemas(appConfig);
+      const schemas = await this.getSchemas(appVersion);
       return schemas[activityId];
     }
   }
@@ -368,18 +399,18 @@ class RedisStoreService extends StoreService {
    * Always fetches the schemas from the store and caches them in memory
    * @returns 
    */
-  async getSchemas(appConfig: {id: string, version: string}): Promise<any> {
-    let schemas = this.cache.getSchemas(appConfig.id, appConfig.version);
+  async getSchemas(appVersion: AppVersion): Promise<any> {
+    let schemas = this.cache.getSchemas(appVersion.id, appVersion.version);
     if (schemas && Object.keys(schemas).length > 0) {
       return schemas;
     } else {
-      const params: KeyStoreParams = { appId: appConfig.id, appVersion: appConfig.version };
+      const params: KeyStoreParams = { appId: appVersion.id, appVersion: appVersion.version };
       const key = this.mintKey(KeyType.SCHEMAS, params);
       schemas = await this.redisClient.hGetAll(key);
       Object.entries(schemas).forEach(([key, value]) => {
         schemas[key] = JSON.parse(value as string);
       });
-      this.cache.setSchemas(appConfig.id, appConfig.version, schemas);
+      this.cache.setSchemas(appVersion.id, appVersion.version, schemas);
       return schemas;
     }
   }
@@ -389,81 +420,81 @@ class RedisStoreService extends StoreService {
    * @param schemas 
    * @returns 
    */
-  async setSchemas(schemas: Record<string, any>, appConfig: {id: string, version: string}): Promise<any> {
-    const params: KeyStoreParams = { appId: appConfig.id, appVersion: appConfig.version };
+  async setSchemas(schemas: Record<string, any>, appVersion: AppVersion): Promise<any> {
+    const params: KeyStoreParams = { appId: appVersion.id, appVersion: appVersion.version };
     const key = this.mintKey(KeyType.SCHEMAS, params);
     const _schemas = {...schemas};
     Object.entries(_schemas).forEach(([key, value]) => {
       _schemas[key] = JSON.stringify(value);
     });
     const response = await this.redisClient.hSet(key, _schemas);
-    this.cache.setSchemas(appConfig.id, appConfig.version, schemas);
+    this.cache.setSchemas(appVersion.id, appVersion.version, schemas);
     return response;
   }
 
   /**
    * Registers handlers for public subscriptions for the given topic in the store
    * @param subscriptions 
-   * @param appConfig 
+   * @param appVersion 
    * @returns 
    */
-  async setSubscriptions(subscriptions: Record<string, any>, appConfig: {id: string, version: string}): Promise<void> {
-    const params: KeyStoreParams = { appId: appConfig.id, appVersion: appConfig.version };
+  async setSubscriptions(subscriptions: Record<string, any>, appVersion: AppVersion): Promise<void> {
+    const params: KeyStoreParams = { appId: appVersion.id, appVersion: appVersion.version };
     const key = this.mintKey(KeyType.SUBSCRIPTIONS, params);
     const _subscriptions = {...subscriptions};
     Object.entries(_subscriptions).forEach(([key, value]) => {
       _subscriptions[key] = JSON.stringify(value);
     });
     const response = await this.redisClient.hSet(key, _subscriptions);
-    this.cache.setSubscriptions(appConfig.id, appConfig.version, subscriptions);
+    this.cache.setSubscriptions(appVersion.id, appVersion.version, subscriptions);
     return response;
   }
 
-  async getSubscriptions(appConfig: { id: string; version: string }): Promise<Record<string, string>> {
-    let subscriptions = this.cache.getSubscriptions(appConfig.id, appConfig.version);
+  async getSubscriptions(appVersion: { id: string; version: string }): Promise<Record<string, string>> {
+    let subscriptions = this.cache.getSubscriptions(appVersion.id, appVersion.version);
     if (subscriptions && Object.keys(subscriptions).length > 0) {
       return subscriptions;
     } else {
-      const params: KeyStoreParams = { appId: appConfig.id, appVersion: appConfig.version };
+      const params: KeyStoreParams = { appId: appVersion.id, appVersion: appVersion.version };
       const key = this.mintKey(KeyType.SUBSCRIPTIONS, params);
       subscriptions = await this.redisClient.hGetAll(key) || {};
       Object.entries(subscriptions).forEach(([key, value]) => {
         subscriptions[key] = JSON.parse(value as string);
       });
-      this.cache.setSubscriptions(appConfig.id, appConfig.version, subscriptions);
+      this.cache.setSubscriptions(appVersion.id, appVersion.version, subscriptions);
       return subscriptions;
     }
   }
 
-  async getSubscription(topic: string, appConfig: { id: string; version: string }): Promise<string | undefined> {
-    let subscriptions = await this.getSubscriptions(appConfig);
+  async getSubscription(topic: string, appVersion: { id: string; version: string }): Promise<string | undefined> {
+    let subscriptions = await this.getSubscriptions(appVersion);
     return subscriptions[topic];
   }
 
-  async setSubscriptionPatterns(subscriptionPatterns: Record<string, any>, appConfig: {id: string, version: string}): Promise<any> {
-    const params: KeyStoreParams = { appId: appConfig.id, appVersion: appConfig.version };
+  async setSubscriptionPatterns(subscriptionPatterns: Record<string, any>, appVersion: AppVersion): Promise<any> {
+    const params: KeyStoreParams = { appId: appVersion.id, appVersion: appVersion.version };
     const key = this.mintKey(KeyType.SUBSCRIPTION_PATTERNS, params);
     const _subscriptions = {...subscriptionPatterns};
     Object.entries(_subscriptions).forEach(([key, value]) => {
       _subscriptions[key] = JSON.stringify(value);
     });
     const response = await this.redisClient.hSet(key, _subscriptions);
-    this.cache.setSubscriptionPatterns(appConfig.id, appConfig.version, subscriptionPatterns);
+    this.cache.setSubscriptionPatterns(appVersion.id, appVersion.version, subscriptionPatterns);
     return response;
   }
 
-  async getSubscriptionPatterns(appConfig: { id: string; version: string }): Promise<any> {
-    let patterns = this.cache.getSubscriptionPatterns(appConfig.id, appConfig.version);
+  async getSubscriptionPatterns(appVersion: { id: string; version: string }): Promise<any> {
+    let patterns = this.cache.getSubscriptionPatterns(appVersion.id, appVersion.version);
     if (patterns && Object.keys(patterns).length > 0) {
       return patterns;
     } else {
-      const params: KeyStoreParams = { appId: appConfig.id, appVersion: appConfig.version };
+      const params: KeyStoreParams = { appId: appVersion.id, appVersion: appVersion.version };
       const key = this.mintKey(KeyType.SUBSCRIPTION_PATTERNS, params);
       patterns = await this.redisClient.hGetAll(key);
       Object.entries(patterns).forEach(([key, value]) => {
         patterns[key] = JSON.parse(value as string);
       });
-      this.cache.setSubscriptionPatterns(appConfig.id, appConfig.version, patterns);
+      this.cache.setSubscriptionPatterns(appVersion.id, appVersion.version, patterns);
       return patterns;
     }
   }

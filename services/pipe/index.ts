@@ -1,6 +1,6 @@
 import FUNCTIONS from './functions'
 
-import { PipeItem, Pipe as PipeType } from '../../typedefs/pipe';
+import { PipeItem, PipeItems, Pipe as PipeType } from '../../typedefs/pipe';
 
 interface JobData {
   [key: string]: any;
@@ -40,17 +40,20 @@ class Pipe {
       //return prior row as if nothing happened
       return resolvedPriorRow as PipeItem[];
     } else {
-      //currentRow is a standard row
       if (subPipeQueue.length > 0) {
         //if items in subPipeQueue, flush and use as resolvedPriorRow
         resolvedPriorRow = [...subPipeQueue];
         subPipeQueue.length = 0;
-      }
-      const [functionName, ...params] = currentRow;
-      //use resolved values from prior row (n - 1) as input params to cell 1 function
-      const resolvedValue = this.resolveFunction(functionName as string)(...resolvedPriorRow);
-      //resolve remaining cells in row and return concatenated with resolvedValue
-      return [resolvedValue].concat(this.processCells([...params]));
+      } else if (!resolvedPriorRow) {
+        //if no prior row, use current row as prior row
+        return [].concat(this.processCells([...currentRow]));
+      } else {
+        const [functionName, ...params] = currentRow;
+        //use resolved values from prior row (n - 1) as input params to cell 1 function
+        const resolvedValue = this.resolveFunction(functionName as string)(...resolvedPriorRow);
+        //resolve remaining cells in row and return concatenated with resolvedValue
+        return [resolvedValue].concat(this.processCells([...params]));
+        }
     }
   }
 
@@ -68,7 +71,7 @@ class Pipe {
     return domain[suffix];
   }
 
-  processCells(cells: PipeItem[]): unknown[] {
+  processCells(cells: PipeItems): unknown[] {
     const resolved = [];
     for (const currentCell of cells) {
       resolved.push(this.resolveCellValue(currentCell));

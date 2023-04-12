@@ -6,9 +6,7 @@ enum KeyType {
   PUBSUBDB,
   APP,
   JOB_DATA,
-  JOB_METADATA,
   JOB_ACTIVITY_DATA,
-  JOB_ACTIVITY_METADATA,
   JOB_STATS_GENERAL,
   JOB_STATS_MEDIAN,
   JOB_STATS_INDEX,
@@ -48,31 +46,26 @@ class KeyStore {
       case KeyType.PUBSUBDB:
         return namespace;
       case KeyType.APP:
+        // the term 'app' must be reserved due to naked paths for job and activity keys
         return `${namespace}:app:${params.appId || ''}`;
       case KeyType.JOB_DATA:
-        return `${namespace}:${params.appId}:job:${params.jobId}:data`;
-      case KeyType.JOB_METADATA:
-        return `${namespace}:${params.appId}:job:${params.jobId}:mdata`;
+        return `${namespace}:${params.appId}:${params.jobId}`;
       case KeyType.JOB_ACTIVITY_DATA:
-        return `${namespace}:${params.appId}:job:${params.jobId}:act:${params.activityId}:data`;
-      case KeyType.JOB_ACTIVITY_METADATA:
-        return `${namespace}:${params.appId}:job:${params.jobId}:act:${params.activityId}:mdata`;
+        return `${namespace}:${params.appId}:job:${params.jobId}:${params.activityId}`;
       case KeyType.JOB_STATS_GENERAL:
-        return `${namespace}:${params.appId}:job:${params.jobKey}:${params.dateTime}:stats:gen`;
+        return `${namespace}:${params.appId}:agg:${params.jobKey}:${params.dateTime}:stats`;
       case KeyType.JOB_STATS_MEDIAN:
-        //median uses ZSET; must add the attribute being tracked to the Redis key to isolate
-        return `${namespace}:${params.appId}:job:${params.jobKey}:${params.dateTime}:stats:mdn:${params.facet}`;
+        return `${namespace}:${params.appId}:agg:${params.jobKey}:${params.dateTime}:stats:${params.facet}`;
       case KeyType.JOB_STATS_INDEX:
-        //index uses LIST; must add the attribute being indexed to the Redis key to isolate
-        return `${namespace}:${params.appId}:job:${params.jobKey}:${params.dateTime}:stats:idx:${params.facet}`;
+        return `${namespace}:${params.appId}:agg:${params.jobKey}:${params.dateTime}:stats:${params.facet}`;
       case KeyType.SCHEMAS:
         return `${namespace}:${params.appId}:vrs:${params.appVersion}:schemas`;
       case KeyType.SUBSCRIPTIONS:
-        return `${namespace}:${params.appId}:vrs:${params.appVersion}:subs`;
+        return `${namespace}:${params.appId}:vrs:${params.appVersion}:subscriptions`;
       case KeyType.SUBSCRIPTION_PATTERNS:
-        return `${namespace}:${params.appId}:vrs:${params.appVersion}:subpats`;
+        return `${namespace}:${params.appId}:vrs:${params.appVersion}:transitions`;
       case KeyType.HOOK_PATTERNS:
-        return `${namespace}:${params.appId}:vrs:${params.appVersion}:hookpats`;
+        return `${namespace}:${params.appId}:vrs:${params.appVersion}:hooks`;
       case KeyType.HOOKS:
         return `${namespace}:${params.appId}:hooks`;
       default:
@@ -87,17 +80,15 @@ export { KeyStore, KeyType, KeyStoreParams, PSNS };
 /**
  * psdb ->                                            {hash}    pubsubdb config {version: "0.0.1", namespace: "psdb"}
  * psdb:apps:<appid> ->                               {hash}    app profile { "id": "appid", "version": "2", "versions/1": "GMT", "versions/2": "GMT"}
- * psdb:<appid>:job:<jobid>:data ->                   {hash}    job data
- * psdb:<appid>:job:<jobid>:mdata ->                  {hash}    job metadata
- * psdb:<appid>:job:<jobid>:act:<activityId>:data ->  {hash}    job activity data (a1)
- * psdb:<appid>:job:<jobid>:act:<activityId>:mdata -> {hash}    job activity metadata (a1)
- * psdb:<appid>:job:<jobkey>:<dateTime>:stats:gen ->  {hash}    job stats (general)
+ * psdb:<appid>:job:<jobid> ->                        {hash}    job data
+ * psdb:<appid>:job:<jobid>:act:<activityId>  ->      {hash}    job activity data (a1)
+ * psdb:<appid>:job:<jobkey>:<dateTime>:stats ->      {hash}    job stats (general)
  * psdb:<appid>:job:<jobkey>:<dateTime>:stats:mdn ->  {zset}    job stats (median)
  * psdb:<appid>:job:<jobkey>:<dateTime>:stats:idx ->  {list}    job stats (index of jobid[])
  * psdb:<appid>:vrs:<version>:schemas ->              {hash}    schemas
- * psdb:<appid>:vrs:<version>:subpats ->              {hash}    subscription patterns [cache]
- * psdb:<appid>:vrs:<version>:subs ->                 {hash}    subscriptions [cache]
- * psdb:<appid>:vrs:<version>:hookpats ->             {hash}    hook patterns [cache] (used to create a skeleton key to locate dynamic hooks in the Redis `hooks` hash)
+ * psdb:<appid>:vrs:<version>:transitions ->          {hash}    subscription patterns [cache]
+ * psdb:<appid>:vrs:<version>:subscriptions ->        {hash}    subscriptions [cache]
+ * psdb:<appid>:vrs:<version>:hooks ->                {hash}    hook patterns [cache] (used to create a skeleton key to locate dynamic hooks in the Redis `hooks` hash)
  * psdb:<appid>:hooks ->                              {hash}    hooks (dynamic); expunged when found; never versioned (external caller has no sense of release schedules or versions)
  */
 
@@ -108,5 +99,5 @@ export { KeyStore, KeyType, KeyStoreParams, PSNS };
  * appid:    app id
  * jobid:    either a random guid based upon time or explicit passed as rule in graph
  * jobkey:   if present, job stats will be captured at a default granilarity of 1h
- * dateTime: date/time (2023-03-12T00:00:00) GMT slice, representing a time like midnight, 1am, 2am, etc
+ * dateTime: date/time (20230312000000) GMT slice, representing a time like midnight, 1am, 2am, etc
  */
