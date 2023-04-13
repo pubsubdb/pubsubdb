@@ -52,12 +52,12 @@ type ActivityType = TriggerActivity | AwaitActivity | JobActivity | OpenAPIActiv
 
 type ActivityData = Record<string, any>;
 type ActivityMetadata = {
-  activity_id: string;
-  activity_type: string;
-  activity_subtype: string;
-  job_id?: string;
-  activity_created: string; //GMT created
-  activity_updated: string; //GMT updated
+  aid: string; //activity_id
+  atp: string; //activity_type
+  stp: string; //activity_subtype
+  jid?: string; //job_id
+  ac: string; //GMT created //activity_created
+  au: string; //GMT updated //activity_updated
 };
 
 type ActivityContext = {

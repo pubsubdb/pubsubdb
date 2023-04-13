@@ -36,13 +36,12 @@ class Activity {
       await this.restoreJobContext();   //restore job context if not passed in
       await this.mapInputData();        //map upstream data to input data
       await this.subscribeToResponse(); //wait for activity to complete
-      //note: this should happen after exec has returned; for now assuming activity is a noop
       await this.saveActivity();        //save activity to db
       await this.subscribeToHook();     //if a hook is declared, subscribe and then sleep; the activity will awaken when the hook is triggered
       await this.registerTimeout();     //add default timeout
       await this.execActivity();        //execute the activity
     } catch (error) {
-      console.log('activity error!!!!!!!', error);
+      console.log('activity process() error', error);
       if (error instanceof RestoreJobContextError) {
         // Handle restoreJobContext error
       } else if (error instanceof MapInputDataError) {
@@ -64,7 +63,7 @@ class Activity {
       //todo: restore job context if not passed in
       throw new RestoreJobContextError();
     } else {
-      this.context[this.metadata.activity_id] = {
+      this.context[this.metadata.aid] = {
         input: {
           data: this.data,
           metadata: this.metadata,
@@ -100,13 +99,13 @@ class Activity {
    * those fields that are not specified in the mapping rules for other activities will not be saved.)
    */
   async saveActivity(): Promise<void> {
-    const jobId = this.context.metadata.job_id;
-    const activityId = this.metadata.activity_id;
+    const jobId = this.context.metadata.jid;
+    const activityId = this.metadata.aid;
     await this.pubsubdb.store.setActivity(
       jobId,
       activityId,
       this.context[activityId].output.data,
-      { ...this.metadata, job_id: jobId, job_key: this.context.metadata.job_key },
+      { ...this.metadata, jid: jobId, key: this.context.metadata.key },
       this.pubsubdb.getAppConfig()
     );
   }
@@ -116,8 +115,8 @@ class Activity {
       const hook = this.config.hook;
       const signal: Signal = {
         topic: hook.topic,
-        resolved: this.context.metadata.job_id,
-        jobId: this.context.metadata.job_id,
+        resolved: this.context.metadata.jid,
+        jobId: this.context.metadata.jid,
       }
       await this.pubsubdb.store.setSignal(signal, this.pubsubdb.getAppConfig());
     }

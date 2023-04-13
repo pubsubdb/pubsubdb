@@ -63,18 +63,19 @@ describe('pubsubdb', () => {
       }
     });
 
-    it('should publish a message for each combination', async () => {
+    it('should distribute messages to different job queues', async () => {
       const sizes = ['sm', 'md', 'lg'];
       const primacies = ['primary', 'secondary', 'tertiary'];
       const colors = ['red', 'yellow', 'blue'];
       const facilities = ['acme', 'spacely', 'cogswell'];
-      for (let i = 0; i < 1; i++) {
+      let i = 1001;
+      for (let j = 0; j < 1; j++) {
         for (const size of sizes) {
           for (const primacy of primacies) {
             for (const color of colors) {
               for (const facility of facilities) {
                 const payload = {
-                  id: `ord_${parseInt((Math.random() * 1000000).toString()).toString()}`,
+                  id: `ord_${i++}`,
                   size,
                   primacy,
                   color,
@@ -88,6 +89,6 @@ describe('pubsubdb', () => {
           }
         }
       }
-    }, 10000);
+    });
   });
 });

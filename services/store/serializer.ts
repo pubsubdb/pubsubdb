@@ -15,8 +15,21 @@ class SerializerService {
         const value = obj[key];
         const newKey = prefix ? `${prefix}/${key}` : key;
 
-        if (value === null || value === undefined || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' || value instanceof Date) {
-          result[newKey] = JSON.stringify(value);
+        if (value instanceof Date) {
+          result[newKey] = value.toISOString();
+        } else if (value === null) {
+          result[newKey] = '{@null}';
+        } else if (value === undefined) {
+          //never save undefined (assume it truly is undefined)
+          //result[newKey] = value.toString();
+        } else if (typeof value === 'string') {
+          if (value === '{@null}') {
+            result[newKey] = '\\{@null\\}';
+          } else {
+            result[newKey] = value;
+          }
+        } else if (typeof value === 'number' || typeof value === 'boolean') {
+          result[newKey] = value.toString();
         } else if (typeof value === 'object') {
           Object.assign(result, SerializerService.flattenHierarchy(value, newKey));
         }
@@ -36,13 +49,6 @@ class SerializerService {
       }
     }
     return result;
-  }
-
-  static dateReviver(key, value) {
-    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/.test(value)) {
-      return new Date(value);
-    }
-    return value;
   }
 
   static objectToArray(obj: any): any {
@@ -74,6 +80,24 @@ class SerializerService {
     return obj;
   }
 
+  static convertTypes(obj: string|number): any {
+    if (typeof obj === 'string' && obj === '\\{@null\\}') {
+      return '{@null}';
+    } else if (typeof obj === 'string' && obj === '{@null}') {
+      return null;
+    } else if (typeof obj === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/.test(obj)) {
+      return new Date(obj);
+    } else if (!isNaN(obj as number)) {
+      //todo: use schema to cast type
+      return Number(obj);
+    } else if (obj === 'true' || obj === 'false') {
+      //todo: use schema to cast type
+      return obj === 'true';
+    } else { 
+      return obj;
+    }
+  }
+
   static restoreHierarchy(obj: FlatObject): any|any[] {
     const result: any = {};
     for (const key in obj) {
@@ -81,7 +105,7 @@ class SerializerService {
       let current = result;
       for (let i = 0; i < keys.length; i++) {
         if (i === keys.length - 1) {
-          current[keys[i]] = JSON.parse(obj[key] as string, SerializerService.dateReviver);
+          current[keys[i]] = SerializerService.convertTypes(obj[key] as string);
         } else {
           current[keys[i]] = current[keys[i]] || {};
           current = current[keys[i]];

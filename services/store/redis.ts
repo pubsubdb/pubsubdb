@@ -261,7 +261,7 @@ class RedisStoreService extends StoreService {
   }
 
   async getJobMetadata(jobId: string, appVersion: AppVersion): Promise<any> {
-    const metadataFields = ['m/activity_id', 'm/activity_type', 'm/activity_subtype', 'm/job_created', 'm/job_updated', 'm/job_id', 'm/job_key', 'm/time_series', 'm/job_status'];
+    const metadataFields = ['m/aid', 'm/atp', 'm/stp', 'm/jc', 'm/ju', 'm/jid', 'm/key', 'm/ts', 'm/js'];
     const params: KeyStoreParams = { appId: appVersion.id, jobId };
     const key = this.mintKey(KeyType.JOB_DATA, params);
     const arrMetadata = await this.redisClient.HMGET(key, metadataFields);
@@ -336,7 +336,7 @@ class RedisStoreService extends StoreService {
    * @returns {undefined|Record<string, any>}
    */
   async getActivityMetadata(jobId: string, activityId: string, appVersion: AppVersion): Promise<any> {
-    const metadataFields = ['m/activity_id', 'm/activity_type', 'm/activity_subtype', 'm/activity_created', 'm/activity_updated', 'm/job_id', 'm/job_key'];
+    const metadataFields = ['m/aid', 'm/atp', 'm/stp', 'm/ac', 'm/au', 'm/jid', 'm/key'];
     const params: KeyStoreParams = { appId: appVersion.id, jobId, activityId };
     const key = this.mintKey(KeyType.JOB_ACTIVITY_DATA, params);
     const arrMetadata = await this.redisClient.HMGET(key, metadataFields);
