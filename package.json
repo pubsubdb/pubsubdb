@@ -8,6 +8,9 @@
     "type": "git",
     "url": "https://github.com/pubsubdb/pubsubdb.git"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "clean": "rimraf ./build",
     "build": "tsc --build tsconfig.json",
