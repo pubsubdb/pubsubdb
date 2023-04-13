@@ -10,6 +10,7 @@ import {
   ActivityMetadata,
   ActivityType,
   TriggerActivity } from "../../../typedefs/activity";
+import { JobContext } from '../../../typedefs/job';
 import { StatsType, Stat } from '../../../typedefs/stats';
 import { MapperService } from '../../mapper';
 import { Pipe } from "../../pipe";
@@ -21,8 +22,13 @@ type FlattenedDataObject = { [key: string]: string };
 class Trigger extends Activity {
   config: TriggerActivity;
 
-  constructor(config: ActivityType, data: ActivityData, metadata: ActivityMetadata, pubsubdb: PubSubDBService) {
-    super(config, data, metadata, pubsubdb);
+  constructor(
+    config: ActivityType,
+    data: ActivityData,
+    metadata: ActivityMetadata,
+    pubsubdb: PubSubDBService,
+    context?: JobContext) {
+      super(config, data, metadata, pubsubdb, context);
   }
 
   /**
@@ -33,11 +39,12 @@ class Trigger extends Activity {
       await this.createContext();
       await this.mapJobData();
       await this.mapOutputData();
-      await this.saveActivity(); //save output activity data used by downstream
-      await this.saveContext();  //save the job data and metadata
-      await this.saveStats();    //save job stats to aggregation hash
+      await this.saveActivity();
+      await this.saveContext();
+      await this.saveStats();
       await this.pub();
     } catch (error) {
+      console.log('trigger process() error!!!!!!!!!!!!', error);
       if (error instanceof RestoreJobContextError) {
         // Handle restoreJobContext error
       } else if (error instanceof MapInputDataError) {
@@ -125,7 +132,14 @@ class Trigger extends Activity {
     const stats = this.config.stats;
     const jobKey = stats?.key;
     if (jobKey) {
-      const pipe = new Pipe([[jobKey]], this.context);
+      let pipe: Pipe;
+      if (Pipe.isPipeObject(jobKey)) {
+        //this is the more complex pipe syntax (an array of arrays)
+        pipe = new Pipe(jobKey['@pipe'], this.context);
+      } else {
+        //this is the simple inline syntax (wrap in two arrays to adhere to the pipe syntax)
+        pipe = new Pipe([[jobKey]], this.context);
+      }
       return await pipe.process();
     } else {
       //todo: use server-assigned instance id to assign the random number slot at startup (001-999)
@@ -240,7 +254,8 @@ class Trigger extends Activity {
   }
 
   resolveTarget(metric: string, target: string, resolvedValue: string): string {
-    const trimmedTarget = target.substring(1, target.length - 1).replace(/\./g, '/');
+    const trimmed = target.substring(1, target.length - 1);
+    const trimmedTarget = trimmed.split('.').slice(3).join('/');
     let resolvedTarget;
     if (this.isCardinalMetric(metric)) {
       resolvedTarget = `${metric}:${trimmedTarget}:${resolvedValue}`;
@@ -287,10 +302,16 @@ class Trigger extends Activity {
   /**
    * publish the output data and job context to the subscribed activities in the
    * subscription patterns hash.
-   * @returns {Promise<void>} A promise that resolves when the activity execution is done.
+   * @returns {Promise<void>}
    */
   async pub(): Promise<void> {
-    const subscriptionPatterns = this.pubsubdb.store.getSubscriptionPatterns(this.pubsubdb.getAppConfig());
+    const transitions = await this.pubsubdb.store.getTransitions(this.pubsubdb.getAppConfig());
+    const transition = transitions[`.${this.metadata.activity_id}`];
+    if (transition) {
+      for (let p in transition) {
+        await this.pubsubdb.pub(`.${p}`, this.context[this.metadata.activity_id].output.data, this.context);
+      }
+    }
   }
 }
 

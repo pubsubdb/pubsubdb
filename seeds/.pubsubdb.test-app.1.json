@@ -13,6 +13,191 @@
     },
     "graphs": [
       {
+        "subscribes": "order.scheduled",
+        "publishes": "order.fulfilled",
+        "activities": {
+          "schedule": {
+            "title": "Schedule Order",
+            "type": "trigger",
+            "output": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "The unique identifier for the order."
+                  }
+                }
+              }
+            },
+            "job": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "The unique identifier for the order."
+                  },
+                  "size": {
+                    "type": "string",
+                    "description": "The size of the order.",
+                    "enum": [
+                      "sm",
+                      "md",
+                      "lg"
+                    ]
+                  },
+                  "primacy": {
+                    "type": "string",
+                    "description": "The importance of the order.",
+                    "enum": [
+                      "primary",
+                      "secondary",
+                      "tertiary"
+                    ]
+                  },
+                  "color": {
+                    "type": "string",
+                    "description": "The color of the order.",
+                    "enum": [
+                      "red",
+                      "yellow",
+                      "blue"
+                    ]
+                  },
+                  "send_date": {
+                    "type": "string",
+                    "description": "The date when the order was scheduled."
+                  },
+                  "must_release_series": {
+                    "type": "string",
+                    "description": "The time series slice the scheduled order must be released."
+                  },
+                  "actual_release_series": {
+                    "type": "string",
+                    "description": "The actual time series slice when the order was released."
+                  },
+                  "facility": {
+                    "type": "string",
+                    "description": "The facility name.",
+                    "enum": [
+                      "acme",
+                      "spacely",
+                      "cogswell"
+                    ]
+                  }
+                }
+              },
+              "maps": {
+                "id": "{schedule.input.data.id}",
+                "color": "{schedule.input.data.color}",
+                "primacy": "{schedule.input.data.primacy}",
+                "size": "{schedule.input.data.size}",
+                "send_date": "{schedule.input.data.send_date}",
+                "must_release_series": "{schedule.input.data.must_release_series}"
+              }
+            },
+            "stats": {
+              "id": "{schedule.input.data.id}",
+              "key": {
+                "@pipe": [
+                  [
+                    "{schedule.input.data.color}",
+                    "{schedule.input.data.primacy}",
+                    "{schedule.input.data.size}"
+                  ],
+                  [
+                    "{@string.concat}"
+                  ]
+                ]
+              },
+              "measures": [
+                {
+                  "measure": "index",
+                  "target": "{schedule.input.data.color}"
+                },
+                {
+                  "measure": "count",
+                  "target": "{schedule.input.data.color}"
+                },
+                {
+                  "measure": "index",
+                  "target": "{schedule.input.data.primacy}"
+                },
+                {
+                  "measure": "count",
+                  "target": "{schedule.input.data.primacy}"
+                }
+              ]
+            }
+          },
+          "route": {
+            "title": "Route Order",
+            "type": "activity",
+            "hook": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "facility": {
+                    "description": "The facility name.",
+                    "enum": [
+                      "acme",
+                      "spacely",
+                      "cogswell"
+                    ]
+                  },
+                  "id": {
+                    "type": "string",
+                    "description": "The unique identifier for the order."
+                  }
+                }
+              }
+            },
+            "job": {
+              "maps": {
+                "facility": "{route.hook.data.facility}"
+              }
+            }
+          },
+          "fulfill": {
+            "title": "Fulfill Order",
+            "type": "job",
+            "job": {
+              "maps": {
+                "actual_release_series": "{schedule.output.data.actual_release_series}"
+              }
+            }
+          }
+        },
+        "transitions": {
+          "schedule": [
+            {
+              "to": "route"
+            }
+          ],
+          "route": [
+            {
+              "to": "fulfill"
+            }
+          ]
+        },
+        "hooks": {
+          "lob.1.order.routed": [
+            {
+              "to": "route",
+              "conditions": {
+                "match": [
+                  {
+                    "expected": "{schedule.output.data.order_id}",
+                    "actual": "{$self.hook.data.order_id}"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
         "subscribes": "order.approval.requested",
         "publishes": "order.approval.responded",
         "activities": {
@@ -238,9 +423,9 @@
                 }
               },
               "maps": {
-                "id": "{a5.output.data.id}",
-                "price": "{a5.output.data.price}",
-                "object_type": "{a5.output.data.object_type}"
+                "id": "{a5.input.data.id}",
+                "price": "{a5.input.data.price}",
+                "object_type": "{a5.input.data.object_type}"
               }
             },
             "stats": {
@@ -253,10 +438,6 @@
                 },
                 {
                   "measure": "avg",
-                  "target": "{a5.input.data.price}"
-                },
-                {
-                  "measure": "mdn",
                   "target": "{a5.input.data.price}"
                 },
                 {

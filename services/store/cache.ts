@@ -10,7 +10,7 @@ class Cache {
   apps: Record<string, PubSubDBApp>;
   schemas: Record<string, Record<string, unknown>>;
   subscriptions: Record<string, Record<string, string>>;
-  subscriptionPatterns: Record<string, Record<string, unknown>>;
+  transitions: Record<string, Record<string, unknown>>;
   hookPatterns: Record<string, Record<string, unknown>>;
 
   /**
@@ -19,16 +19,16 @@ class Cache {
    * @param apps 
    * @param schemas 
    * @param subscriptions 
-   * @param subscriptionPatterns 
+   * @param transitions 
    * @param hookPatterns 
    */
-  constructor(appId: string, settings: PubSubDBSettings, apps: Record<string, PubSubDBApp> = {}, schemas: Record<string, Record<string, unknown>> = {}, subscriptions: Record<string, Record<string, string>> = {}, subscriptionPatterns: Record<string, Record<string, unknown>> = {}, hookPatterns: Record<string, Record<string, unknown>> = {}) {
+  constructor(appId: string, settings: PubSubDBSettings, apps: Record<string, PubSubDBApp> = {}, schemas: Record<string, Record<string, unknown>> = {}, subscriptions: Record<string, Record<string, string>> = {}, transitions: Record<string, Record<string, unknown>> = {}, hookPatterns: Record<string, Record<string, unknown>> = {}) {
     this.appId = appId;
     this.settings = settings;
     this.apps = apps;
     this.schemas = schemas;
     this.subscriptions = subscriptions;
-    this.subscriptionPatterns = subscriptionPatterns;
+    this.transitions = transitions;
     this.hookPatterns = hookPatterns;
   }
 
@@ -39,7 +39,7 @@ class Cache {
     this.apps = {} as Record<string, PubSubDBApp>;
     this.schemas = {};
     this.subscriptions = {};
-    this.subscriptionPatterns = {};
+    this.transitions = {};
     this.hookPatterns = {};
   }
 
@@ -95,37 +95,28 @@ class Cache {
     this.subscriptions[`${appId}/${version}`] = subscriptions;
   }
 
-  getSubscriptionPatterns(appId: string, version: string): Record<string, unknown> {
-    return this.subscriptionPatterns[`${appId}/${version}`];
+  getTransitions(appId: string, version: string): Record<string, unknown> {
+    return this.transitions[`${appId}/${version}`];
   }
 
-  setSubscriptionPatterns(appId: string, version: string, subscriptionPatterns: Record<string, unknown>): void {
-    this.subscriptionPatterns[`${appId}/${version}`] = subscriptionPatterns;
+  setTransitions(appId: string, version: string, transitions: Record<string, unknown>): void {
+    this.transitions[`${appId}/${version}`] = transitions;
   }
 
-  getHooks(appId: string, version: string): Record<string, unknown> {
-    throw new Error("Hooks (getHooks) is not supported");
+  getHookPatterns(appId: string): Record<string, unknown> {
+    return this.hookPatterns[`${appId}`];
   }
 
-  setHook(appId: string, version: string): Record<string, unknown> {
-    //NOTE: setting hook is only done at runtime, not compile time
-    //      hooks are not cached or ever really read as a set
-    throw new Error("Hooks (setHook) is not supported");
+  setHookPatterns(appId: string, hookPatterns: Record<string, unknown>): void {
+    this.hookPatterns[`${appId}`] = hookPatterns;
   }
 
-  getHookPatterns(appId: string, version: string): Record<string, unknown> {
-    //NOTE: hook patterns ARE cached locally
-    throw new Error("Hooks (getHookPatterns) is not supported");
+  getSignals(appId: string, version: string): Record<string, unknown> {
+    throw new Error("SIGNAL (getHooks) is not supported");
   }
 
-  getHookPattern(appId: string, version: string): Record<string, unknown> {
-    //a single hook pattern is not cached locally
-    throw new Error("Hooks (getHookPattern) is not supported");
-  }
-
-  setHookPatterns(appId: string, version: string, hookPatterns: Record<string, unknown>): void {
-    //hook patterns are set as a single set at compile time
-    throw new Error("Hooks (setHookPatterns) is not supported");
+  setSignals(appId: string, version: string): Record<string, unknown> {
+    throw new Error("SIGNAL (setHook) is not supported");
   }
 }
 

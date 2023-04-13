@@ -19,6 +19,10 @@ class Pipe {
     return !Array.isArray(currentRow) && '@pipe' in currentRow;
   }
 
+  static isPipeObject(obj: { [key: string]: any }|string): boolean {
+    return typeof obj === 'object' && obj !== null && !Array.isArray(obj) && '@pipe' in obj;
+  }
+
   /**
    * loop through each PipeItem row in this Pipe, resolving and transforming line by line
    * @returns {any} the result of the pipe
@@ -50,14 +54,14 @@ class Pipe {
       } else {
         const [functionName, ...params] = currentRow;
         //use resolved values from prior row (n - 1) as input params to cell 1 function
-        const resolvedValue = this.resolveFunction(functionName as string)(...resolvedPriorRow);
+        const resolvedValue = Pipe.resolveFunction(functionName as string)(...resolvedPriorRow);
         //resolve remaining cells in row and return concatenated with resolvedValue
         return [resolvedValue].concat(this.processCells([...params]));
         }
     }
   }
 
-  private resolveFunction(functionName: string) {
+  static resolveFunction(functionName: string) {
     let [prefix, suffix] = functionName.split('.');
     prefix = prefix.substring(2);
     suffix = suffix.substring(0, suffix.length - 1);

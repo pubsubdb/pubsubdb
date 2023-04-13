@@ -14,7 +14,7 @@ enum KeyType {
   SUBSCRIPTIONS,
   SUBSCRIPTION_PATTERNS,
   HOOKS,
-  HOOK_PATTERNS,
+  SIGNALS,
 }
 
 //when minting a key, the following parameters are used to create a unique key per entity
@@ -64,10 +64,12 @@ class KeyStore {
         return `${namespace}:${params.appId}:vrs:${params.appVersion}:subscriptions`;
       case KeyType.SUBSCRIPTION_PATTERNS:
         return `${namespace}:${params.appId}:vrs:${params.appVersion}:transitions`;
-      case KeyType.HOOK_PATTERNS:
-        return `${namespace}:${params.appId}:vrs:${params.appVersion}:hooks`;
       case KeyType.HOOKS:
+        //`hooks` provide the pattern to resolve a value
         return `${namespace}:${params.appId}:hooks`;
+      case KeyType.SIGNALS:
+        //`signals` provide the registry of resolved values that link back to paused jobs
+        return `${namespace}:${params.appId}:signals`;
       default:
         throw new Error("Invalid key type.");
     }

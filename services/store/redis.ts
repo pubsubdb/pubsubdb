@@ -5,6 +5,7 @@ import { StoreService } from './store';
 import { StatsType } from '../../typedefs/stats';
 import { SerializerService } from './serializer';
 import { AppVersion } from '../../typedefs/app';
+import { Signal } from '../../typedefs/signal';
 
 class RedisStoreService extends StoreService {
   redisClient: any;
@@ -471,20 +472,20 @@ class RedisStoreService extends StoreService {
     return subscriptions[topic];
   }
 
-  async setSubscriptionPatterns(subscriptionPatterns: Record<string, any>, appVersion: AppVersion): Promise<any> {
+  async setTransitions(transitions: Record<string, any>, appVersion: AppVersion): Promise<any> {
     const params: KeyStoreParams = { appId: appVersion.id, appVersion: appVersion.version };
     const key = this.mintKey(KeyType.SUBSCRIPTION_PATTERNS, params);
-    const _subscriptions = {...subscriptionPatterns};
+    const _subscriptions = {...transitions};
     Object.entries(_subscriptions).forEach(([key, value]) => {
       _subscriptions[key] = JSON.stringify(value);
     });
     const response = await this.redisClient.hSet(key, _subscriptions);
-    this.cache.setSubscriptionPatterns(appVersion.id, appVersion.version, subscriptionPatterns);
+    this.cache.setTransitions(appVersion.id, appVersion.version, transitions);
     return response;
   }
 
-  async getSubscriptionPatterns(appVersion: { id: string; version: string }): Promise<any> {
-    let patterns = this.cache.getSubscriptionPatterns(appVersion.id, appVersion.version);
+  async getTransitions(appVersion: { id: string; version: string }): Promise<any> {
+    let patterns = this.cache.getTransitions(appVersion.id, appVersion.version);
     if (patterns && Object.keys(patterns).length > 0) {
       return patterns;
     } else {
@@ -494,10 +495,50 @@ class RedisStoreService extends StoreService {
       Object.entries(patterns).forEach(([key, value]) => {
         patterns[key] = JSON.parse(value as string);
       });
-      this.cache.setSubscriptionPatterns(appVersion.id, appVersion.version, patterns);
+      this.cache.setTransitions(appVersion.id, appVersion.version, patterns);
       return patterns;
     }
   }
+
+  async setHookPatterns(hookPatterns: { [key: string]: string }, appVersion: AppVersion): Promise<any> {
+    const key = this.mintKey(KeyType.HOOKS, { appId: appVersion.id });
+    const _hooks = {...hookPatterns};
+    Object.entries(_hooks).forEach(([key, value]) => {
+      _hooks[key] = JSON.stringify(value);
+    });
+    const response = await this.redisClient.hSet(key, _hooks);
+    this.cache.setHookPatterns(appVersion.id, hookPatterns);
+    return response;
+  }
+
+  async getHookPatterns(appVersion: AppVersion): Promise<Record<string, unknown>> {
+    let patterns = this.cache.getHookPatterns(appVersion.id);
+    if (patterns && Object.keys(patterns).length > 0) {
+      return patterns;
+    } else {
+      const key = this.mintKey(KeyType.HOOKS, { appId: appVersion.id });
+      patterns = await this.redisClient.hGetAll(key);
+      Object.entries(patterns).forEach(([key, value]) => {
+        patterns[key] = JSON.parse(value as string);
+      });
+      this.cache.setHookPatterns(appVersion.id, patterns);
+      return patterns;
+    }
+  }
+
+  async setSignal(signal: Signal, appVersion: AppVersion): Promise<any> {
+    const key = this.mintKey(KeyType.SIGNALS, { appId: appVersion.id });
+    const { topic, resolved, jobId} = signal;
+    return await this.redisClient.HSET(key, `${topic}:${resolved}`, jobId);
+  }
+
+  async getSignal(topic: string, resolved: string, appVersion: AppVersion): Promise<Signal | undefined> {
+    const key = this.mintKey(KeyType.SIGNALS, { appId: appVersion.id });
+    const signal = await this.redisClient.HGET(key, `${topic}:${resolved}`);
+    return signal ? signal : undefined;
+    //todo: should delete any signal that is returned
+  }
+
 }
 
 export { RedisStoreService };
