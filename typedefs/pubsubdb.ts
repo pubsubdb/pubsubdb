@@ -16,6 +16,7 @@ type PubSubDBGraph = {
   publishes: string;
   activities: Record<string, any>;
   transitions: Record<string, any>;
+  hooks: Record<string, any>;
 };
 
 type PubSubDBSettings = {

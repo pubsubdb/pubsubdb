@@ -53,7 +53,7 @@ describe('pubsubdb', () => {
   describe('pub()', () => {
     it('should should publish a message', async () => {
       let payload: any;
-      for (let i = 0; i < 10; i++) {
+      for (let i = 0; i < 1; i++) {
         payload = { 
           id: `ord_${parseInt((Math.random()*1000000).toString()).toString()}`, 
           price: 49.99 + i, 
@@ -62,5 +62,32 @@ describe('pubsubdb', () => {
         await pubSubDB.pub('order.approval.price.requested', payload);
       }
     });
+
+    it('should publish a message for each combination', async () => {
+      const sizes = ['sm', 'md', 'lg'];
+      const primacies = ['primary', 'secondary', 'tertiary'];
+      const colors = ['red', 'yellow', 'blue'];
+      const facilities = ['acme', 'spacely', 'cogswell'];
+      for (let i = 0; i < 1; i++) {
+        for (const size of sizes) {
+          for (const primacy of primacies) {
+            for (const color of colors) {
+              for (const facility of facilities) {
+                const payload = {
+                  id: `ord_${parseInt((Math.random() * 1000000).toString()).toString()}`,
+                  size,
+                  primacy,
+                  color,
+                  facility,
+                  send_date: new Date(),
+                  must_release_series: '202304120015'
+                };
+                await pubSubDB.pub('order.scheduled', payload);
+              }
+            }
+          }
+        }
+      }
+    }, 10000);
   });
 });

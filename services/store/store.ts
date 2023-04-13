@@ -1,4 +1,5 @@
 import { AppVersion } from '../../typedefs/app';
+import { Signal } from '../../typedefs/signal';
 import { StatsType } from '../../typedefs/stats';
 
 abstract class StoreService {
@@ -24,8 +25,12 @@ abstract class StoreService {
   abstract setSchemas(schemas: Record<string, any>, config: AppVersion): Promise<any>;
   abstract setSubscriptions(subscriptions: Record<string, any>, config: AppVersion): Promise<any>;
   abstract getSubscription(topic: string, config: AppVersion): Promise<string | undefined>;
-  abstract setSubscriptionPatterns(subscriptionsPatterns: Record<string, any>, config: AppVersion): Promise<any>;
-  abstract getSubscriptionPatterns(config: AppVersion): Promise<any>;
+  abstract setTransitions(subscriptionsPatterns: Record<string, any>, config: AppVersion): Promise<any>;
+  abstract getTransitions(config: AppVersion): Promise<any>;
+  abstract setHookPatterns(hookPatterns: { [key: string]: string }, config: AppVersion): Promise<any>;
+  abstract getHookPatterns(config: AppVersion): Promise<Record<string, unknown>>;
+  abstract setSignal(signal: Signal, appVersion: AppVersion): Promise<any>;
+  abstract getSignal(topic: string, resolved: string, appVersion: AppVersion): Promise<Signal | undefined>;
 }
 
 export { StoreService };

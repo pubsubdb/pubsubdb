@@ -13,9 +13,10 @@ class Deployer {
 
     this.bindSortedActivityIdsToTriggers();
     this.extractDynamicMappingRules();
+    await this.deployHookPatterns();
     await this.deployActivitySchemas();
     await this.deploySubscriptions(); 
-    await this.deploySubscriptionPatterns();
+    await this.deployTransitions();
     await this.deployPublications();
     await this.publishNewVersionToSubscribers();
     await this.updateActiveVersionInRedis();
@@ -177,7 +178,7 @@ class Deployer {
   /**
    * 2.2b) Deploy the private subscriptions to Redis
    */
-  async deploySubscriptionPatterns() {
+  async deployTransitions() {
     const graphs = this.manifest!.app.graphs;
     const privateSubscriptions: { [key: string]: any } = {};
   
@@ -207,7 +208,31 @@ class Deployer {
         }
       }
     }
-    await this.store.setSubscriptionPatterns(privateSubscriptions, this.getAppConfig());
+    await this.store.setTransitions(privateSubscriptions, this.getAppConfig());
+  }
+
+  async deployHookPatterns() {
+    const graphs = this.manifest!.app.graphs;
+    const hookPatterns: { [key: string]: string } = {};
+
+    for (const graph of graphs) {
+      if (graph.hooks) {
+        for (const topic in graph.hooks) {
+          hookPatterns[topic] = graph.hooks[topic];
+          //create back ref in the graph (when schema is saved it will be available)
+          const activityId = graph.hooks[topic][0].to;
+          const targetActivity = graph.activities[activityId];
+          if (targetActivity) {
+            if (!targetActivity.hook) {
+              targetActivity.hook = {};
+            }
+            targetActivity.hook.topic = topic;
+          }
+        }
+      }
+    }
+    //save hooks to redis
+    await this.store.setHookPatterns(hookPatterns, this.getAppConfig());
   }
 
   // 2.3) Compile the list of publications; used for dynamic subscriptions (block if nonexistent)

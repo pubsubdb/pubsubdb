@@ -1,24 +1,17 @@
 import { PubSubDBService } from "..";
 import { ActivityData, ActivityMetadata, JobActivity } from "../../../typedefs/activity";
+import { JobContext } from "../../../typedefs/job";
 import { Activity, ActivityType } from "./activity";
 
 class Job extends Activity {
   config: JobActivity;
 
-  constructor(config: ActivityType, data: ActivityData, metadata: ActivityMetadata, pubsubdb: PubSubDBService) {
-    super(config, data, metadata, pubsubdb);
+  constructor(config: ActivityType, data: ActivityData, metadata: ActivityMetadata, pubsubdb: PubSubDBService, context: JobContext) {
+    super(config, data, metadata, pubsubdb, context);
   }
 
-  async restoreJobContext(): Promise<void> {
-    console.log("Job restoreJobContext - Do nothing; No context");
-  }
-
-  async mapInputData(): Promise<void> {
+  async mapJobData(): Promise<void> {
     console.log("Job mapInputData - Do nothing; No input data");
-  }
-
-  async subscribeToResponse(): Promise<void> {
-    console.log("Job subscribeToResponse - Do nothing; No response");
   }
 
   async execActivity(): Promise<void> {

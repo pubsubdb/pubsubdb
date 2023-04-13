@@ -6,6 +6,7 @@ import { RestoreJobContextError,
          RegisterTimeoutError, 
          ExecActivityError } from '../../../modules/errors';
 import { PubSubDBService } from "..";
+import { Signal } from "../../../typedefs/signal";
 
 /**
  * Both the base class for all activities as well as a class that can be used to create a generic activity.
@@ -22,21 +23,26 @@ class Activity {
   context: JobContext;
   pubsubdb: PubSubDBService;
 
-  constructor(config: ActivityType, data: ActivityData, metadata: ActivityMetadata, pubsubdb: PubSubDBService) {
+  constructor(config: ActivityType, data: ActivityData, metadata: ActivityMetadata, pubsubdb: PubSubDBService, context?: JobContext) {
     this.config = config;
     this.data = data;
     this.metadata = metadata;
     this.pubsubdb = pubsubdb;
+    this.context = context;
   }
 
   async process() {
     try {
-      await this.restoreJobContext();
-      await this.mapInputData();
-      await this.subscribeToResponse();
-      await this.registerTimeout();
-      await this.execActivity();
+      await this.restoreJobContext();   //restore job context if not passed in
+      await this.mapInputData();        //map upstream data to input data
+      await this.subscribeToResponse(); //wait for activity to complete
+      //note: this should happen after exec has returned; for now assuming activity is a noop
+      await this.saveActivity();        //save activity to db
+      await this.subscribeToHook();     //if a hook is declared, subscribe and then sleep; the activity will awaken when the hook is triggered
+      await this.registerTimeout();     //add default timeout
+      await this.execActivity();        //execute the activity
     } catch (error) {
+      console.log('activity error!!!!!!!', error);
       if (error instanceof RestoreJobContextError) {
         // Handle restoreJobContext error
       } else if (error instanceof MapInputDataError) {
@@ -54,29 +60,67 @@ class Activity {
   }
 
   async restoreJobContext(): Promise<void> {
-
-    // Placeholder for restoreJobContext
-    throw new RestoreJobContextError();
+    if(!this.context) {
+      //todo: restore job context if not passed in
+      throw new RestoreJobContextError();
+    } else {
+      this.context[this.metadata.activity_id] = {
+        input: {
+          data: this.data,
+          metadata: this.metadata,
+        },
+        output: {
+          data: {},
+          metadata: {},
+        },
+      };
+    }
   }
 
   async mapInputData(): Promise<void> {
     // Placeholder for mapInputData
-    throw new MapInputDataError();
   }
 
   async subscribeToResponse(): Promise<void> {
     // Placeholder for subscribeToResponse
-    throw new SubscribeToResponseError();
   }
 
   async registerTimeout(): Promise<void> {
     // Placeholder for registerTimeout
-    throw new RegisterTimeoutError();
+    //throw new RegisterTimeoutError();
   }
 
   async execActivity(): Promise<void> {
     // Placeholder for execActivity
-    throw new ExecActivityError();
+    //throw new ExecActivityError();
+  }
+
+  /**
+   * saves activity data; (NOTE: This data represents a subset of the incoming event payload.
+   * those fields that are not specified in the mapping rules for other activities will not be saved.)
+   */
+  async saveActivity(): Promise<void> {
+    const jobId = this.context.metadata.job_id;
+    const activityId = this.metadata.activity_id;
+    await this.pubsubdb.store.setActivity(
+      jobId,
+      activityId,
+      this.context[activityId].output.data,
+      { ...this.metadata, job_id: jobId, job_key: this.context.metadata.job_key },
+      this.pubsubdb.getAppConfig()
+    );
+  }
+
+  async subscribeToHook(): Promise<void> {
+    if (this.config.hook) {
+      const hook = this.config.hook;
+      const signal: Signal = {
+        topic: hook.topic,
+        resolved: this.context.metadata.job_id,
+        jobId: this.context.metadata.job_id,
+      }
+      await this.pubsubdb.store.setSignal(signal, this.pubsubdb.getAppConfig());
+    }
   }
 }
 

@@ -103,6 +103,21 @@ describe('RedisStoreService', () => {
       const result = await redisStoreService.getActivityData(jobId, activityId, appConfig);
       expect(result).toEqual(data);
     });
+
+    it('should restore all data types', async () => {
+      const jobId = 'JOB_ID';
+      const activityId = 'ACTIVITY_ID';
+      const data = { 
+        string: 'string',
+        boolean: true,
+        number: 55,
+        array_of_numbers: [1, 2, 3],
+        date: new Date(),
+      };
+      await redisStoreService.setActivity(jobId, activityId, data, {}, appConfig);
+      const result = await redisStoreService.getActivityData(jobId, activityId, appConfig);
+      expect(result).toEqual(data);
+    });
   });
 
   describe('getActivityMetadata', () => {

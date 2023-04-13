@@ -8,6 +8,7 @@ interface ActivityBase {
   output?: Record<string, any>;
   settings?: Record<string, any>;
   dependents?: string[];
+  hook?: Record<string, any>;
 }
 
 interface TriggerActivity extends ActivityBase {

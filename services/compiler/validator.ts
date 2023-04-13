@@ -1,5 +1,6 @@
 import { MappingStatements } from "../../typedefs/map";
 import { PubSubDBManifest, StoreService } from "../../typedefs/pubsubdb";
+import { Pipe } from "../pipe";
 
 class Validator {
   manifest: PubSubDBManifest | null = null;
@@ -87,12 +88,16 @@ class Validator {
           const statementParts = statement.slice(1, -1).split('.');
           const referencedActivityId = statementParts[0];
   
-          if (!(referencedActivityId == '$app' || activityIds.includes(referencedActivityId))) {
+          if (!(referencedActivityId == '$app' || activityIds.includes(referencedActivityId) || this.isFunction(statement))) {
             throw new Error(`Mapping statement references non-existent activity: ${statement}`);
           }
         }
       });
     }
+  }
+
+  isFunction(value: string): boolean {
+    return value.startsWith('{@') && Pipe.resolveFunction(value);
   }
 
   // 1.3) Validate the mapping/@pipe statements are valid

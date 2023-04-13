@@ -5,6 +5,7 @@ import { AdapterService } from '../adapter';
 import { StoreService } from '../store/store';
 import Activities from './activities';
 import { ActivityType } from './activities/activity';
+import { JobContext } from '../../typedefs/job';
 
 //todo: can be multiple instances; track as a Map
 let instance: PubSubDBService;
@@ -82,6 +83,10 @@ class PubSubDBService {
     return instance;
   }
 
+  isPrivate(topic: string) {
+    return topic.startsWith('.');
+  }
+
   /**
    * returns a tuple containing the activity id and the activity schema
    * for the single activity that is subscribed to the provided topic
@@ -91,10 +96,16 @@ class PubSubDBService {
   async getActivity(topic: string): Promise<[activityId: string, activity: ActivityType]> {
     const app = await this.store.getApp(this.appId);
     if (app) {
-      const activityId = await this.store.getSubscription(topic, this.getAppConfig());
-      if (activityId) {
+      if (this.isPrivate(topic)) {
+        const activityId = topic.substring(1)
         const activity = await this.store.getSchema(activityId, this.getAppConfig());
         return [activityId, activity];
+      } else {
+        const activityId = await this.store.getSubscription(topic, this.getAppConfig());
+        if (activityId) {
+          const activity = await this.store.getSchema(activityId, this.getAppConfig());
+          return [activityId, activity];
+        }
       }
       throw new Error(`no subscription found for topic ${topic} in app ${this.appId} for app version ${app.version}`);
     }
@@ -129,7 +140,7 @@ class PubSubDBService {
    * @param {string} topic - for example: 'trigger.test.requested'
    * @param {Promise<Record<string, unknown>>} data 
    */
-  async pub(topic: string, data: Record<string, unknown>) {
+  async pub(topic: string, data: Record<string, unknown>, context?: JobContext) {
     const [activityId, activity] = await this.getActivity(topic);
     const ActivityHandler = Activities[activity.type];
     if (ActivityHandler) {
@@ -141,7 +152,7 @@ class PubSubDBService {
         activity_created: utc,
         activity_updated: utc
       };
-      const activityHandler = new ActivityHandler(activity, data, metadata, this);
+      const activityHandler = new ActivityHandler(activity, data, metadata, this, context);
       await activityHandler.process();
     }
   }

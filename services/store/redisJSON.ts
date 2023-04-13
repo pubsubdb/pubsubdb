@@ -23,9 +23,9 @@
 //     await this.redisClient.json.set(key, '.', subscriptions, { NX: true });
 //   }
   
-//   async initSubscriptionPatternCache() {
+//   async initTransitionCache() {
 //     const subscriptions = {};
-//     this.subscriptionPatternCache = subscriptions;
+//     this.transitionCache = subscriptions;
 //     const key = this.getKey(NS.SUBSCRIPTION_PATTERNS);
 //     await this.redisClient.json.set(key, '.', subscriptions, { NX: true });
 //   }
@@ -163,10 +163,10 @@
 //     return response;
 //   }
 
-//   async setSubscriptionPatterns(subscriptionsPatterns: Record<string, any>, config: any): Promise<any> {
+//   async setTransitions(subscriptionsPatterns: Record<string, any>, config: any): Promise<any> {
 //     const key = this.getKey(NS.ACTIVITY_SCHEMAS);
 //     const response = await this.redisClient.json.set(key, '.', subscriptionsPatterns);
-//     this.subscriptionPatternCache = subscriptionsPatterns;
+//     this.transitionCache = subscriptionsPatterns;
 //     return response;
 //   }
 
