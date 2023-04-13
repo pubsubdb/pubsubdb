@@ -36,11 +36,11 @@ describe("Trigger class", () => {
     };
 
     const activityMetadata: ActivityMetadata = {
-      activity_id: "a1",
-      activity_type: "trigger",
-      activity_subtype: "async",
-      activity_created: "2021-01-01T00:00:00.000Z",
-      activity_updated: "2021-01-01T00:00:00.000Z",
+      aid: "a1",
+      atp: "trigger",
+      stp: "async",
+      ac: "2021-01-01T00:00:00.000Z",
+      au: "2021-01-01T00:00:00.000Z",
     };
 
     // Create Trigger instance

@@ -44,7 +44,7 @@ class Trigger extends Activity {
       await this.saveStats();
       await this.pub();
     } catch (error) {
-      console.log('trigger process() error!!!!!!!!!!!!', error);
+      console.log('trigger process() error', error);
       if (error instanceof RestoreJobContextError) {
         // Handle restoreJobContext error
       } else if (error instanceof MapInputDataError) {
@@ -66,22 +66,22 @@ class Trigger extends Activity {
    * @returns {Promise<void>} A promise that resolves when the job is created.
    */
   async createContext(): Promise<void> {
-    const utc = new Date().toUTCString();
+    const utc = new Date().toISOString();
     const appConfig = this.pubsubdb.getAppConfig();
     this.context = {
       metadata: {
         ...this.metadata,
-        app_id: appConfig.id,
-        app_version: appConfig.version,
-        job_id: null,
-        job_key: null,
-        job_created: utc,
-        job_updated: utc,
-        time_series: this.getTimeSeriesStamp(),
-        job_status: this.createCollationKey(),
+        app: appConfig.id,
+        vrs: appConfig.version,
+        jid: null,
+        key: null,
+        jc: utc,
+        ju: utc,
+        ts: this.getTimeSeriesStamp(),
+        js: this.createCollationKey(),
       },
       data: {}, //job data will be added in the next step if it exists
-      [this.metadata.activity_id]: { 
+      [this.metadata.aid]: { 
         input: { data: this.data },
         output: { data: {} },
         settings: { data: {} },
@@ -89,8 +89,8 @@ class Trigger extends Activity {
        },
     };
     //must first initialize the job context before we can get the job id and key
-    this.context.metadata.job_id = await this.getJobId();
-    this.context.metadata.job_key = await this.getJobKey();
+    this.context.metadata.jid = await this.getJobId();
+    this.context.metadata.key = await this.getJobKey();
   }
 
   /**
@@ -164,7 +164,7 @@ class Trigger extends Activity {
    * @returns {Promise<void>}
    */
   async mapOutputData(): Promise<void> {
-    const aid = this.metadata.activity_id;
+    const aid = this.metadata.aid;
     const filteredData: FlattenedDataObject = {};
     //flatten the payload to make comparison easier
     const toFlatten = { [aid]: { output: { data: this.data } } };
@@ -183,7 +183,7 @@ class Trigger extends Activity {
   }
 
   async saveContext(): Promise<void> {
-    const jobId = this.context.metadata.job_id;
+    const jobId = this.context.metadata.jid;
     await this.pubsubdb.store.setJob(jobId, this.context.data, this.context.metadata, this.pubsubdb.getAppConfig());
   }
 
@@ -192,13 +192,13 @@ class Trigger extends Activity {
    * those fields that are not specified in the mapping rules for other activities will not be saved.)
    */
   async saveActivity(): Promise<void> {
-    const jobId = this.context.metadata.job_id;
-    const activityId = this.metadata.activity_id;
+    const jobId = this.context.metadata.jid;
+    const activityId = this.metadata.aid;
     await this.pubsubdb.store.setActivity(
       jobId,
       activityId,
       this.context[activityId].output.data,
-      { ...this.metadata, job_id: jobId, job_key: this.context.metadata.job_key },
+      { ...this.metadata, jid: jobId, key: this.context.metadata.key },
       this.pubsubdb.getAppConfig()
     );
   }
@@ -241,7 +241,7 @@ class Trigger extends Activity {
     const resolvedValue = pipe.process().toString();
     const resolvedTarget = this.resolveTarget(metric, target, resolvedValue);
     if (metric === 'index') {
-      return { metric, target: resolvedTarget, value: this.context.metadata.job_id };
+      return { metric, target: resolvedTarget, value: this.context.metadata.jid };
     } else if (metric === 'count') {
       return { metric, target: resolvedTarget, value: 1 };
     }
@@ -288,11 +288,11 @@ class Trigger extends Activity {
    * Stats are persisted to a hash, list, or zset depending on the type of aggregation.
    */
   async saveStats(): Promise<void> {
-    if (this.context.metadata.job_key) {
+    if (this.context.metadata.key) {
       await this.pubsubdb.store.setJobStats(
-        this.context.metadata.job_key,
-        this.context.metadata.job_id,
-        this.context.metadata.time_series,
+        this.context.metadata.key,
+        this.context.metadata.jid,
+        this.context.metadata.ts,
         this.resolveStats(),
         this.pubsubdb.getAppConfig()
       );
@@ -306,10 +306,10 @@ class Trigger extends Activity {
    */
   async pub(): Promise<void> {
     const transitions = await this.pubsubdb.store.getTransitions(this.pubsubdb.getAppConfig());
-    const transition = transitions[`.${this.metadata.activity_id}`];
+    const transition = transitions[`.${this.metadata.aid}`];
     if (transition) {
       for (let p in transition) {
-        await this.pubsubdb.pub(`.${p}`, this.context[this.metadata.activity_id].output.data, this.context);
+        await this.pubsubdb.pub(`.${p}`, this.context[this.metadata.aid].output.data, this.context);
       }
     }
   }

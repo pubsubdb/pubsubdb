@@ -37,7 +37,6 @@ const start = async () => {
   try {
     await server.listen({ port: 3000, path: '0.0.0.0' });
     console.log('Server is running on port 3000');
-    console.log('Redis');
     const redisConnection = await RedisConnection.getConnection('instance1');
     const redisClient = await redisConnection.getClient();
     await redisClient.set('test:key', 'test value');
@@ -56,7 +55,7 @@ const start = async () => {
     await redisClient.json.set(KEY, '.', {"inventory":{"headphones":[{"id":12345,"name":"Noise-cancelling Bluetooth headphones","description":"Wireless Bluetooth headphones with noise-cancelling technology","wireless":true,"connection":"Bluetooth","price":99.98,"stock":25,"free-shipping":false,"colors":["black","silver"]},{"id":12346,"name":"Wireless earbuds","description":"Wireless Bluetooth in-ear headphones","wireless":true,"connection":"Bluetooth","price":64.99,"stock":17,"free-shipping":false,"colors":["black","white"]},{"id":12347,"name":"Mic headset","description":"Headset with built-in microphone","wireless":false,"connection":"USB","price":35.01,"stock":28,"free-shipping":false}],"keyboards":[{"id":22345,"name":"Wireless keyboard","description":"Wireless Bluetooth keyboard","wireless":true,"connection":"Bluetooth","price":44.99,"stock":23,"free-shipping":false,"colors":["black","silver"]},{"id":22346,"name":"USB-C keyboard","description":"Wired USB-C keyboard","wireless":false,"connection":"USB-C","price":29.99,"stock":30,"free-shipping":false}]}}, { NX: true });
     const query = { path: '$..[?(@.stock==23||@.stock==30)]' };
     const filteredItems = await redisClient.json.get(KEY, query);
-    console.log(filteredItems);
+    console.log('filtered', filteredItems);
 
     // shut down server
     function shutdown() {

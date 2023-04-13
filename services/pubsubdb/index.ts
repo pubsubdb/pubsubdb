@@ -144,13 +144,13 @@ class PubSubDBService {
     const [activityId, activity] = await this.getActivity(topic);
     const ActivityHandler = Activities[activity.type];
     if (ActivityHandler) {
-      const utc = new Date().toUTCString();
+      const utc = new Date().toISOString();
       const metadata: ActivityMetadata = {
-        activity_id: activityId,
-        activity_type: activity.type,
-        activity_subtype: activity.subtype,
-        activity_created: utc,
-        activity_updated: utc
+        aid: activityId,
+        atp: activity.type,
+        stp: activity.subtype,
+        ac: utc,
+        au: utc
       };
       const activityHandler = new ActivityHandler(activity, data, metadata, this, context);
       await activityHandler.process();

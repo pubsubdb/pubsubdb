@@ -20,12 +20,12 @@ enum KeyType {
 //when minting a key, the following parameters are used to create a unique key per entity
 type KeyStoreParams = {
   appId?: string;       //app id is a uuid for a given pubsubdb app
-  appVersion?: string; //(e.g. "1.0.0", "1", "1.0")
-  jobId?: string;      //a customer-defined id for job; must be unique for the entire app
-  activityId?: string; //activity id is a uuid for a given pubsubdb app
-  jobKey?: string;   //a customer-defined label for a job that serves to categorize events 
-  dateTime?: string; //UTC date time: YYYY-MM-DDTHH:MM (20203-04-12T00:00); serves as a time-series bucket for the job_key
-  facet?: string;    //data path starting at root with values separated by colons (e.g. "object/type:bar")
+  appVersion?: string;  //(e.g. "1.0.0", "1", "1.0")
+  jobId?: string;       //a customer-defined id for job; must be unique for the entire app
+  activityId?: string;  //activity id is a uuid for a given pubsubdb app
+  jobKey?: string;      //a customer-defined label for a job that serves to categorize events 
+  dateTime?: string;    //UTC date time: YYYY-MM-DDTHH:MM (20203-04-12T00:00); serves as a time-series bucket for the job_key
+  facet?: string;       //data path starting at root with values separated by colons (e.g. "object/type:bar")
 };
 
 class KeyStore {
@@ -47,23 +47,23 @@ class KeyStore {
         return namespace;
       case KeyType.APP:
         // the term 'app' must be reserved due to naked paths for job and activity keys
-        return `${namespace}:app:${params.appId || ''}`;
+        return `${namespace}:a:${params.appId || ''}`;
       case KeyType.JOB_DATA:
-        return `${namespace}:${params.appId}:${params.jobId}`;
+        return `${namespace}:${params.appId}:j:${params.jobId}`;
       case KeyType.JOB_ACTIVITY_DATA:
-        return `${namespace}:${params.appId}:job:${params.jobId}:${params.activityId}`;
+        return `${namespace}:${params.appId}:j:${params.jobId}:${params.activityId}`;
       case KeyType.JOB_STATS_GENERAL:
-        return `${namespace}:${params.appId}:agg:${params.jobKey}:${params.dateTime}:stats`;
+        return `${namespace}:${params.appId}:s:${params.jobKey}:${params.dateTime}`;
       case KeyType.JOB_STATS_MEDIAN:
-        return `${namespace}:${params.appId}:agg:${params.jobKey}:${params.dateTime}:stats:${params.facet}`;
+        return `${namespace}:${params.appId}:s:${params.jobKey}:${params.dateTime}:${params.facet}`;
       case KeyType.JOB_STATS_INDEX:
-        return `${namespace}:${params.appId}:agg:${params.jobKey}:${params.dateTime}:stats:${params.facet}`;
+        return `${namespace}:${params.appId}:s:${params.jobKey}:${params.dateTime}:${params.facet}`;
       case KeyType.SCHEMAS:
-        return `${namespace}:${params.appId}:vrs:${params.appVersion}:schemas`;
+        return `${namespace}:${params.appId}:v:${params.appVersion}:schemas`;
       case KeyType.SUBSCRIPTIONS:
-        return `${namespace}:${params.appId}:vrs:${params.appVersion}:subscriptions`;
+        return `${namespace}:${params.appId}:v:${params.appVersion}:subscriptions`;
       case KeyType.SUBSCRIPTION_PATTERNS:
-        return `${namespace}:${params.appId}:vrs:${params.appVersion}:transitions`;
+        return `${namespace}:${params.appId}:v:${params.appVersion}:transitions`;
       case KeyType.HOOKS:
         //`hooks` provide the pattern to resolve a value
         return `${namespace}:${params.appId}:hooks`;
