@@ -1,5 +1,5 @@
 {
-  "name": "pubsubdb",
+  "name": "@pubsubdb/pubsubdb",
   "version": "0.0.1",
   "description": "The PubSubDB Process Database",
   "main": "build/index.js",
