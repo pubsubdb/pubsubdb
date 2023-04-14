@@ -6,17 +6,18 @@ abstract class StoreService {
   abstract init(namespace: string, appId: string): Promise<any>;
   abstract getSettings(bCreate?: boolean): Promise<any>;
   abstract setSettings(manifest: Record<string, unknown>): Promise<any>;
+  abstract getMulti(): Promise<any>;
   abstract getApps(): Promise<{[appId: string]: any}>;
   abstract getApp(appId: string): Promise<any>;
   abstract setApp(appId: string, appVersion: string): Promise<any>;
   abstract activateAppVersion(appId: string, version: string): Promise<any>;
-  abstract setJob(jobId: any, data: Record<string, unknown>, metadata: Record<string, unknown>, config: AppVersion): Promise<any>;
-  abstract setJobStats(jobKey: string, jobId: string, dateTime: string, stats: StatsType, appConfig: {id: string, version: string}): Promise<string>
+  abstract setJob(jobId: any, data: Record<string, unknown>, metadata: Record<string, unknown>, config: AppVersion, multi? : any): Promise<any|string>
+  abstract setJobStats(jobKey: string, jobId: string, dateTime: string, stats: StatsType, appVersion: AppVersion, multi? : any): Promise<any|string>
   abstract getJobMetadata(jobId: string, config: AppVersion): Promise<any>;
   abstract getJobData(jobId: string, config: AppVersion): Promise<any>;
   abstract getJob(jobId: string, config: AppVersion): Promise<any>;
   abstract get(jobId: string, config: AppVersion): Promise<any>;
-  abstract setActivity(jobId: string, activityId: any, data: Record<string, unknown>, metadata: Record<string, unknown>, config: AppVersion): Promise<any>;
+  abstract setActivity(jobId: string, activityId: any, data: Record<string, unknown>, metadata: Record<string, unknown>, config: AppVersion, multi? : any): Promise<any|string>
   abstract getActivityMetadata(jobId: string, activityId: string, config: AppVersion): Promise<any>;
   abstract getActivityData(jobId: string, activityId: string, config: AppVersion): Promise<any>;
   abstract getActivity(jobId: string, activityId: string, config: AppVersion): Promise<any>;

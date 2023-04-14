@@ -39,9 +39,15 @@ class Trigger extends Activity {
       await this.createContext();
       await this.mapJobData();
       await this.mapOutputData();
-      await this.saveActivity();
-      await this.saveContext();
-      await this.saveStats();
+      
+      /////// MULTI ///////
+      const multi = await this.pubsubdb.store.getMulti();
+      await this.saveActivity(multi);
+      await this.saveJob(multi);
+      await this.saveStats(multi);
+      await multi.exec();
+      /////// MULTI ///////
+
       await this.pub();
     } catch (error) {
       console.log('trigger process() error', error);
@@ -182,16 +188,27 @@ class Trigger extends Activity {
     }
   }
 
-  async saveContext(): Promise<void> {
+  /**
+   * saves job data (if any) and metadata
+   * @param multi - Redis multi object
+   */
+  async saveJob(multi?: any): Promise<void> {
     const jobId = this.context.metadata.jid;
-    await this.pubsubdb.store.setJob(jobId, this.context.data, this.context.metadata, this.pubsubdb.getAppConfig());
+    await this.pubsubdb.store.setJob(
+      jobId,
+      this.context.data,
+      this.context.metadata,
+      this.pubsubdb.getAppConfig(),
+      multi
+    );
   }
 
   /**
    * saves activity data; (NOTE: This data represents a subset of the incoming event payload.
    * those fields that are not specified in the mapping rules for other activities will not be saved.)
+   * @param {any} multi - Redis multi object
    */
-  async saveActivity(): Promise<void> {
+  async saveActivity(multi?: any): Promise<void> {
     const jobId = this.context.metadata.jid;
     const activityId = this.metadata.aid;
     await this.pubsubdb.store.setActivity(
@@ -199,7 +216,8 @@ class Trigger extends Activity {
       activityId,
       this.context[activityId].output.data,
       { ...this.metadata, jid: jobId, key: this.context.metadata.key },
-      this.pubsubdb.getAppConfig()
+      this.pubsubdb.getAppConfig(),
+      multi
     );
   }
 
@@ -287,14 +305,15 @@ class Trigger extends Activity {
    * aggregation stats are only persisted if the trigger has a `stats` field with a valid job_key
    * Stats are persisted to a hash, list, or zset depending on the type of aggregation.
    */
-  async saveStats(): Promise<void> {
+  async saveStats(multi?: any): Promise<void> {
     if (this.context.metadata.key) {
       await this.pubsubdb.store.setJobStats(
         this.context.metadata.key,
         this.context.metadata.jid,
         this.context.metadata.ts,
         this.resolveStats(),
-        this.pubsubdb.getAppConfig()
+        this.pubsubdb.getAppConfig(),
+        multi
       );
     }
   }
