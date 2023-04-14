@@ -6,6 +6,7 @@ import { StatsType } from '../../typedefs/stats';
 import { SerializerService } from './serializer';
 import { AppVersion } from '../../typedefs/app';
 import { Signal } from '../../typedefs/signal';
+import { RedisClientType } from '../../typedefs/redis';
 
 class RedisStoreService extends StoreService {
   redisClient: any;
@@ -31,6 +32,10 @@ class RedisStoreService extends StoreService {
     const settings = await this.getSettings(true);
     this.cache = new Cache(appId, settings);
     return await this.getApps();
+  }
+
+  async getMulti(): Promise<any> {
+    return await this.redisClient.multi();
   }
 
   /**
@@ -217,14 +222,14 @@ class RedisStoreService extends StoreService {
    * @param appVersion
    * @returns 
    */
-  async setJobStats(jobKey: string, jobId: string, dateTime: string, stats: StatsType, appVersion: AppVersion): Promise<string> {
+  async setJobStats(jobKey: string, jobId: string, dateTime: string, stats: StatsType, appVersion: AppVersion, multi? : any): Promise<any|string> {
     const params: KeyStoreParams = { appId: appVersion.id, jobId, jobKey, dateTime };
-    const multi = await this.redisClient.multi();
+    multi = multi || await this.redisClient.multi();
     //general
     if (stats.general.length) {
       const generalStatsKey = this.mintKey(KeyType.JOB_STATS_GENERAL, params);
       for (const { target, value } of stats.general) {
-        multi.HINCRBYFLOAT(generalStatsKey, target, value);
+        multi.HINCRBYFLOAT(generalStatsKey, 'target', value as number);
       }
     }
     //index
@@ -237,7 +242,7 @@ class RedisStoreService extends StoreService {
     for (const { target, value } of stats.median) {
       const medianParams = { ...params, facet: target };
       const medianStatsKey = this.mintKey(KeyType.JOB_STATS_MEDIAN, medianParams);
-      multi.ZADD(medianStatsKey, { score: value.toString(), value: value.toString() });
+      multi.ZADD(medianStatsKey, { score: value.toString(), value: value.toString() } as any);
     }
     return await multi.exec();
   }
@@ -253,11 +258,11 @@ class RedisStoreService extends StoreService {
    * @param metadata 
    * @returns 
    */
-  async setJob(jobId: string, data: Record<string, unknown>, metadata: Record<string, unknown>, appVersion: AppVersion): Promise<string> {
+  async setJob(jobId: string, data: Record<string, unknown>, metadata: Record<string, unknown>, appVersion: AppVersion, multi? : any): Promise<any|string> {
     const hashKey = this.mintKey(KeyType.JOB_DATA, { appId: appVersion.id, jobId });
     const hashData = SerializerService.flattenHierarchy({ m: metadata, d: data});
-    const response = await this.redisClient.HSET(hashKey, hashData);
-    return jobId;
+    const response = await (multi || this.redisClient).HSET(hashKey, hashData);
+    return multi || jobId;
   }
 
   async getJobMetadata(jobId: string, appVersion: AppVersion): Promise<any> {
@@ -320,11 +325,11 @@ class RedisStoreService extends StoreService {
    * @param appVersion 
    * @returns 
    */
-  async setActivity(jobId: string, activityId: string, data: Record<string, unknown>, metadata: Record<string, unknown>, appVersion: AppVersion): Promise<string>  {
+  async setActivity(jobId: string, activityId: string, data: Record<string, unknown>, metadata: Record<string, unknown>, appVersion: AppVersion, multi? : RedisClientType): Promise<RedisClientType|string>  {
     const hashKey = this.mintKey(KeyType.JOB_ACTIVITY_DATA, { appId: appVersion.id, jobId, activityId });
     const hashData = SerializerService.flattenHierarchy({ m: metadata, d: data});
-    const response = await this.redisClient.HSET(hashKey, hashData);
-    return activityId;
+    const response = await (multi || this.redisClient).HSET(hashKey, hashData);
+    return multi || activityId;
   }
   
   /**

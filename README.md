@@ -34,7 +34,7 @@ pubSubDB = await PubSubDB.init({ appId: 'myapp', store: new RedisStore(redisClie
 ```
 
 ### Plan
-PubSubDB supports full lifecycle management like other data storage solutions. The system is designed to protect the models from arbitrary changes, providing migration and deployment tools to support hot deployments with no downtime. It's possible to plan the migration beforehand to better understand the scope of the change and whether or not a full hot deployment is possible. Provide your app manifest to PubSubDB to generate the plan.
+PubSubDB is designed to protect the models from arbitrary changes, providing migration and planning tools to support hot deployments with no downtime. It's possible to plan the migration beforehand to better understand the scope of the change and whether or not a hot deployment is possible. Provide your app manifest to PubSubDB to generate the plan.
 
 ```typescript
 import { pubsubdb } from '@pubsubdb/pubsubdb';
