@@ -6,6 +6,7 @@ import { StoreService } from '../store/store';
 import Activities from './activities';
 import { ActivityType } from './activities/activity';
 import { JobContext } from '../../typedefs/job';
+import { PSNS } from '../store/keyStore';
 
 //todo: can be multiple instances; track as a Map
 let instance: PubSubDBService;
@@ -36,19 +37,21 @@ class PubSubDBService {
     }
   }
 
-  verifyNamespace(namespace: string) {
-    if (!namespace.match(/^[A-Za-z0-9-]+$/)) {
-      throw new Error(`namespace ${namespace} is invalid`);
+  verifyNamespace(namespace?: string) {
+    if (!namespace) {
+      this.namespace = PSNS;
+    } else if (!namespace.match(/^[A-Za-z0-9-]+$/)) {
+      throw new Error(`config.namespace [${namespace}] is invalid`);
     } else {
       this.namespace = namespace;
     }
   }
 
   verifyAppId(appId: string) {
-    if (!appId.match(/^[A-Za-z0-9-]+$/)) {
-      throw new Error(`appId ${appId} is invalid`);
+    if (!appId?.match(/^[A-Za-z0-9-]+$/)) {
+      throw new Error(`config.appId [${appId}] is invalid`);
     } else if (appId === 'app') {
-      throw new Error(`appId ${appId} is reserved`);
+      throw new Error(`config.appId [${appId}] is reserved`);
     } else {
       this.appId = appId;
     }

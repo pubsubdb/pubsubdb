@@ -35,7 +35,7 @@ class RedisStoreService extends StoreService {
   }
 
   async getMulti(): Promise<any> {
-    return await this.redisClient.multi();
+    return await this.redisClient.MULTI();
   }
 
   /**
@@ -88,7 +88,7 @@ class RedisStoreService extends StoreService {
   async setSettings(manifest: PubSubDBSettings): Promise<any> {
     const params: KeyStoreParams = {};
     const key = this.mintKey(KeyType.PUBSUBDB, params);
-    return await this.redisClient.hSet(key, manifest);
+    return await this.redisClient.HSET(key, manifest);
   }
 
   async getApps(): Promise<{[appId: string]: PubSubDBApp}> {
@@ -101,7 +101,7 @@ class RedisStoreService extends StoreService {
       let cursor = '0', tuples = [];
       // Collect app keys using hScan
       do {
-        const val = await this.redisClient.hScan(key, cursor) as { cursor: string, tuples: string[] };
+        const val = await this.redisClient.HSCAN(key, cursor) as { cursor: string, tuples: string[] };
         cursor = val.cursor;
         tuples = val.tuples;
         for (let i = 0; i < tuples.length; i += 2) {
@@ -110,7 +110,7 @@ class RedisStoreService extends StoreService {
         }
       } while (Number(cursor) !== 0);
       // Create multi to fetch app data
-      const multi = this.redisClient.multi();
+      const multi = this.redisClient.MULTI();
       for (const appKey of appKeys) {
         multi.hGetAll(appKey);
       }
@@ -142,7 +142,7 @@ class RedisStoreService extends StoreService {
     } else {
       const params: KeyStoreParams = { appId: id };
       const key = this.mintKey(KeyType.APP, params);
-      app = await this.redisClient.hGetAll(key);
+      app = await this.redisClient.HGETALL(key);
       this.cache.setApp(id, app);
     }
   }
@@ -156,7 +156,7 @@ class RedisStoreService extends StoreService {
       version,
       [versionId]: `deployed:${new Date().toISOString()}`,
     };
-    await this.redisClient.hSet(key, payload);
+    await this.redisClient.HSET(key, payload);
     this.cache.setApp(id, payload);
     return payload;
   }
@@ -184,7 +184,7 @@ class RedisStoreService extends StoreService {
       Object.entries(payload).forEach(([key, value]) => {
         payload[key] = JSON.stringify(value);
       });
-      return await this.redisClient.hSet(key, payload);
+      return await this.redisClient.HSET(key, payload);
     }
     throw new Error(`Version ${version} does not exist for app ${id}`);
   }
@@ -207,7 +207,7 @@ class RedisStoreService extends StoreService {
       version,
       [`versions/${version}`]: new Date().toISOString()
     };
-    return await this.redisClient.hSet(key, payload);
+    return await this.redisClient.HSET(key, payload);
   }
 
   /**
@@ -224,7 +224,7 @@ class RedisStoreService extends StoreService {
    */
   async setJobStats(jobKey: string, jobId: string, dateTime: string, stats: StatsType, appVersion: AppVersion, multi? : any): Promise<any|string> {
     const params: KeyStoreParams = { appId: appVersion.id, jobId, jobKey, dateTime };
-    multi = multi || await this.redisClient.multi();
+    multi = multi || await this.redisClient.MULTI();
     //general
     if (stats.general.length) {
       const generalStatsKey = this.mintKey(KeyType.JOB_STATS_GENERAL, params);
@@ -412,7 +412,7 @@ class RedisStoreService extends StoreService {
     } else {
       const params: KeyStoreParams = { appId: appVersion.id, appVersion: appVersion.version };
       const key = this.mintKey(KeyType.SCHEMAS, params);
-      schemas = await this.redisClient.hGetAll(key);
+      schemas = await this.redisClient.HGETALL(key);
       Object.entries(schemas).forEach(([key, value]) => {
         schemas[key] = JSON.parse(value as string);
       });
@@ -433,7 +433,7 @@ class RedisStoreService extends StoreService {
     Object.entries(_schemas).forEach(([key, value]) => {
       _schemas[key] = JSON.stringify(value);
     });
-    const response = await this.redisClient.hSet(key, _schemas);
+    const response = await this.redisClient.HSET(key, _schemas);
     this.cache.setSchemas(appVersion.id, appVersion.version, schemas);
     return response;
   }
@@ -451,7 +451,7 @@ class RedisStoreService extends StoreService {
     Object.entries(_subscriptions).forEach(([key, value]) => {
       _subscriptions[key] = JSON.stringify(value);
     });
-    const response = await this.redisClient.hSet(key, _subscriptions);
+    const response = await this.redisClient.HSET(key, _subscriptions);
     this.cache.setSubscriptions(appVersion.id, appVersion.version, subscriptions);
     return response;
   }
@@ -463,7 +463,7 @@ class RedisStoreService extends StoreService {
     } else {
       const params: KeyStoreParams = { appId: appVersion.id, appVersion: appVersion.version };
       const key = this.mintKey(KeyType.SUBSCRIPTIONS, params);
-      subscriptions = await this.redisClient.hGetAll(key) || {};
+      subscriptions = await this.redisClient.HGETALL(key) || {};
       Object.entries(subscriptions).forEach(([key, value]) => {
         subscriptions[key] = JSON.parse(value as string);
       });
@@ -484,7 +484,7 @@ class RedisStoreService extends StoreService {
     Object.entries(_subscriptions).forEach(([key, value]) => {
       _subscriptions[key] = JSON.stringify(value);
     });
-    const response = await this.redisClient.hSet(key, _subscriptions);
+    const response = await this.redisClient.HSET(key, _subscriptions);
     this.cache.setTransitions(appVersion.id, appVersion.version, transitions);
     return response;
   }
@@ -496,7 +496,7 @@ class RedisStoreService extends StoreService {
     } else {
       const params: KeyStoreParams = { appId: appVersion.id, appVersion: appVersion.version };
       const key = this.mintKey(KeyType.SUBSCRIPTION_PATTERNS, params);
-      patterns = await this.redisClient.hGetAll(key);
+      patterns = await this.redisClient.HGETALL(key);
       Object.entries(patterns).forEach(([key, value]) => {
         patterns[key] = JSON.parse(value as string);
       });
@@ -511,7 +511,7 @@ class RedisStoreService extends StoreService {
     Object.entries(_hooks).forEach(([key, value]) => {
       _hooks[key] = JSON.stringify(value);
     });
-    const response = await this.redisClient.hSet(key, _hooks);
+    const response = await this.redisClient.HSET(key, _hooks);
     this.cache.setHookPatterns(appVersion.id, hookPatterns);
     return response;
   }
@@ -522,7 +522,7 @@ class RedisStoreService extends StoreService {
       return patterns;
     } else {
       const key = this.mintKey(KeyType.HOOKS, { appId: appVersion.id });
-      patterns = await this.redisClient.hGetAll(key);
+      patterns = await this.redisClient.HGETALL(key);
       Object.entries(patterns).forEach(([key, value]) => {
         patterns[key] = JSON.parse(value as string);
       });
