@@ -9,11 +9,11 @@ class RedisConnection {
 
   private static clientOptions: RedisClientOptions = {
     socket: {
-      host: 'redis',
-      port: 6379,
+      host: config.REDIS_HOST,
+      port: config.REDIS_PORT,
       tls: false,
     },
-    password: 'key_admin',
+    password: config.REDIS_PASSWORD,
     database: config.REDIS_DATABASE,
   };
 
@@ -21,17 +21,14 @@ class RedisConnection {
     return new Promise((resolve, reject) => {
       const client = createClient(options);
 
-      // Set up 'error' and 'ready' event handlers
       client.on('error', (error) => {
         reject(error);
       });
 
       client.on('ready', () => {
-        //config.NODE_ENV !== 'test' && console.log('Redis connection is ready', config.REDIS_DATABASE);
         resolve(client);
       });
 
-      // Connect to the Redis server
       client.connect();
     });
   }

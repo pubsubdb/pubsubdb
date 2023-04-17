@@ -227,7 +227,7 @@ class IORedisStoreService extends StoreService {
     if (stats.general.length) {
       const generalStatsKey = this.mintKey(KeyType.JOB_STATS_GENERAL, params);
       for (const { target, value } of stats.general) {
-        multi.hincrbyfloat(generalStatsKey, 'target', value as number);
+        multi.hincrbyfloat(generalStatsKey, target, value as number);
       }
     }
     //index
@@ -240,7 +240,7 @@ class IORedisStoreService extends StoreService {
     for (const { target, value } of stats.median) {
       const medianParams = { ...params, facet: target };
       const medianStatsKey = this.mintKey(KeyType.JOB_STATS_MEDIAN, medianParams);
-      multi.zadd(medianStatsKey, { score: value.toString(), value: value.toString() } as any);
+      multi.zadd(medianStatsKey, value.toString(), value.toString());
     }
     return await multi.exec();
   }

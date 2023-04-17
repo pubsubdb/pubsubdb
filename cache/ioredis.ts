@@ -7,9 +7,9 @@ class RedisConnection {
   private id: string | null = null;
 
   private static clientOptions: RedisClientOptions = {
-    host: 'redis',
-    port: 6379,
-    password: 'key_admin',
+    host: config.REDIS_HOST,
+    port: config.REDIS_PORT,
+    password: config.REDIS_PASSWORD,
     db: config.REDIS_DATABASE,
   };
 

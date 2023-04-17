@@ -1,6 +1,7 @@
 import { RedisConnection, RedisClientType } from '../../../cache/ioredis';
 import { KeyType, PSNS } from '../../../services/store/keyStore';
 import { IORedisStoreService } from '../../../services/store/ioredis';
+import { StatsType } from '../../../typedefs/stats';
 
 describe('IORedisStoreService', () => {
   const appConfig = { id: 'test-app', version: '1' };
@@ -91,6 +92,34 @@ describe('IORedisStoreService', () => {
       await redisStoreService.setJob(jobId, data, {}, appConfig);
       const result = await redisStoreService.get(jobId, appConfig);
       expect(result).toEqual(data);
+    });
+  });
+
+  describe('setJobStats', () => {
+    it('should set job stats correctly', async () => {
+      const jobKey = 'job-key';
+      const jobId = 'job-id';
+      const dateTime = '202304170000';
+      const stats: StatsType = {
+        general: [{ metric: 'count', target: 'target1', value: 1 }],
+        index: [{ metric: 'index', target: 'target2', value: 20 }],
+        median: [{ metric: 'mdn', target: 'target3', value: 30 }],
+      };
+
+      const result = await redisStoreService.setJobStats(jobKey, jobId, dateTime, stats, appConfig);
+      expect(result).not.toBeNull();
+
+      const generalStatsKey = redisStoreService.mintKey(KeyType.JOB_STATS_GENERAL, { ...cacheConfig, jobId, jobKey, dateTime });
+      const generalStats = await redisClient.hgetall(generalStatsKey);
+      expect(generalStats[stats.general[0].target]).toEqual(stats.general[0].value.toString());
+  
+      const indexStatsKey = redisStoreService.mintKey(KeyType.JOB_STATS_INDEX, { ...cacheConfig, jobId, jobKey, dateTime, facet: stats.index[0].target });
+      const indexStats = await redisClient.lrange(indexStatsKey, 0, -1);
+      expect(indexStats[0]).toEqual(stats.index[0].value.toString());
+  
+      const medianStatsKey = redisStoreService.mintKey(KeyType.JOB_STATS_MEDIAN, { ...cacheConfig, jobId, jobKey, dateTime, facet: stats.median[0].target });
+      const medianStats = await redisClient.zrange(medianStatsKey, 0, -1);
+      expect(medianStats[0]).toEqual(stats.median[0].value.toString());
     });
   });
 
