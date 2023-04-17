@@ -1,6 +1,5 @@
-import { RedisClientType } from "../../../typedefs/redis"
-import { RedisStoreService as RedisStore } from "../../../services/store/redis";
-import { RedisConnection } from "../../../cache/redis";
+import { IORedisStoreService as IORedisStore } from "../../../services/store/ioredis";
+import { RedisConnection, RedisClientType } from "../../../cache/ioredis";
 import { CompilerService } from "../../../services/compiler";
 import { PSNS } from "../../../services/store/keyStore";
 
@@ -9,13 +8,13 @@ describe("Compiler Service", () => {
   const CONNECTION_KEY = 'manual-test-connection';
   let redisConnection: RedisConnection;
   let redisClient: RedisClientType;
-  let redisStore: RedisStore;
+  let redisStore: IORedisStore;
 
   beforeAll(async () => {
     redisConnection = await RedisConnection.getConnection(CONNECTION_KEY);
     redisClient = await redisConnection.getClient();
-    redisClient.flushDb();
-    redisStore = new RedisStore(redisClient);
+    redisClient.flushdb();
+    redisStore = new IORedisStore(redisClient);
     //the store must be initialized before the compiler service can use it (engine typically does this)
     await redisStore.init(PSNS, appConfig.id);
   });

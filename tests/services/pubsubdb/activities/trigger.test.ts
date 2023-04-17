@@ -1,7 +1,7 @@
 import { Trigger } from "../../../../services/pubsubdb/activities/trigger";
-import { RedisConnection } from '../../../../cache/redis';
+import { RedisConnection } from '../../../../cache/ioredis';
 import { ActivityType, ActivityData, ActivityMetadata } from "../../../../typedefs/activity";
-import { PubSubDB, RedisStore } from '../../../..';
+import { PubSubDB, IORedisStore } from '../../../../index';
 
 describe("Trigger class", () => {
   let pubSubDB: PubSubDB;
@@ -11,7 +11,7 @@ describe("Trigger class", () => {
     // Connect to Redis
     redisConnection = await RedisConnection.getConnection('test-connection');
     const redisClient = await redisConnection.getClient();
-    const redisStore = new RedisStore(redisClient);
+    const redisStore = new IORedisStore(redisClient);
     pubSubDB = await PubSubDB.init({ store: redisStore, appId: 'test-app' });
   });
 

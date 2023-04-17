@@ -395,8 +395,11 @@ When the `index` measure is collected, the value of the `id` field will be store
 Consider the following query that returns just those jobs with an `object_type` field with a value of `widgetA`. The max response count default is 1,000, but can be increased. *Note how the time range is required. Include `start` **and** `end` values or use a `range` and pin the direction using `start` **or** `end`.*
 
 ```ts
-import { pubsubdb } from '@pubsubdb/pubsubdb';
-const jobs = pubsubdb.getJobs('order.approval.price.requested', {
+import { PubSubDB, IORedisStore } from '@pubsubdb/pubsubdb';
+
+const pubSubDB = PubSubDB.init({ ... });
+
+const jobs = pubSubDB.getJobs('order.approval.price.requested', {
   target: '{object_type:widgetA}',
   fields: ['id', 'price'],
   range: '1h',
@@ -433,47 +436,50 @@ The expected JSON output would be as follows. *Note that the `fields` array is o
 PubSubDB supports full lifecycle management like other data storage solutions. The system is designed to protect the models from arbitrary changes, providing migration and deployment tools to support hot deployments with no downtime. It's possible to plan the migration beforehand to better understand the scope of the change and whether or not a full hot deployment is possible. Provide your app manifest to PubSubDB to generate the plan.
 
 ```typescript
-import { pubsubdb } from '@pubsubdb/pubsubdb';
+import { PubSubDB, IORedisStore } from '@pubsubdb/pubsubdb';
 
-pubsubdb.init({  });
-const plan = pubsubdb.plan('./pubsubdb.yaml');
+const pubSubDB = PubSubDB.init({ ... });
+const plan = pubSubDB.plan('./pubsubdb.yaml');
 ```
 
 ## Deploy
 Once you're satisfied with your plan, call deploy to officially compile and deploy the next version of your application.
 
 ```typescript
-import { pubsubdb } from '@pubsubdb/pubsubdb';
+import { PubSubDB, IORedisStore } from '@pubsubdb/pubsubdb';
 
-pubsubdb.init({  });
-const status = pubsubdb.deploy('./pubsubdb.yaml');
+const pubSubDB = PubSubDB.init({ ... });
+const status = pubSubDB.deploy('./pubsubdb.yaml');
 ```
 
 ## Trigger Workflow Job
 Publish events to trigger any flow. In this example, the **Approve Order** flow is triggered by publishing the `order.approval.requested` event. The payload should adhere to the `output` schema defined for the activity trigger, `a1`.
 
 ```ts
-import { pubsubdb } from '@pubsubdb/pubsubdb';
+import { PubSubDB, IORedisStore } from '@pubsubdb/pubsubdb';
 
-const jobId = pubsubdb.pub('order.approval.requested', { id: 'order_123', price: 47.99 });
+const pubSubDB = PubSubDB.init({ ... });
+const jobId = pubSubDB.pub('order.approval.requested', { id: 'order_123', price: 47.99 });
 ```
 
 ## Get Job Data
 Retrieve the data for a single workflow using the job ID.
 
 ```ts
-import { pubsubdb } from '@pubsubdb/pubsubdb';
+import { PubSubDB, IORedisStore } from '@pubsubdb/pubsubdb';
 
-const job = pubsubdb.get('order_123');
+const pubSubDB = PubSubDB.init({ ... });
+const job = pubSubDB.get('order_123');
 ```
 
 ## Get Job Metadata
 Query the status of a single workflow using the job ID. (*This query desccribes all state transitions for the job and the rate at which each activity was processed.*)
 
 ```ts
-import { pubsubdb } from '@pubsubdb/pubsubdb';
+import { PubSubDB, IORedisStore } from '@pubsubdb/pubsubdb';
 
-const jobMetadata = pubsubdb.getJobMetadata('order_123');
+const pubSubDB = PubSubDB.init({ ... });
+const jobMetadata = pubSubDB.getJobMetadata('order_123');
 ```
 
 ## Get Job Statistics
@@ -482,9 +488,11 @@ Query for aggregation statistics by providing a time range and measures. In this
 >The count for any target field is distributed across cardinal values. Getting the count for a boolean field will return the total number of both `true` and `false` values.
 
 ```ts
-import { pubsubdb } from '@pubsubdb/pubsubdb';
+import { PubSubDB, IORedisStore } from '@pubsubdb/pubsubdb';
 
-const stats = pubsubdb.getJobStatistics('order.approval.price.requested', {
+const pubSubDB = PubSubDB.init({ ... });
+
+const stats = pubSubDB.getJobStatistics('order.approval.price.requested', {
   key: 'widgetA',
   granularity: '1h',
   range: '24h',

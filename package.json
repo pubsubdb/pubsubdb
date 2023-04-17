@@ -1,6 +1,6 @@
 {
   "name": "@pubsubdb/pubsubdb",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "The PubSubDB Process Database",
   "main": "build/index.js",
   "types": "build/index.d.ts",
@@ -23,6 +23,7 @@
     "test": "NODE_ENV=test jest --detectOpenHandles --forceExit --verbose",
     "test:psdb": "NODE_ENV=test jest ./tests/index.test.ts --detectOpenHandles --verbose",
     "test:redis": "NODE_ENV=test jest ./tests/services/store/redis.test.ts --detectOpenHandles --forceExit --verbose",
+    "test:ioredis": "NODE_ENV=test jest ./tests/services/store/ioredis.test.ts --detectOpenHandles --forceExit --verbose",
     "test:compiler": "NODE_ENV=test jest ./tests/services/compiler/index.test.ts --detectOpenHandles --forceExit --verbose"
   },
   "keywords": [],

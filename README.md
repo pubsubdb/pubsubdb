@@ -28,70 +28,76 @@ npm install @pubsubdb/pubsubdb
 Pass your Redis client library (e.g, `redis`, `ioredis`) to serve as the backend Data Store used by PubSubDB:
 
 ```javascript
-import { PubSubDB, RedisStore } from '../index';
+import { PubSubDB, IORedisStore } from '../index';
 
-pubSubDB = await PubSubDB.init({ appId: 'myapp', store: new RedisStore(redisClient)});
+pubSubDB = await PubSubDB.init({ appId: 'myapp', store: new IORedisStore(redisClient)});
 ```
 
 ### Plan
 PubSubDB is designed to protect the models from arbitrary changes, providing migration and planning tools to support hot deployments with no downtime. It's possible to plan the migration beforehand to better understand the scope of the change and whether or not a hot deployment is possible. Provide your app manifest to PubSubDB to generate the plan.
 
 ```typescript
-import { pubsubdb } from '@pubsubdb/pubsubdb';
+import { PubSubDB, IORedisStore } from '@pubsubdb/pubsubdb';
 
-pubsubdb.init({ });
-const plan = pubsubdb.plan('./pubsubdb.yaml');
+const pubSubDB = PubSubDB.init({ ... });
+const plan = pubSubDB.plan('./pubsubdb.yaml');
 ```
 
 ### Deploy
 Once you're satisfied with your plan, call deploy to officially compile and deploy the next version of your application (pass `true` to immediately activate the deployment).
 
 ```typescript
-import { pubsubdb } from '@pubsubdb/pubsubdb';
+import { PubSubDB, IORedisStore } from '@pubsubdb/pubsubdb';
 
-pubsubdb.init({ });
-const status = await pubsubdb.deploy('./pubsubdb.yaml', true);
+const pubSubDB = PubSubDB.init({ ... });
+const status = await pubSubDB.deploy('./pubsubdb.yaml', true);
 ```
 
 ### Trigger Workflow Job
 Publish events to trigger any flow. In this example, the workflow is triggered by publishing the `order.approval.requested` event.
 
 ```ts
-import { pubsubdb } from '@pubsubdb/pubsubdb';
+import { PubSubDB, IORedisStore } from '@pubsubdb/pubsubdb';
+
+const pubSubDB = PubSubDB.init({ ... });
 
 const payload = {
   id: 'order_123',
   price: 47.99,
   object_type: 'widgetA'
 };
-const jobId = pubsubdb.pub('order.approval.requested', payload);
+const jobId = pubSubDB.pub('order.approval.requested', payload);
 ```
 
 ### Get Job Data
 Get the job data for a single workflow using the job ID.
 
 ```ts
-import { pubsubdb } from '@pubsubdb/pubsubdb';
+import { PubSubDB, IORedisStore } from '@pubsubdb/pubsubdb';
 
-const job = pubsubdb.get('order_123');
+const pubSubDB = PubSubDB.init({ ... });
+const job = pubSubDB.get('order_123');
 ```
 
 ### Get Job Metadata
 Query the status of a single workflow using the job ID. (*This query desccribes all state transitions for the job and the rate at which each activity was processed.*)
 
 ```ts
-import { pubsubdb } from '@pubsubdb/pubsubdb';
+import { PubSubDB, IORedisStore } from '@pubsubdb/pubsubdb';
 
-const jobMetadata = pubsubdb.getJobMetadata('order_123');
+const pubSubDB = PubSubDB.init({ ... });
+const jobMetadata = pubSubDB.getJobMetadata('order_123');
 ```
 
 ### Get Job Statistics
 Query for aggregation statistics by providing a time range and measures. In this example, the stats for the `order.approval.price.requested` topic have been requested for the past 24 hours. The granularity is set to `1h`, so an array with 24 distinct time slices will be returned.
 
 ```ts
-import { pubsubdb } from '@pubsubdb/pubsubdb';
+import { PubSubDB, IORedisStore } from '@pubsubdb/pubsubdb';
 
-const stats = pubsubdb.getJobStatistics('order.approval.price.requested', {
+const pubSubDB = PubSubDB.init({ ... });
+
+const stats = pubSubDB.getJobStatistics('order.approval.price.requested', {
   key: 'widgetA',
   granularity: '1h',
   range: '24h',

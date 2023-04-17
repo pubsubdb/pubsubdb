@@ -38,7 +38,7 @@ class CompilerService {
    * deploys an app to Redis; the app is not active yet
    * @param mySchemaPath 
    */
-  async deploy(mySchemaPath: string): Promise<void> {
+  async deploy(mySchemaPath: string, activate = false): Promise<void> {
     try {
       // 0) parse the manifest file and save fully resolved as a JSON file
       const schema = await $RefParser.dereference(mySchemaPath) as PubSubDBManifest;
@@ -56,6 +56,11 @@ class CompilerService {
 
       // 4) save the app version to Redis (so it can be activated later)
       await this.store.setApp(schema.app.id, schema.app.version);
+
+      // 5) activate
+      if (activate) {
+        await this.activate(schema.app.id, schema.app.version);
+      }
     } catch(err) {
       console.error(err);
     }
