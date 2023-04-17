@@ -36,6 +36,16 @@ describe('RedisConnection', () => {
     const val = await redisClient.get('test-key');
     expect(val).toBe('test-value');
   });
+
+    
+  it('should set and get a hash in Redis', async () => {
+    const redisConnection = await RedisConnection.getConnection('test-connection');
+    const redisClient = await redisConnection.getClient();
+    const obj = { a: 'b' };
+    await redisClient.hset('test-hash', obj);
+    const val = await redisClient.hgetall('test-hash');
+    expect(val).toEqual(obj);
+  });
   
   it('publishes and subscribes', async () => {
     const publisher = await RedisConnection.getConnection('publisher');

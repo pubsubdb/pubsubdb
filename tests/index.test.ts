@@ -1,5 +1,5 @@
-import { PubSubDB, PubSubDBConfig, RedisStore } from '../index';
-import { RedisConnection, RedisClientType } from '../cache/redis';
+import { PubSubDB, PubSubDBConfig, IORedisStore } from '../index';
+import { RedisConnection, RedisClientType } from '../cache/ioredis';
 import { PSNS } from '../services/store/keyStore';
 
 describe('pubsubdb', () => {
@@ -8,13 +8,13 @@ describe('pubsubdb', () => {
   let pubSubDB: PubSubDB;
   let redisConnection: RedisConnection;
   let redisClient: RedisClientType;
-  let redisStore: RedisStore;
+  let redisStore: IORedisStore;
 
   beforeAll(async () => {
     redisConnection = await RedisConnection.getConnection(CONNECTION_KEY);
     redisClient = await redisConnection.getClient();
-    redisClient.flushDb();
-    redisStore = new RedisStore(redisClient);
+    redisClient.flushdb();
+    redisStore = new IORedisStore(redisClient);
   });
 
   afterAll(async () => {
