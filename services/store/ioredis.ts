@@ -88,7 +88,7 @@ class IORedisStoreService extends StoreService {
   async setSettings(manifest: PubSubDBSettings): Promise<any> {
     const params: KeyStoreParams = {};
     const key = this.mintKey(KeyType.PUBSUBDB, params);
-    return await this.redisClient.hset(key, manifest);
+    return await this.redisClient.hmset(key, manifest);
   }
 
   async getApps(): Promise<{[appId: string]: PubSubDBApp}> {
@@ -154,7 +154,7 @@ class IORedisStoreService extends StoreService {
       version,
       [versionId]: `deployed:${new Date().toISOString()}`,
     };
-    await this.redisClient.hset(key, payload);
+    await this.redisClient.hmset(key, payload);
     this.cache.setApp(id, payload);
     return payload;
   }
@@ -182,7 +182,7 @@ class IORedisStoreService extends StoreService {
       Object.entries(payload).forEach(([key, value]) => {
         payload[key] = JSON.stringify(value);
       });
-      return await this.redisClient.hset(key, payload);
+      return await this.redisClient.hmset(key, payload);
     }
     throw new Error(`Version ${version} does not exist for app ${id}`);
   }
@@ -205,7 +205,7 @@ class IORedisStoreService extends StoreService {
       version,
       [`versions/${version}`]: new Date().toISOString()
     };
-    return await this.redisClient.hset(key, payload);
+    return await this.redisClient.hmset(key, payload);
   }
 
   /**
@@ -259,7 +259,7 @@ class IORedisStoreService extends StoreService {
   async setJob(jobId: string, data: Record<string, unknown>, metadata: Record<string, unknown>, appVersion: AppVersion, multi? : any): Promise<any|string> {
     const hashKey = this.mintKey(KeyType.JOB_DATA, { appId: appVersion.id, jobId });
     const hashData = SerializerService.flattenHierarchy({ m: metadata, d: data});
-    const response = await (multi || this.redisClient).hset(hashKey, hashData);
+    const response = await (multi || this.redisClient).hmset(hashKey, hashData);
     return multi || jobId;
   }
 
@@ -326,7 +326,7 @@ class IORedisStoreService extends StoreService {
   async setActivity(jobId: string, activityId: string, data: Record<string, unknown>, metadata: Record<string, unknown>, appVersion: AppVersion, multi? : RedisClientType): Promise<RedisClientType|string>  {
     const hashKey = this.mintKey(KeyType.JOB_ACTIVITY_DATA, { appId: appVersion.id, jobId, activityId });
     const hashData = SerializerService.flattenHierarchy({ m: metadata, d: data});
-    const response = await (multi || this.redisClient).hset(hashKey, hashData);
+    const response = await (multi || this.redisClient).hmset(hashKey, hashData);
     return multi || activityId;
   }
   
@@ -431,7 +431,7 @@ class IORedisStoreService extends StoreService {
     Object.entries(_schemas).forEach(([key, value]) => {
       _schemas[key] = JSON.stringify(value);
     });
-    const response = await this.redisClient.hset(key, _schemas);
+    const response = await this.redisClient.hmset(key, _schemas);
     this.cache.setSchemas(appVersion.id, appVersion.version, schemas);
     return response;
   }
@@ -449,7 +449,7 @@ class IORedisStoreService extends StoreService {
     Object.entries(_subscriptions).forEach(([key, value]) => {
       _subscriptions[key] = JSON.stringify(value);
     });
-    const response = await this.redisClient.hset(key, _subscriptions);
+    const response = await this.redisClient.hmset(key, _subscriptions);
     this.cache.setSubscriptions(appVersion.id, appVersion.version, subscriptions);
     return response;
   }
@@ -482,7 +482,7 @@ class IORedisStoreService extends StoreService {
     Object.entries(_subscriptions).forEach(([key, value]) => {
       _subscriptions[key] = JSON.stringify(value);
     });
-    const response = await this.redisClient.hset(key, _subscriptions);
+    const response = await this.redisClient.hmset(key, _subscriptions);
     this.cache.setTransitions(appVersion.id, appVersion.version, transitions);
     return response;
   }
@@ -509,7 +509,7 @@ class IORedisStoreService extends StoreService {
     Object.entries(_hooks).forEach(([key, value]) => {
       _hooks[key] = JSON.stringify(value);
     });
-    const response = await this.redisClient.hset(key, _hooks);
+    const response = await this.redisClient.hmset(key, _hooks);
     this.cache.setHookPatterns(appVersion.id, hookPatterns);
     return response;
   }

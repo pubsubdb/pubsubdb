@@ -186,7 +186,7 @@ describe('IORedisStoreService', () => {
         },
       };
       const result = await redisStoreService.setSchemas(schemas, appConfig);
-      expect(result).toEqual(2);
+      expect(result).toEqual('OK');
     });
   });
 });
