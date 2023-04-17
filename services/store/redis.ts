@@ -229,7 +229,7 @@ class RedisStoreService extends StoreService {
     if (stats.general.length) {
       const generalStatsKey = this.mintKey(KeyType.JOB_STATS_GENERAL, params);
       for (const { target, value } of stats.general) {
-        multi.HINCRBYFLOAT(generalStatsKey, 'target', value as number);
+        multi.HINCRBYFLOAT(generalStatsKey, target, value as number);
       }
     }
     //index
