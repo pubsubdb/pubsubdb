@@ -55,5 +55,5 @@ hooks:
     - to: route
       conditions:
         match:
-          - expected: "{schedule.output.data.order_id}"
-            actual: "{$self.hook.data.order_id}"
+          - expected: "{schedule.output.data.id}"
+            actual: "{$self.hook.data.id}"

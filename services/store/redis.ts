@@ -224,27 +224,35 @@ class RedisStoreService extends StoreService {
    */
   async setJobStats(jobKey: string, jobId: string, dateTime: string, stats: StatsType, appVersion: AppVersion, multi? : any): Promise<any|string> {
     const params: KeyStoreParams = { appId: appVersion.id, jobId, jobKey, dateTime };
-    multi = multi || await this.redisClient.MULTI();
+    const privateMulti = multi || await this.redisClient.MULTI();
     //general
     if (stats.general.length) {
       const generalStatsKey = this.mintKey(KeyType.JOB_STATS_GENERAL, params);
       for (const { target, value } of stats.general) {
-        multi.HINCRBYFLOAT(generalStatsKey, target, value as number);
+        privateMulti.HINCRBYFLOAT(generalStatsKey, target, value as number);
       }
     }
     //index
     for (const { target, value } of stats.index) {
       const indexParams = { ...params, facet: target };
       const indexStatsKey = this.mintKey(KeyType.JOB_STATS_INDEX, indexParams);
-      multi.RPUSH(indexStatsKey, value.toString());
+      privateMulti.RPUSH(indexStatsKey, value.toString());
     }
     //median
     for (const { target, value } of stats.median) {
       const medianParams = { ...params, facet: target };
       const medianStatsKey = this.mintKey(KeyType.JOB_STATS_MEDIAN, medianParams);
-      multi.ZADD(medianStatsKey, { score: value.toString(), value: value.toString() } as any);
+      privateMulti.ZADD(medianStatsKey, { score: value.toString(), value: value.toString() } as any);
     }
-    return await multi.exec();
+    if (!multi) {
+      //always execute the multi if it's not passed in
+      return await privateMulti.exec();
+    }
+  }
+
+  async updateJobStatus(jobId: string, collationKeyStatus: number, appVersion: AppVersion, multi? : any): Promise<any> {
+    const jobKey = this.mintKey(KeyType.JOB_DATA, { appId: appVersion.id, jobId });
+    await (multi || this.redisClient).HINCRBYFLOAT(jobKey, 'm/js', collationKeyStatus);
   }
 
   /**
@@ -330,6 +338,21 @@ class RedisStoreService extends StoreService {
     const hashData = SerializerService.flattenHierarchy({ m: metadata, d: data});
     const response = await (multi || this.redisClient).HSET(hashKey, hashData);
     return multi || activityId;
+  }
+
+  /**
+   * ALWAYS called first before running any activity (including triggers); if the activity
+   * already exists, this is a dupe and the activity should not be run.
+   * 
+   * @param jobId 
+   * @param activityId 
+   * @param config 
+   * @returns 
+   */
+  async setActivityNX(jobId: string, activityId: any, config: AppVersion): Promise<number> {
+    const hashKey = this.mintKey(KeyType.JOB_ACTIVITY_DATA, { appId: config.id, jobId, activityId });
+    const response = await this.redisClient.HSETNX(hashKey, 'm/aid', activityId);
+    return response ? 1 : 0;
   }
   
   /**
@@ -531,10 +554,10 @@ class RedisStoreService extends StoreService {
     }
   }
 
-  async setSignal(signal: Signal, appVersion: AppVersion): Promise<any> {
+  async setSignal(signal: Signal, appVersion: AppVersion, multi?: any): Promise<any> {
     const key = this.mintKey(KeyType.SIGNALS, { appId: appVersion.id });
     const { topic, resolved, jobId} = signal;
-    return await this.redisClient.HSET(key, `${topic}:${resolved}`, jobId);
+    return await (multi || this.redisClient).HSET(key, `${topic}:${resolved}`, jobId);
   }
 
   async getSignal(topic: string, resolved: string, appVersion: AppVersion): Promise<Signal | undefined> {

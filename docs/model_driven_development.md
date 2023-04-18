@@ -36,19 +36,19 @@ The PubSubDB model is a modern, JSON-based alternative to WSDL/SOAP, offering a 
   - [8.2. Price Approval Process](#82-price-approval-process)
 
 ## 1. Introduction
-When engineering solutions for critical business processes, it is essential to adopt a cross-functional approach where *all* stakeholders concentrate on the core models and high-level design. One of the primary benefits of model-driven development lies in its ability to allow team members (engineering, operations, product, etc) to prioritize the application's overall design and logic rather than becoming entangled in implementation specifics. Consequently, this leads to accelerated development cycles, enhanced productivity, and better maintainability as the application progresses, as the required skill is a logical understanding of the business process, not how to express it in code.
+When engineering solutions for critical business processes, it is essential to adopt a cross-functional approach where *all* stakeholders (engineering, operations, product, etc)concentrate on the core models and high-level design. One of the primary benefits of model-driven development lies in its ability to focus on the application's overall design and logic rather than becoming entangled in implementation specifics. Consequently, this leads to accelerated development cycles, as the required skill to design a workflow is a logical understanding of the business process and how to move it forward, not how to express it in code.
 
 ### 1.1. Overview of the Model
-The PubSubDB execution model utilizes models to define an application's behavior and data flow. The approach is designed to be flexible, modular, and easy to understand.
+PubSubDB utilizes an *execution-oriented* model to define an application's behavior and data flow. The approach is designed to be flexible, modular, and easy to understand.
 
-The primary building blocks are `graphs`, which are essentially a collection of activities (nodes) connected by transitions (edges). Each activity represents a specific task or operation, while transitions define the flow between these activities based on certain conditions. This structure allows the model to accommodate complex workflows and processes that span multiple services or systems.
+A standard `graph` serves as the foundational building block--essentially a collection of activities (nodes) connected by transitions (edges). Each activity represents a specific task or operation, while transitions define the flow between these activities based on certain conditions. This structure allows the model to accommodate complex workflows and processes that span multiple services and systems.
 
 One of the key features of this model is the functional mapper called '@pipes', which provides an expressive and versatile way to manipulate and transform data between activities. Using '@pipes', developers can create complex data mappings and conditional flows without the need for extensive scripting or programming.
 
-The model is highly adaptable and can be used to define a wide range of applications, from simple data processing tasks to sophisticated business processes. By using this modern JSON-based model, developers can create more maintainable, scalable, and efficient applications that are easy to understand and modify as needed.
+The model is highly adaptable and can be used to define a wide range of applications, from simple data processing tasks to sophisticated business processes. By using this modern JSON-based model, developers can create more maintainable, scalable, and efficient applications that are easy to understand and adapt as the environment changes.
 
 ### 1.2. JSON Structure
-The model is represented as a JSON object with various nested properties that define the application's structure, settings, and execution behavior. The primary components of the JSON model are as follows:
+The model is represented as a JSON object by the engine once compiled (although YAML can be interchangeably used for authoring given its better readability). The structure is comprised of various nested properties that define the application's settings, and execution behavior. The primary components of the JSON model are as follows:
 
 - `app`: The top-level object that contains the application's metadata, settings, and graphs.
   - `id`: A unique identifier for the application.
@@ -59,6 +59,7 @@ The model is represented as a JSON object with various nested properties that de
     - `publishes`: The event or message that the graph emits upon completion.
     - `activities`: An object that contains the activities (nodes) within the graph. Each activity has a unique key and consists of properties such as title, type, input, output, and job.
     - `transitions`: An object that defines the flow between activities based on specified conditions. Each key in the transitions object corresponds to an activity key, and its value is an array of transition objects.
+    - `hooks`: An event or message that a sleeping activity is subscribed to, which will awaken the it
 - `@pipes`: A functional mapper that allows for data transformation and manipulation between activities using various functions.
 
 The JSON structure of the model is designed to be easy to read and modify, allowing developers to understand the application's logic and behavior at a glance. By using a JSON-based format, the model can be easily shared, versioned, and integrated into various programming languages and platforms.

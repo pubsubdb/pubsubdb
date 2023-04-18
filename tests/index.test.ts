@@ -89,6 +89,26 @@ describe('pubsubdb', () => {
           }
         }
       }
+      //todo:locate all data in redis and verify
+    });
+
+    it('should throw an error when publishing duplicates', async () => {
+      try {
+        //duplicate order! will throw error!!
+        const payload = {
+          id: `ord_1002`,
+          size: 'xl',
+          primacy: 'primary',
+          color: 'red',
+          facility: 'acme',
+          send_date: new Date(),
+          must_release_series: '202304120015'
+        };
+        await pubSubDB.pub('order.scheduled', payload);
+        expect(true).toBe(false);
+      } catch (err) {
+        expect(true).toBe(true);
+      }
     });
   });
 });

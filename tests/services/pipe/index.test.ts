@@ -33,6 +33,37 @@ describe('Pipe', () => {
     });
   });
 
+  describe('number', () => {
+    it('isEven, isOdd', () => {
+      jobData = {
+        evenNumber: 42,
+        oddNumber: 55
+      };
+  
+      // Test isEven function
+      rules = [
+        [ '{evenNumber}' ],
+        [ '{@number.isEven}' ],
+      ];
+  
+      pipe = new Pipe(rules, jobData);
+      const isEvenResult = pipe.process();
+  
+      expect(isEvenResult).toEqual(true);
+  
+      // Test isOdd function
+      rules = [
+        [ '{oddNumber}' ],
+        [ '{@number.isOdd}' ],
+      ];
+  
+      pipe = new Pipe(rules, jobData);
+      const isOddResult = pipe.process();
+  
+      expect(isOddResult).toEqual(true);
+    });
+  });  
+
   describe('string', () => {
     it('concat, split, charAt, includes, indexOf', () => {
       jobData = {

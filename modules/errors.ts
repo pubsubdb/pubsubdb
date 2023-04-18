@@ -4,6 +4,12 @@ class RestoreJobContextError extends Error {
   }
 }
 
+class DuplicateActivityError extends Error {
+  constructor() {
+    super("Error occurred while creating duplicate activity");
+  }
+}
+
 class MapInputDataError extends Error {
   constructor() {
     super("Error occurred while mapping input data");
@@ -28,4 +34,4 @@ class ExecActivityError extends Error {
   }
 }
 
-export { RestoreJobContextError, MapInputDataError, SubscribeToResponseError, RegisterTimeoutError, ExecActivityError };
+export { RestoreJobContextError, DuplicateActivityError, MapInputDataError, SubscribeToResponseError, RegisterTimeoutError, ExecActivityError };

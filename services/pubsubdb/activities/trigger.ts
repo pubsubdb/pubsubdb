@@ -4,7 +4,8 @@ import {
   MapInputDataError, 
   SubscribeToResponseError, 
   RegisterTimeoutError, 
-  ExecActivityError } from '../../../modules/errors';
+  ExecActivityError, 
+  DuplicateActivityError} from '../../../modules/errors';
 import {
   ActivityData,
   ActivityMetadata,
@@ -14,6 +15,7 @@ import { JobContext } from '../../../typedefs/job';
 import { StatsType, Stat } from '../../../typedefs/stats';
 import { MapperService } from '../../mapper';
 import { Pipe } from "../../pipe";
+import { KeyType } from '../../store/keyStore';
 import { SerializerService } from '../../store/serializer';
 import { Activity } from "./activity";
 
@@ -39,6 +41,9 @@ class Trigger extends Activity {
       await this.createContext();
       await this.mapJobData();
       await this.mapOutputData();
+
+      //ALWAYS save the activity immediately (WILL THROW ERROR IF DUPE!)
+      await this.saveActivityNX();
       
       /////// MULTI ///////
       const multi = await this.pubsubdb.store.getMulti();
@@ -50,20 +55,16 @@ class Trigger extends Activity {
 
       await this.pub();
     } catch (error) {
-      console.log('trigger process() error', error);
-      if (error instanceof RestoreJobContextError) {
-        // Handle restoreJobContext error
+      // TODO: what is the policy for each of the following? for now rethrowing all errors
+      if (error instanceof DuplicateActivityError) {
+      } else if (error instanceof RestoreJobContextError) {
       } else if (error instanceof MapInputDataError) {
-        // Handle mapInputData error
       } else if (error instanceof SubscribeToResponseError) {
-        // Handle subscribeToResponse error
       } else if (error instanceof RegisterTimeoutError) {
-        // Handle registerTimeout error
       } else if (error instanceof ExecActivityError) {
-        // Handle execActivity error
       } else {
-        // Handle generic error
       }
+      throw error;
     }
   }
 
@@ -84,7 +85,7 @@ class Trigger extends Activity {
         jc: utc,
         ju: utc,
         ts: this.getTimeSeriesStamp(),
-        js: this.createCollationKey(),
+        js: this.createCollationKey() - this.getActivitySubtractionValue(3),
       },
       data: {}, //job data will be added in the next step if it exists
       [this.metadata.aid]: { 
@@ -201,6 +202,24 @@ class Trigger extends Activity {
       this.pubsubdb.getAppConfig(),
       multi
     );
+  }
+
+  /**
+   * saves just the activity id to ensure no dupes before proceeding with the multi insert
+   * @param {any} multi - Redis multi object
+   */
+  async saveActivityNX(multi?: any): Promise<void> {
+    const jobId = this.context.metadata.jid;
+    const activityId = this.metadata.aid;
+    const response = await this.pubsubdb.store.setActivityNX(
+      jobId,
+      activityId,
+      this.pubsubdb.getAppConfig()
+    );
+    if (response !== 1) {
+      const key = this.pubsubdb.store.mintKey(KeyType.JOB_ACTIVITY_DATA, { appId: this.pubsubdb.getAppConfig().id, jobId, activityId });
+      throw new Error(`Duplicate Activity. Job/Activity ${key} already exists`);
+    }
   }
 
   /**

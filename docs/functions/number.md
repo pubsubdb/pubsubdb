@@ -4,6 +4,8 @@ In this section, various Number functions will be explored, which are available 
 
 **Table of Contents**
 - [number.isFinite](#numberisfinite): Check if a number is finite
+- [number.isEven](#numberiseven): Check if a number is even
+- [number.isOdd](#numberisodd): Check if a number is odd
 - [number.isInteger](#numberisinteger): Check if a number is an integer
 - [number.isNaN](#numberisnan): Check if a value is NaN
 - [number.parseFloat](#numberparsefloat): Parse a string and return a floating-point number
@@ -43,6 +45,74 @@ After executing the mapping rules, the resulting JSON object will be:
 ```json
 {
   "is_finite": true
+}
+```
+
+## number.isOdd
+The `number.isOdd` function checks if a number is odd. It takes one parameter: the number to be checked.
+
+### Example
+Suppose there are the following input JSON objects:
+
+**Object A:**
+```json
+{
+  "output": {
+    "data": {
+      "value": 42
+    }
+  }
+}
+```
+
+The goal is to create a new object with a boolean field indicating if the `value` field is an odd number. The `number.isOdd` function can be used in the mapping rules as follows:
+
+```yaml
+is_odd: 
+  "@pipe":
+    - ["{a.output.data.value}"]
+    - ["{@number.isOdd}"]
+```
+
+After executing the mapping rules, the resulting JSON object will be:
+
+```json
+{
+  "is_odd": false
+}
+```
+
+## number.isEven
+The `number.isEven` function checks if a number is even. It takes one parameter: the number to be checked.
+
+### Example
+Suppose there are the following input JSON objects:
+
+**Object A:**
+```json
+{
+  "output": {
+    "data": {
+      "value": 42
+    }
+  }
+}
+```
+
+The goal is to create a new object with a boolean field indicating if the `value` field is an even number. The `number.isEven` function can be used in the mapping rules as follows:
+
+```yaml
+is_even: 
+  "@pipe":
+    - ["{a.output.data.value}"]
+    - ["{@number.isEven}"]
+```
+
+After executing the mapping rules, the resulting JSON object will be:
+
+```json
+{
+  "is_even": true
 }
 ```
 

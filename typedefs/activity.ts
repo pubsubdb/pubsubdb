@@ -9,6 +9,7 @@ interface ActivityBase {
   settings?: Record<string, any>;
   dependents?: string[];
   hook?: Record<string, any>;
+  sortedActivityPosition?: number;
 }
 
 interface TriggerActivity extends ActivityBase {
