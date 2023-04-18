@@ -149,6 +149,26 @@ describe('RedisStoreService', () => {
     });
   });
 
+  describe('setActivityNX', () => {
+    it('should set the activity data in the store with NX behavior', async () => {
+      const jobId = 'job-1';
+      const activityId = 'activity-1';
+  
+      // First, set the activity using setActivityNX
+      const response = await redisStoreService.setActivityNX(jobId, activityId, appConfig);
+      expect(response).toEqual(1); // Expect the HSETNX result to be 1 (field was set)
+  
+      // Now, try to set the same activity again using setActivityNX
+      const secondResponse = await redisStoreService.setActivityNX(jobId, activityId, appConfig);
+      expect(secondResponse).toEqual(0); // Expect the HSETNX result to be 0 (field was not set because it already exists)
+  
+      // Verify that the activity data in the store is correct
+      const hashKey = redisStoreService.mintKey(KeyType.JOB_ACTIVITY_DATA, { appId: appConfig.id, jobId, activityId });
+      const storedActivityId = await redisStoreService.redisClient.HGET(hashKey, 'm/aid');
+      expect(storedActivityId).toEqual(activityId);
+    });
+  });
+
   describe('getActivityMetadata', () => {
     it('should retrieve the activity metadata from the store', async () => {
       const jobId = 'job-1';

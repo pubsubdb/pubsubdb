@@ -3,6 +3,14 @@ class NumberHandler {
     return Number.isFinite(input);
   }
 
+  isEven(input: number): boolean {
+    return !isNaN(input) && input % 2 === 0;
+  }
+
+  isOdd(input: number): boolean {
+    return !isNaN(input) && input % 2 !== 0;
+  }
+
   isInteger(input: number): boolean {
     return Number.isInteger(input);
   }

@@ -50,12 +50,12 @@ class Deployer {
       const triggerActivityId = this.getTriggerActivityId(graph);
   
       if (triggerActivityId) {
-        const activityIds = Object.keys(activities);
-        activityIds.sort((a, b) => {
-          return parseInt(a.slice(1)) - parseInt(b.slice(1));
-        });
-  
+        const activityIds = Object.keys(activities).sort();
         activities[triggerActivityId].sortedActivityIds = activityIds;
+
+        Object.entries(activities).forEach(([activityId, activity]) => {
+          activity.sortedActivityPosition = activityIds.indexOf(activityId);
+        });
       }
     }
   }

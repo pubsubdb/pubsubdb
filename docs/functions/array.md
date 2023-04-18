@@ -148,8 +148,8 @@ The goal is to create a new object with the squares of the numbers in the `numbe
 ```yaml
 squares: 
   "@pipe":
-    - ["{a.output.data.numbers}"]
-    - ["{@array.map}", "{@number.square}"]
+    - ["{a.output.data.numbers}", "{@number.square}"]
+    - ["{@array.map}"]
 ```
 
 After executing the mapping rules, the resulting JSON object will be:

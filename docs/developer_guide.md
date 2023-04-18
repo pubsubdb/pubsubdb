@@ -74,7 +74,7 @@ transitions:
 ```
 
 ## Define Conditional Activities
-Now, let's review *conditional* activities that only exectute when their transition condition is met. It's common in business processes to branch depending upon conditions in the data. Consider the **Approve Order Price** graph with conditions now added to check the `price` field. The conditions ensure that `a5`  only transitions to `a6` if the  price is less than *100*. The inverse condition is applied to the transition from `a5` to `a7`.
+Now, let's review *conditional* activities that only execute when their transition condition is met. It's common in business processes to branch depending upon conditions in the data. Consider the **Approve Order Price** graph with conditions now added to check the `price` field. The conditions ensure that `a5`  only transitions to `a6` if the  price is less than *100*. The inverse condition is applied to the transition from `a5` to `a7`.
 
 ```yaml
 activities:
