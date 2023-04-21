@@ -146,7 +146,11 @@ class IORedisStoreService extends StoreService {
       const sApp = await this.redisClient.hgetall(key);
       app = {};
       for (const field in sApp) {
-        app[field] = JSON.parse(sApp[field] as string);
+        try {
+          app[field] = JSON.parse(sApp[field] as string);
+        } catch (e) {
+          app[field] = sApp[field];
+        }
       }
       this.cache.setApp(id, app as PubSubDBApp);
     }
