@@ -35,7 +35,8 @@ class IORedisStoreService extends StoreService {
     this.logger = logger;
     const settings = await this.getSettings(true);
     this.cache = new Cache(appId, settings);
-    return await this.getApps();
+    await this.getApp(appId);
+    return this.cache.getApps();
   }
 
   getMulti(): ChainableCommander {
@@ -138,18 +139,18 @@ class IORedisStoreService extends StoreService {
    * @returns {Promise<any>}
    */
   async getApp(id: string): Promise<PubSubDBApp> {
-    let app = this.cache.getApp(id);
+    let app: Partial<PubSubDBApp> = this.cache.getApp(id);
     if (!(app && Object.keys(app).length > 0)) {
       const params: KeyStoreParams = { appId: id };
       const key = this.mintKey(KeyType.APP, params);
       const sApp = await this.redisClient.hgetall(key);
-      const app: Partial<PubSubDBApp> = {};
+      app = {};
       for (const field in sApp) {
         app[field] = JSON.parse(sApp[field] as string);
       }
       this.cache.setApp(id, app as PubSubDBApp);
     }
-    return app;
+    return app as PubSubDBApp;
   }
 
   async setApp(id: string, version: string): Promise<PubSubDBApp> {
