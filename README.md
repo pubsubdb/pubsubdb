@@ -19,13 +19,16 @@ PubSubDB uses standard graph notation to define the activities (nodes) and trans
 Multistep workflows like this are defined using a standard Open API extension. This approach allows PubSubDB to leverage the existing Open API definitions when orchestrating API endpoints. For example, the *input* and *output* schemas for the **[Create Asana Task]** activity above are already defined in the official Asana Open API specification, and the extension can reference them using a standard `$ref` tag.
 
 ### Install
-Install PubSubDB using NPM.
+[![npm version](https://badge.fury.io/js/%40pubsubdb%2Fpubsubdb.svg)](https://badge.fury.io/js/%40pubsubdb%2Fpubsubdb)
 
-```bash
+Install PubSubDB using NPM. 
+
+```sh
 npm install @pubsubdb/pubsubdb
 ```
 
-Pass your Redis client library (e.g, `redis`, `ioredis`) to serve as the backend Data Store used by PubSubDB:
+
+Pass your Redis client library (The `redis` and `ioredis` NPM packages are supported) to serve as the backend Data Store used by PubSubDB:
 
 ```javascript
 import { PubSubDB, IORedisStore } from '../index';

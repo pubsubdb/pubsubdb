@@ -1,6 +1,7 @@
 import { PubSubDB, PubSubDBConfig, IORedisStore } from '../index';
 import { RedisConnection, RedisClientType } from '../cache/ioredis';
 import { PSNS } from '../services/store/keyStore';
+import { GetStatsOptions } from '../typedefs/stats';
 
 describe('pubsubdb', () => {
   const appConfig = { id: 'test-app', version: '1' };
@@ -97,7 +98,7 @@ describe('pubsubdb', () => {
         //duplicate order! will throw error!!
         const payload = {
           id: `ord_1002`,
-          size: 'xl',
+          size: 'lg',
           primacy: 'primary',
           color: 'red',
           facility: 'acme',
@@ -111,4 +112,17 @@ describe('pubsubdb', () => {
       }
     });
   });
+
+  describe('getStats()', () => {
+    it('should return stats', async () => {
+      const options: GetStatsOptions = {
+        key: 'redprimarylg',
+        granularity: '5m',  //should come from schema
+        range: '1h',
+        end: 'NOW',
+      };
+      const stats = await pubSubDB.getStats(options);
+      expect(stats.segments.length).toEqual(13); //13 5m segments in 1h ( 00 to 00 inclusive)
+    });
+  } );
 });

@@ -1,3 +1,4 @@
+import { ILogger } from "../services/logger";
 import { PubSubDBService } from "../services/pubsubdb";
 import { RedisStoreService } from "../services/store/redis";
 import { StoreService } from "../services/store/store";
@@ -5,10 +6,11 @@ import { StoreService } from "../services/store/store";
 type PubSubDB = typeof PubSubDBService;
 
 type PubSubDBConfig = {
-  appId: string;       // customer's chosen app id
-  store: StoreService; // redis store wrapping customer's redis instance
-  namespace?: string;  //default 'psdb'
-  cluster?: boolean;   //default false
+  appId: string;       // customer app id
+  namespace?: string;  // default: `psdb`
+  store: StoreService; //interface definition for common store methods
+  logger?: ILogger;
+  cluster?: boolean;   //default: `false`
 }
 
 type PubSubDBGraph = {

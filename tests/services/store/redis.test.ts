@@ -1,4 +1,5 @@
 import { RedisConnection, RedisClientType } from '../../../cache/redis';
+import { LoggerService } from '../../../services/logger';
 import { KeyType, PSNS } from '../../../services/store/keyStore';
 import { RedisStoreService } from '../../../services/store/redis';
 import { StatsType } from '../../../typedefs/stats';
@@ -14,7 +15,7 @@ describe('RedisStoreService', () => {
     await redisClient.flushDb();
     redisStoreService = new RedisStoreService(redisClient);
     const appConfig = { id: 'APP_ID', version: 'APP_VERSION' };
-    await redisStoreService.init(PSNS, appConfig.id);
+    await redisStoreService.init(PSNS, appConfig.id, new LoggerService());
   });
 
   beforeAll(async () => {

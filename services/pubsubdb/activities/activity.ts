@@ -4,9 +4,11 @@ import { RestoreJobContextError,
          MapInputDataError, 
          SubscribeToResponseError, 
          RegisterTimeoutError, 
-         ExecActivityError } from '../../../modules/errors';
+         ExecActivityError, 
+         DuplicateActivityError} from '../../../modules/errors';
 import { PubSubDBService } from "..";
 import { Signal } from "../../../typedefs/signal";
+import { ILogger } from "../../logger";
 
 /**
  * Both the base class for all activities as well as a class that can be used to create a generic activity.
@@ -22,6 +24,7 @@ class Activity {
   metadata: ActivityMetadata;
   context: JobContext;
   pubsubdb: PubSubDBService;
+  logger: ILogger;
 
   constructor(config: ActivityType, data: ActivityData, metadata: ActivityMetadata, pubsubdb: PubSubDBService, context?: JobContext) {
     this.config = config;
@@ -29,38 +32,35 @@ class Activity {
     this.metadata = metadata;
     this.pubsubdb = pubsubdb;
     this.context = context;
+    this.logger = this.pubsubdb.logger;
   }
 
-  async process() {
+  async process(): Promise<string> {
     try {
-      await this.restoreJobContext();   //restore job context if not passed in
-      await this.mapInputData();        //map upstream data to input data
-      await this.subscribeToResponse(); //wait for activity to complete
+      await this.restoreJobContext();
+      await this.mapInputData();
+      await this.subscribeToResponse();
 
       /////// MULTI ///////
-      const multi = await this.pubsubdb.store.getMulti();
-      await this.saveActivity(multi);        //save activity to db
-      await this.saveActivityStatus(multi);  //save activity status (-1)
-      await this.subscribeToHook(multi);     //if a hook is declared, subscribe and then sleep; the activity will awaken when the hook is triggered
+      const multi = this.pubsubdb.store.getMulti();
+      await this.saveActivity(multi);
+      await this.saveActivityStatus(multi);
+      await this.subscribeToHook(multi);
       await multi.exec();
       /////// MULTI ///////
 
-      await this.registerTimeout();     //add default timeout
-      await this.execActivity();        //execute the activity
+      await this.registerTimeout();
+      await this.execActivity();
+      return this.context.metadata.aid;
     } catch (error) {
-      console.log('activity process() error', error);
-      if (error instanceof RestoreJobContextError) {
-        // Handle restoreJobContext error
+      this.logger.error('activity.process:error', error);
+      if (error instanceof DuplicateActivityError) {
+      } else if (error instanceof RestoreJobContextError) {
       } else if (error instanceof MapInputDataError) {
-        // Handle mapInputData error
       } else if (error instanceof SubscribeToResponseError) {
-        // Handle subscribeToResponse error
       } else if (error instanceof RegisterTimeoutError) {
-        // Handle registerTimeout error
       } else if (error instanceof ExecActivityError) {
-        // Handle execActivity error
       } else {
-        // Handle generic error
       }
     }
   }
@@ -102,25 +102,6 @@ class Activity {
   }
 
   /**
-   * updates the collation key for the job by subtracting the activity's position from
-   * the 15-digit collation key. For example, if the collation key is 999999999999900
-   * and the activity is the 3rd in the list (and the multipler is 1),
-   * then the collation key will be updated to 998999999999900.
-   * This means that the activity is running. When an activity completes, 2 will be subtracted.
-   * @param {number} position - between 0 and 14 inclusive
-   * @param {number} multiplier - binary flag (1 pending, 2 complete, 4 bypassed, 8 error) that indicates the activity's status
-   * @returns 
-   */
-  getActivitySubtractionValue(multiplier: 1|2|3|4 = 1): number {
-    const position = this.config.sortedActivityPosition
-    if (position < 0 || position > 14) {
-      throw new Error('Invalid position. Must be between 0 and 14, inclusive.');
-    }
-    const targetLength = 15;
-    return Math.pow(10, targetLength - position - 1) * multiplier;
-  }
-
-  /**
    * saves activity data; (NOTE: This data represents a subset of the incoming event payload.
    * those fields that are not specified in the mapping rules for other activities will not be saved.)
    */
@@ -141,13 +122,13 @@ class Activity {
   }
 
   /**
-   * update the job collatin key to indicate that the activity is running (1)
+   * update the job collation key to indicate that the activity is running (1)
    * @param multi 
    */
   async saveActivityStatus(multi?): Promise<void> {
     await this.pubsubdb.store.updateJobStatus(
       this.context.metadata.jid,
-      -this.getActivitySubtractionValue(),
+      -this.config.collationInt,
       this.pubsubdb.getAppConfig(),
       multi
     );

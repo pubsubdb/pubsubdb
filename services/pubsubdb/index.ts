@@ -1,12 +1,19 @@
 import { ActivityMetadata } from '../../typedefs/activity';
-import { PubSubDBApps, PubSubDBConfig, PubSubDBSettings } from '../../typedefs/pubsubdb';
-import { CompilerService } from '../compiler';
+import { JobContext } from '../../typedefs/job';
+import {
+  PubSubDBApps,
+  PubSubDBConfig,
+  PubSubDBManifest,
+  PubSubDBSettings } from '../../typedefs/pubsubdb';
+import { GetStatsOptions, StatsResponse } from '../../typedefs/stats';
 import { AdapterService } from '../adapter';
+import { CompilerService } from '../compiler';
+import { LoggerService, ILogger } from '../logger';
+import { ReporterService as Reporter } from '../reporter';
+import { PSNS } from '../store/keyStore';
 import { StoreService } from '../store/store';
 import Activities from './activities';
 import { ActivityType } from './activities/activity';
-import { JobContext } from '../../typedefs/job';
-import { PSNS } from '../store/keyStore';
 
 //todo: can be multiple instances; track as a Map
 let instance: PubSubDBService;
@@ -24,6 +31,7 @@ class PubSubDBService {
   apps: PubSubDBApps | null;
   cluster = false;
   adapterService: AdapterService | null;
+  logger: ILogger;
 
   static stop(config: Record<string, string|number|boolean>) {
     if (instance?.cluster) {
@@ -50,7 +58,7 @@ class PubSubDBService {
   verifyAppId(appId: string) {
     if (!appId?.match(/^[A-Za-z0-9-]+$/)) {
       throw new Error(`config.appId [${appId}] is invalid`);
-    } else if (appId === 'app') {
+    } else if (appId === 'a') {
       throw new Error(`config.appId [${appId}] is reserved`);
     } else {
       this.appId = appId;
@@ -62,7 +70,7 @@ class PubSubDBService {
       throw new Error(`store ${store} is invalid`);
     } else {
       this.store = store;
-      this.apps = await this.store.init(this.namespace, this.appId);
+      this.apps = await this.store.init(this.namespace, this.appId, this.logger);
     }
   }
 
@@ -78,6 +86,7 @@ class PubSubDBService {
    */
   static async init(config: PubSubDBConfig) {
     instance = new PubSubDBService();
+    instance.logger = new LoggerService(config.logger);
     instance.verifyNamespace(config.namespace);
     instance.verifyAppId(config.appId);
     await instance.verifyStore(config.store);
@@ -86,24 +95,23 @@ class PubSubDBService {
     return instance;
   }
 
-  isPrivate(topic: string) {
-    return topic.startsWith('.');
-  }
 
+  // ************* METADATA/MODEL METHODS *************
   /**
-   * returns a tuple containing the activity id and the activity schema
-   * for the single activity that is subscribed to the provided topic
-   * @param {string} topic - for example: 'trigger.test.requested'
+   * returns a tuple with the activity [id, schema] when provided a subscription topic
+   * @param {string} topic - for example: 'trigger.test.requested' OR '.a1'
    * @returns {Promise<[activityId: string, activity: ActivityType]>}
    */
   async getActivity(topic: string): Promise<[activityId: string, activity: ActivityType]> {
     const app = await this.store.getApp(this.appId);
     if (app) {
       if (this.isPrivate(topic)) {
+        //private subscriptions use the activity id (.activityId)
         const activityId = topic.substring(1)
         const activity = await this.store.getSchema(activityId, this.getAppConfig());
         return [activityId, activity];
       } else {
+        //public subscriptions use a topic (a.b.c) that is associated with an activity id
         const activityId = await this.store.getSubscription(topic, this.getAppConfig());
         if (activityId) {
           const activity = await this.store.getSchema(activityId, this.getAppConfig());
@@ -114,32 +122,47 @@ class PubSubDBService {
     }
     throw new Error(`no app found for id ${this.appId}`);
   }
-
   /**
    * get the pubsubdb manifest
    */
   async getSettings(): Promise<PubSubDBSettings> {
     return await this.store.getSettings();
   }
+  isPrivate(topic: string) {
+    return topic.startsWith('.');
+  }
 
-  async plan(path: string) {
-    const compiler = new CompilerService(this.store);
+
+
+  // ************* COMPILER METHODS *************
+  async plan(path: string): Promise<PubSubDBManifest> {
+    const compiler = new CompilerService(this.store, this.logger);
     return await compiler.plan(path);
   }
-
-  async deploy(path: string) {
-    const compiler = new CompilerService(this.store);
+  async deploy(path: string): Promise<PubSubDBManifest> {
+    const compiler = new CompilerService(this.store, this.logger);
     return await compiler.deploy(path);
   }
-
   async activate(version: string) {
-    const appConfig = this.getAppConfig();
-    const compiler = new CompilerService(this.store);
-    return await compiler.activate(appConfig.id, version);
+    const { id } = this.getAppConfig();
+    const compiler = new CompilerService(this.store, this.logger);
+    return await compiler.activate(id, version);
   }
 
+
+
+  // ************* REPORTER METHODS *************
+  async getStats(options: GetStatsOptions): Promise<StatsResponse> {
+    const { id, version } = this.getAppConfig();
+    const reporter = new Reporter(id, version, this.store, this.logger);
+    return await reporter.getStats(options);
+  }
+
+
+
+  // ************* PUB/SUB METHODS *************
   /**
-   * public interface to invoke an activity (trigger) by publishing an event to its topic
+   * trigger a job by publishing a payload to its assigned topic
    * @param {string} topic - for example: 'trigger.test.requested'
    * @param {Promise<Record<string, unknown>>} data 
    */
@@ -156,10 +179,9 @@ class PubSubDBService {
         au: utc
       };
       const activityHandler = new ActivityHandler(activity, data, metadata, this, context);
-      await activityHandler.process();
+      return await activityHandler.process();
     }
   }
-
   /**
    * subscribe to a topic as a read-only listener
    * 
@@ -167,16 +189,15 @@ class PubSubDBService {
    * @param callback 
    */
   sub(topic: string, callback: (data: Record<string, any>) => void) {
+    //Declarative YAML app models represent the "primary" subscription type.
     //This method represents the "secondary" subscription type and allows 
     //PubSubDB to be used as a standard fan-out event publisher with no
-    //jobs, tracking or anything else...essentially a read-only mechanism
-    //that allows callers to subscribe to events and receiving their payloads.
-
-    //Declarative YAML app models represent the "primary" subscription type
-    //and guarantee, one-time delivery of an event and its payload.
-    //Activities can and do affect the state of the app as they react to events.
+    //jobs, tracking or anything else...essentially a read-only mechanism.
   }
 
+
+
+  // ************* STORE METHODS (ACTIVITY/JOB DATA) *************
   /**
    * return a job by its id
    * @param key 

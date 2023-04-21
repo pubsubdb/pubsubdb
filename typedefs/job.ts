@@ -1,4 +1,5 @@
 type JobData = Record<string, unknown>;
+type JobsData = Record<string, unknown>;
 
 type ActivityData = {
   data: Record<string, unknown>;
@@ -32,4 +33,4 @@ type JobContext = {
   };
 };
 
-export { JobContext, JobData, JobMetadata };
+export { JobContext, JobData, JobsData, JobMetadata };

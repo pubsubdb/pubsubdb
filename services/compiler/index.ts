@@ -4,22 +4,25 @@ import * as path from 'path';
 import { PubSubDBManifest, StoreService } from '../../typedefs/pubsubdb';
 import { Validator } from './validator';
 import { Deployer } from './deployer';
+import { ILogger } from '../logger';
 
 /**
  * The compiler service converts a graph into a executable program.
  */
 class CompilerService {
   store: StoreService | null;
+  logger: ILogger;
 
-  constructor(store: StoreService) {
+  constructor(store: StoreService, logger: ILogger) {
     this.store = store;
+    this.logger = logger;
   }
 
   /**
    * verifies and plans the deployment of an app to Redis; the app is not deployed yet
    * @param path 
    */
-  async plan(path: string): Promise<void> {
+  async plan(path: string): Promise<PubSubDBManifest> {
     try {
       // 0) parse the manifest file and save fully resolved as a JSON file
       const schema = await $RefParser.dereference(path) as PubSubDBManifest;
@@ -29,6 +32,8 @@ class CompilerService {
       validator.validate(schema, this.store);
 
       // 2) todo: add a PlannerService module that will plan the deployment (what might break, drift, etc)
+
+      return schema as PubSubDBManifest
     } catch(err) {
       console.error(err);
     }
@@ -38,7 +43,7 @@ class CompilerService {
    * deploys an app to Redis; the app is not active yet
    * @param mySchemaPath 
    */
-  async deploy(mySchemaPath: string, activate = false): Promise<void> {
+  async deploy(mySchemaPath: string, activate = false): Promise<PubSubDBManifest> {
     try {
       // 0) parse the manifest file and save fully resolved as a JSON file
       const schema = await $RefParser.dereference(mySchemaPath) as PubSubDBManifest;
@@ -61,6 +66,7 @@ class CompilerService {
       if (activate) {
         await this.activate(schema.app.id, schema.app.version);
       }
+      return schema;
     } catch(err) {
       console.error(err);
     }

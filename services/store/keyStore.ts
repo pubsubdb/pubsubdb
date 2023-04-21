@@ -81,17 +81,17 @@ export { KeyStore, KeyType, KeyStoreParams, PSNS };
 //key/value namespace hierarchy
 /**
  * psdb ->                                            {hash}    pubsubdb config {version: "0.0.1", namespace: "psdb"}
- * psdb:apps:<appid> ->                               {hash}    app profile { "id": "appid", "version": "2", "versions/1": "GMT", "versions/2": "GMT"}
- * psdb:<appid>:job:<jobid> ->                        {hash}    job data
- * psdb:<appid>:job:<jobid>:act:<activityId>  ->      {hash}    job activity data (a1)
- * psdb:<appid>:job:<jobkey>:<dateTime>:stats ->      {hash}    job stats (general)
- * psdb:<appid>:job:<jobkey>:<dateTime>:stats:mdn ->  {zset}    job stats (median)
- * psdb:<appid>:job:<jobkey>:<dateTime>:stats:idx ->  {list}    job stats (index of jobid[])
- * psdb:<appid>:vrs:<version>:schemas ->              {hash}    schemas
- * psdb:<appid>:vrs:<version>:transitions ->          {hash}    subscription patterns [cache]
- * psdb:<appid>:vrs:<version>:subscriptions ->        {hash}    subscriptions [cache]
- * psdb:<appid>:vrs:<version>:hooks ->                {hash}    hook patterns [cache] (used to create a skeleton key to locate dynamic hooks in the Redis `hooks` hash)
- * psdb:<appid>:hooks ->                              {hash}    hooks (dynamic); expunged when found; never versioned (external caller has no sense of release schedules or versions)
+ * psdb:a:<appid> ->                                  {hash}    app profile { "id": "appid", "version": "2", "versions/1": "GMT", "versions/2": "GMT"}
+ * psdb:<appid>:j:<jobid> ->                          {hash}    job data
+ * psdb:<appid>:j:<jobid>:<activityId>  ->            {hash}    job activity data (a1)
+ * psdb:<appid>:s:<jobkey>:<dateTime> ->              {hash}    job stats (general)
+ * psdb:<appid>:s:<jobkey>:<dateTime>:mdn:<field/path>:<fieldvalue> ->      {zset}    job stats (median)
+ * psdb:<appid>:s:<jobkey>:<dateTime>:index:<field/path>:<fieldvalue> ->    {list}    job stats (index of jobid[])
+ * psdb:<appid>:v:<version>:activities ->             {hash}    schemas [cache]
+ * psdb:<appid>:v:<version>:transitions ->            {hash}    transitions [cache]
+ * psdb:<appid>:v:<version>:subscriptions ->          {hash}    subscriptions [cache]
+ * psdb:<appid>:hooks ->                              {hash}    hooks (rules); set at compile time
+ * psdb:<appid>:signals ->                            {hash}    dynamic signal list to hget/hdel to resolve (always self-clean); added/removed at runtime
  */
 
 

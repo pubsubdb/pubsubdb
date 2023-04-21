@@ -9,14 +9,14 @@ interface ActivityBase {
   settings?: Record<string, any>;
   dependents?: string[];
   hook?: Record<string, any>;
-  sortedActivityPosition?: number;
+  collationInt?: number;
 }
 
 interface TriggerActivity extends ActivityBase {
   type: 'trigger';
   stats?: Record<string, any>;
   job?: Record<string, any>;
-  sortedActivityIds?: string[];
+  collationKey?: number;
 }
 
 interface AwaitActivity extends ActivityBase {

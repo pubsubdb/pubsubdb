@@ -2,16 +2,18 @@ import { PubSubDBApp, PubSubDBApps, PubSubDBSettings } from '../../typedefs/pubs
 import { KeyStore, KeyStoreParams, KeyType, PSNS } from './keyStore';
 import { Cache } from './cache';
 import { StoreService } from './store';
-import { StatsType } from '../../typedefs/stats';
+import { JobStats, JobStatsRange, StatsType } from '../../typedefs/stats';
 import { SerializerService } from './serializer';
 import { AppVersion } from '../../typedefs/app';
 import { Signal } from '../../typedefs/signal';
-import { RedisClientType } from '../../typedefs/redis';
+import { RedisClientType, RedisMultiType } from '../../typedefs/redis';
+import { ILogger } from '../logger';
 
 class RedisStoreService extends StoreService {
   redisClient: any;
   cache: Cache;
   namespace: string;
+  logger: ILogger;
 
   constructor(redisClient: any) {
     super();
@@ -27,15 +29,16 @@ class RedisStoreService extends StoreService {
    * @param appId
    * @returns {Promise<{[appId: string]: PubSubDBApp}>}
    */
-  async init(namespace = PSNS, appId: string): Promise<{[appId: string]: PubSubDBApp}> {
+  async init(namespace = PSNS, appId: string, logger: ILogger): Promise<{[appId: string]: PubSubDBApp}> {
     this.namespace = namespace;
+    this.logger = logger;
     const settings = await this.getSettings(true);
     this.cache = new Cache(appId, settings);
     return await this.getApps();
   }
 
-  async getMulti(): Promise<any> {
-    return await this.redisClient.MULTI();
+  getMulti(): RedisMultiType {
+    return this.redisClient.MULTI();
   }
 
   /**
@@ -137,14 +140,17 @@ class RedisStoreService extends StoreService {
    */
   async getApp(id: string): Promise<PubSubDBApp> {
     let app = this.cache.getApp(id);
-    if (app && Object.keys(app).length > 0) {
-      return app;
-    } else {
+    if (!(app && Object.keys(app).length > 0)) {
       const params: KeyStoreParams = { appId: id };
       const key = this.mintKey(KeyType.APP, params);
-      app = await this.redisClient.HGETALL(key);
-      this.cache.setApp(id, app);
+      const sApp = await this.redisClient.HGETALL(key);
+      const app: Partial<PubSubDBApp> = {};
+      for (const field in sApp) {
+        app[field] = JSON.parse(sApp[field] as string);
+      }
+      this.cache.setApp(id, app as PubSubDBApp);
     }
+    return app;
   }
 
   async setApp(id: string, version: string): Promise<PubSubDBApp> {
@@ -248,6 +254,29 @@ class RedisStoreService extends StoreService {
       //always execute the multi if it's not passed in
       return await privateMulti.exec();
     }
+  }
+
+  async getJobStats(jobKeys: string[], config: AppVersion): Promise<JobStatsRange> {
+    const multi = this.getMulti();
+    for (const jobKey of jobKeys) {
+      const jobStatsKey = this.mintKey(KeyType.JOB_STATS_GENERAL, { appId: config.id, jobKey });
+      multi.HGETALL(jobStatsKey);
+    }
+    const results = await multi.exec();
+    const output: { [key: string]: JobStats } = {};
+    for (const [index, result] of results.entries()) {
+      const key = jobKeys[index];
+      const statsHash: unknown = result[1];
+      if (statsHash && Object.keys(statsHash).length > 0) {
+        for (const [key, val] of Object.entries(statsHash as object)) {
+          statsHash[key] = Number(val);
+        }
+        output[key] = statsHash as JobStats;
+      } else {
+        output[key] = {} as JobStats;
+      }
+    }
+    return output;
   }
 
   async updateJobStatus(jobId: string, collationKeyStatus: number, appVersion: AppVersion, multi? : any): Promise<any> {

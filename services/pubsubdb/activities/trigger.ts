@@ -35,27 +35,27 @@ class Trigger extends Activity {
 
   /**
    * trigger-specific processing of the activity
+   * @returns {Promise<string>} A promise that resolves with the job id.
    */
-  async process() {
+  async process(): Promise<string> {
     try {
       await this.createContext();
       await this.mapJobData();
       await this.mapOutputData();
-
-      //ALWAYS save the activity immediately (WILL THROW ERROR IF DUPE!)
       await this.saveActivityNX();
       
       /////// MULTI ///////
-      const multi = await this.pubsubdb.store.getMulti();
+      const multi = this.pubsubdb.store.getMulti();
       await this.saveActivity(multi);
       await this.saveJob(multi);
       await this.saveStats(multi);
       await multi.exec();
       /////// MULTI ///////
 
-      await this.pub();
+      this.pub();
+      return this.context.metadata.jid;
     } catch (error) {
-      // TODO: what is the policy for each of the following? for now rethrowing all errors
+      this.logger.error('trigger.process:error', error);
       if (error instanceof DuplicateActivityError) {
       } else if (error instanceof RestoreJobContextError) {
       } else if (error instanceof MapInputDataError) {
@@ -74,20 +74,20 @@ class Trigger extends Activity {
    */
   async createContext(): Promise<void> {
     const utc = new Date().toISOString();
-    const appConfig = this.pubsubdb.getAppConfig();
+    const { id, version } = this.pubsubdb.getAppConfig();
     this.context = {
       metadata: {
         ...this.metadata,
-        app: appConfig.id,
-        vrs: appConfig.version,
+        app: id,
+        vrs: version,
         jid: null,
         key: null,
         jc: utc,
         ju: utc,
         ts: this.getTimeSeriesStamp(),
-        js: this.createCollationKey() - this.getActivitySubtractionValue(3),
+        js: this.getJobStatus(),
       },
-      data: {}, //job data will be added in the next step if it exists
+      data: {},
       [this.metadata.aid]: { 
         input: { data: this.data },
         output: { data: {} },
@@ -95,28 +95,20 @@ class Trigger extends Activity {
         errors: { data: {} },
        },
     };
-    //must first initialize the job context before we can get the job id and key
+
     this.context.metadata.jid = await this.getJobId();
     this.context.metadata.key = await this.getJobKey();
   }
 
   /**
-   * alphabetically sort the activities by their ID (ascending) ["a1", "a2", "a3", ...]
-   * and then bind the sorted array to the trigger activity. This is used by the trigger
-   * at runtime to create 15-digit collation integer (99999999999) that can be used to track
-   * the status of the job at the level of the individual activity. A collation value of
-   * 899000000000000 means that the first activity (assume 'a1') is running and the others
-   * are still pending. Remember that this is alphabetical, so it is merely coincidence that
-   * the value was `899*` and not `989*` or `998*`.
-   * @returns {number} A number that represents the collation key for the job.
+   * every job starts out with the trigger in a completed state (6) which
+   * is why this method multiplies the collation int by `3` (9 - 3 = 6).
+   * 
+   * @see CollationService
+   * @returns {number} 1 - 15 digit integer multiplied by 3 (3, 30, 300, ...)
    */
-  createCollationKey(): number {
-    const length = this.config.sortedActivityIds.length;
-    const val = Math.pow(10, length) - 1; //e.g, 999, 99999, 9999999, etc
-    const numberAsString = val.toString();
-    const targetLength = 15;
-    const paddedNumber = numberAsString + '0'.repeat(targetLength - length);
-    return parseInt(paddedNumber, 10);
+  getJobStatus(): number {
+    return this.config.collationKey - (this.config.collationInt * 3);
   }
 
   /**

@@ -1,6 +1,6 @@
 import { createClient, RedisClientOptions } from 'redis';
-import { RedisClientType } from '../typedefs/redis';
 import config from '../config';
+import { RedisClientType, RedisMultiType } from '../typedefs/redis';
 
 class RedisConnection {
   private connection: RedisClientType | null = null;
@@ -71,4 +71,4 @@ class RedisConnection {
   }
 }
 
-export { RedisConnection, RedisClientType };
+export { RedisConnection, RedisClientType, RedisMultiType };

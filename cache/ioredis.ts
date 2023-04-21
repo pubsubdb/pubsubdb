@@ -1,5 +1,6 @@
 import { Redis, RedisOptions as RedisClientOptions } from 'ioredis';
 import config from '../config';
+import { RedisClientType, RedisMultiType } from '../typedefs/ioredis';
 
 class RedisConnection {
   private connection: any | null = null;
@@ -23,7 +24,6 @@ class RedisConnection {
     if (!this.connection) {
       throw new Error('Redis client is not connected');
     }
-
     return this.connection;
   }
 
@@ -32,7 +32,6 @@ class RedisConnection {
       await this.connection.quit();
       this.connection = null;
     }
-
     if (this.id) {
       RedisConnection.instances.delete(this.id);
     }
@@ -42,7 +41,6 @@ class RedisConnection {
     if (this.instances.has(id)) {
       return this.instances.get(id)!;
     }
-
     const instance = new RedisConnection();
     const mergedOptions = { ...this.clientOptions, ...options };
     instance.connection = await instance.createConnection(mergedOptions);
@@ -57,4 +55,4 @@ class RedisConnection {
   }
 }
 
-export { RedisConnection, Redis as RedisClientType };
+export { RedisConnection, RedisClientType, RedisMultiType };

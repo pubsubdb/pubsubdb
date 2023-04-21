@@ -4,29 +4,46 @@ import fastifyBasicAuth from '@fastify/basic-auth';
 import fastifyMultipart from '@fastify/multipart';
 import { RedisConnection } from '../cache/ioredis';
 import { registerAppRoutes } from './routes';
+import { IORedisStore, PubSubDB, PubSubDBConfig } from '../index';
 
+//init server and plugins
 const server = fastify({ logger: true });
-
-// Register Fastify plugins
 server.register(fastifyAuth);
 server.register(fastifyBasicAuth, { validate: async (username, password, req, reply) => { /* Your validation logic here */ } });
 server.register(fastifyMultipart, { /* Multipart options here */ });
 
-// Your routes and other configurations here
-registerAppRoutes(server);
+//init redis connection and pubsubdb interface
+const initPubSubDB = async () => {
+  const redisConnection = await RedisConnection.getConnection('instance1');
+  const redisClient = await redisConnection.getClient();
+  const redisStore = new IORedisStore(redisClient);
+  const config: PubSubDBConfig = {
+    appId: 'test-app',
+    namespace: 'psdb',
+    store: redisStore
+  };
+  //deploy app version 1 (it doesn't break anything if it's already deployed)
+  const pubSubDB = await PubSubDB.init(config);
+  await pubSubDB.plan('/app/seeds/pubsubdb.yaml');
+  await pubSubDB.deploy('/app/seeds/pubsubdb.yaml');
+  await pubSubDB.activate('1');
+  return pubSubDB;
+};
 
 // Start the server
 const start = async () => {
+  //init pubsubdb
+  const pubsubdb = await initPubSubDB();
+
+  //init the http routes
+  registerAppRoutes(server, pubsubdb);
+
+  //start server on default port
   try {
     await server.listen({ port: 3000, path: '0.0.0.0' });
     console.log('Server is running on port 3000');
-    const redisConnection = await RedisConnection.getConnection('instance1');
-    const redisClient = await redisConnection.getClient();
-    await redisClient.set('test:key', 'test value');
-    const response = redisClient.get('test:key');
-    console.log('response', { response: await response });
 
-    // shut down server
+    // server shutdown/cleanup redis
     function shutdown() {
       server.close(() => {
         RedisConnection.disconnectAll();

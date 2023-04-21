@@ -1,13 +1,16 @@
 import { AppVersion } from '../../typedefs/app';
 import { Signal } from '../../typedefs/signal';
-import { StatsType } from '../../typedefs/stats';
+import { JobStatsRange, StatsType } from '../../typedefs/stats';
+import { ILogger } from '../logger';
 import { KeyStore, KeyStoreParams } from './keyStore';
+import { ChainableCommander } from 'ioredis';
+import { RedisMultiType } from '../../typedefs/redis';
 
 abstract class StoreService {
-  abstract init(namespace: string, appId: string): Promise<any>;
+  abstract init(namespace: string, appId: string, logger: ILogger): Promise<any>;
   abstract getSettings(bCreate?: boolean): Promise<any>;
   abstract setSettings(manifest: Record<string, unknown>): Promise<any>;
-  abstract getMulti(): Promise<any>;
+  abstract getMulti(): RedisMultiType | ChainableCommander;
   abstract mintKey(type: KeyStore, params: KeyStoreParams): string;
   abstract getApps(): Promise<{[appId: string]: any}>;
   abstract getApp(appId: string): Promise<any>;
@@ -15,6 +18,7 @@ abstract class StoreService {
   abstract activateAppVersion(appId: string, version: string): Promise<any>;
   abstract setJob(jobId: any, data: Record<string, unknown>, metadata: Record<string, unknown>, config: AppVersion, multi? : any): Promise<any|string>
   abstract setJobStats(jobKey: string, jobId: string, dateTime: string, stats: StatsType, appVersion: AppVersion, multi? : any): Promise<any|string>
+  abstract getJobStats(jobKeys: string[], config: AppVersion): Promise<JobStatsRange>
   abstract updateJobStatus(jobId: string, collationKeyStatus: number, appVersion: AppVersion, multi? : any): Promise<any>
   abstract getJobMetadata(jobId: string, config: AppVersion): Promise<any>;
   abstract getJobData(jobId: string, config: AppVersion): Promise<any>;
