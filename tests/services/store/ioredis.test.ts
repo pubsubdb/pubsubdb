@@ -2,6 +2,7 @@ import { RedisConnection, RedisClientType } from '../../../cache/ioredis';
 import { KeyType, PSNS } from '../../../services/store/keyStore';
 import { IORedisStoreService } from '../../../services/store/ioredis';
 import { StatsType } from '../../../typedefs/stats';
+import { LoggerService } from '../../../services/logger';
 
 describe('IORedisStoreService', () => {
   const appConfig = { id: 'test-app', version: '1' };
@@ -14,7 +15,7 @@ describe('IORedisStoreService', () => {
     await redisClient.flushdb();
     redisStoreService = new IORedisStoreService(redisClient);
     const appConfig = { id: 'APP_ID', version: 'APP_VERSION' };
-    await redisStoreService.init(PSNS, appConfig.id);
+    await redisStoreService.init(PSNS, appConfig.id, new LoggerService());
   });
 
   beforeAll(async () => {

@@ -2,18 +2,21 @@ import { PubSubDBApp, PubSubDBApps, PubSubDBSettings } from '../../typedefs/pubs
 import { KeyStore, KeyStoreParams, KeyType, PSNS } from './keyStore';
 import { Cache } from './cache';
 import { StoreService } from './store';
-import { StatsType } from '../../typedefs/stats';
+import { JobStats, JobStatsRange, StatsType } from '../../typedefs/stats';
 import { SerializerService } from './serializer';
 import { AppVersion } from '../../typedefs/app';
 import { Signal } from '../../typedefs/signal';
-import { RedisClientType } from '../../typedefs/redis';
+import { ILogger } from '../logger';
+import { RedisClientType } from '../../cache/ioredis';
+import { ChainableCommander } from 'ioredis';
 
 class IORedisStoreService extends StoreService {
-  redisClient: any;
+  redisClient: RedisClientType;
   cache: Cache;
   namespace: string;
+  logger: ILogger;
 
-  constructor(redisClient: any) {
+  constructor(redisClient: RedisClientType) {
     super();
     this.redisClient = redisClient;
   }
@@ -27,15 +30,16 @@ class IORedisStoreService extends StoreService {
    * @param appId
    * @returns {Promise<{[appId: string]: PubSubDBApp}>}
    */
-  async init(namespace = PSNS, appId: string): Promise<{[appId: string]: PubSubDBApp}> {
+  async init(namespace = PSNS, appId: string, logger: ILogger): Promise<{[appId: string]: PubSubDBApp}> {
     this.namespace = namespace;
+    this.logger = logger;
     const settings = await this.getSettings(true);
     this.cache = new Cache(appId, settings);
     return await this.getApps();
   }
 
-  async getMulti(): Promise<any> {
-    return await this.redisClient.multi();
+  getMulti(): ChainableCommander {
+    return this.redisClient.multi();
   }
 
   /**
@@ -110,7 +114,7 @@ class IORedisStoreService extends StoreService {
       // Create multi to fetch app data
       const multi = this.redisClient.multi();
       for (const appKey of appKeys) {
-        multi.hGetAll(appKey);
+        multi.hgetall(appKey);
       }
       // Execute multi and process results
       const multiResults = await multi.exec();
@@ -120,7 +124,7 @@ class IORedisStoreService extends StoreService {
           throw err;
         }
         const appId = appKeys[index];
-        apps[appId] = JSON.parse(appData) as PubSubDBApp;
+        apps[appId] = JSON.parse(appData as string) as PubSubDBApp;
       }
       this.cache.setApps(apps);
     }
@@ -135,14 +139,17 @@ class IORedisStoreService extends StoreService {
    */
   async getApp(id: string): Promise<PubSubDBApp> {
     let app = this.cache.getApp(id);
-    if (app && Object.keys(app).length > 0) {
-      return app;
-    } else {
+    if (!(app && Object.keys(app).length > 0)) {
       const params: KeyStoreParams = { appId: id };
       const key = this.mintKey(KeyType.APP, params);
-      app = await this.redisClient.hgetall(key);
-      this.cache.setApp(id, app);
+      const sApp = await this.redisClient.hgetall(key);
+      const app: Partial<PubSubDBApp> = {};
+      for (const field in sApp) {
+        app[field] = JSON.parse(sApp[field] as string);
+      }
+      this.cache.setApp(id, app as PubSubDBApp);
     }
+    return app;
   }
 
   async setApp(id: string, version: string): Promise<PubSubDBApp> {
@@ -248,6 +255,28 @@ class IORedisStoreService extends StoreService {
     }
   }
 
+  async getJobStats(jobKeys: string[], config: AppVersion): Promise<JobStatsRange> {
+    const multi = this.getMulti();
+    for (const jobKey of jobKeys) {
+      multi.hgetall(jobKey);
+    }
+    const results = await multi.exec();
+    const output: { [key: string]: JobStats } = {};
+    for (const [index, result] of results.entries()) {
+      const key = jobKeys[index];
+      const statsHash: unknown = result[1];
+      if (statsHash && Object.keys(statsHash).length > 0) {
+        for (const [key, val] of Object.entries(statsHash as object)) {
+          statsHash[key] = Number(val);
+        }
+        output[key] = statsHash as JobStats;
+      } else {
+        output[key] = {} as JobStats;
+      }
+    }
+    return output;
+  }
+
   async updateJobStatus(jobId: string, collationKeyStatus: number, appVersion: AppVersion, multi? : any): Promise<any> {
     const jobKey = this.mintKey(KeyType.JOB_DATA, { appId: appVersion.id, jobId });
     await (multi || this.redisClient).hincrbyfloat(jobKey, 'm/js', collationKeyStatus);
@@ -275,6 +304,7 @@ class IORedisStoreService extends StoreService {
     const metadataFields = ['m/aid', 'm/atp', 'm/stp', 'm/jc', 'm/ju', 'm/jid', 'm/key', 'm/ts', 'm/js'];
     const params: KeyStoreParams = { appId: appVersion.id, jobId };
     const key = this.mintKey(KeyType.JOB_DATA, params);
+    // @ts-ignore
     const arrMetadata = await this.redisClient.hmget(key, metadataFields);
     //iterate to create an object where the keys are the metadata fields and values are jobMetadata
     const objMetadata = metadataFields.reduce((acc, field, index) => {
@@ -365,6 +395,7 @@ class IORedisStoreService extends StoreService {
     const metadataFields = ['m/aid', 'm/atp', 'm/stp', 'm/ac', 'm/au', 'm/jid', 'm/key'];
     const params: KeyStoreParams = { appId: appVersion.id, jobId, activityId };
     const key = this.mintKey(KeyType.JOB_ACTIVITY_DATA, params);
+    // @ts-ignore
     const arrMetadata = await this.redisClient.hmget(key, metadataFields);
     //iterate to create an object where the keys are the metadata fields and values are jobMetadata
     const objMetadata = metadataFields.reduce((acc, field, index) => {
@@ -474,7 +505,6 @@ class IORedisStoreService extends StoreService {
     });
     const response = await this.redisClient.hmset(key, _subscriptions);
     this.cache.setSubscriptions(appVersion.id, appVersion.version, subscriptions);
-    return response;
   }
 
   async getSubscriptions(appVersion: { id: string; version: string }): Promise<Record<string, string>> {
@@ -560,9 +590,9 @@ class IORedisStoreService extends StoreService {
 
   async getSignal(topic: string, resolved: string, appVersion: AppVersion): Promise<Signal | undefined> {
     const key = this.mintKey(KeyType.SIGNALS, { appId: appVersion.id });
-    const signal = await this.redisClient.HGET(key, `${topic}:${resolved}`);
-    return signal ? signal : undefined;
-    //todo: should delete any signal that is returned
+    //todo: MULTI: HGET/HDEL to ensure a signal is only used once
+    const signal = await this.redisClient.hget(key, `${topic}:${resolved}`);
+    return signal ? { topic, resolved, jobId: signal } : undefined;
   }
 
 }

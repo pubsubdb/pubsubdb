@@ -2,6 +2,7 @@ import { IORedisStoreService as IORedisStore } from "../../../services/store/ior
 import { RedisConnection, RedisClientType } from "../../../cache/ioredis";
 import { CompilerService } from "../../../services/compiler";
 import { PSNS } from "../../../services/store/keyStore";
+import { LoggerService } from "../../../services/logger";
 
 describe("Compiler Service", () => {
   const appConfig = { id: 'test-app', version: '1' };
@@ -16,7 +17,7 @@ describe("Compiler Service", () => {
     redisClient.flushdb();
     redisStore = new IORedisStore(redisClient);
     //the store must be initialized before the compiler service can use it (engine typically does this)
-    await redisStore.init(PSNS, appConfig.id);
+    await redisStore.init(PSNS, appConfig.id, new LoggerService());
   });
 
   afterAll(async () => {
@@ -25,21 +26,21 @@ describe("Compiler Service", () => {
 
   describe("plan()", () => {
     it("should plan an app deployment, using a path", async () => {
-      const compilerService = new CompilerService(redisStore);
+      const compilerService = new CompilerService(redisStore, new LoggerService());
       await compilerService.plan('/app/seeds/pubsubdb.yaml');
     });
   });
 
   describe("deploy()", () => {
     it("should deploy an app to Redis, using a path", async () => {
-      const compilerService = new CompilerService(redisStore);
+      const compilerService = new CompilerService(redisStore, new LoggerService());
       await compilerService.deploy('/app/seeds/pubsubdb.yaml');
     });
   });
 
   describe("activate()", () => {
     it("should activate a deployed app version", async () => {
-      const compilerService = new CompilerService(redisStore);
+      const compilerService = new CompilerService(redisStore, new LoggerService());
       await compilerService.activate('test-app', '1');
     });
   });

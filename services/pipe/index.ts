@@ -1,10 +1,6 @@
 import FUNCTIONS from './functions'
-
 import { PipeItem, PipeItems, Pipe as PipeType } from '../../typedefs/pipe';
-
-interface JobData {
-  [key: string]: any;
-}
+import { JobData, JobsData } from '../../typedefs/job';
 
 class Pipe {
   rules: PipeType;
@@ -57,7 +53,7 @@ class Pipe {
         const resolvedValue = Pipe.resolveFunction(functionName as string)(...resolvedPriorRow);
         //resolve remaining cells in row and return concatenated with resolvedValue
         return [resolvedValue].concat(this.processCells([...params]));
-        }
+      }
     }
   }
 
@@ -95,10 +91,9 @@ class Pipe {
     }
   }
 
-  private getNestedProperty(obj: JobData, path: string): any {
+  private getNestedProperty(obj: JobsData|unknown, path: string): any {
     const pathParts = path.split('.');
     let current = obj;
-
     for (const part of pathParts) {
       if (current === null || typeof current !== 'object' || !current.hasOwnProperty(part)) {
         return undefined;
