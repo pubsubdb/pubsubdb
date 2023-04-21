@@ -120,7 +120,6 @@ class IORedisStoreService extends StoreService {
       const multiResults = await multi.exec();
       apps = {};
       for (const [index, [err, appData]] of multiResults.entries()) {
-        console.log('appData~!!!!!', appData, typeof appData);
         if (err) {
           throw err;
         }
