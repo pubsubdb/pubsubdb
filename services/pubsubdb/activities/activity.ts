@@ -116,7 +116,7 @@ class Activity {
         jid: jobId,
         key: this.context.metadata.key
       },
-      this.pubsubdb.getAppConfig(),
+      await this.pubsubdb.getAppConfig(),
       multi,
     );
   }
@@ -129,7 +129,7 @@ class Activity {
     await this.pubsubdb.store.updateJobStatus(
       this.context.metadata.jid,
       -this.config.collationInt,
-      this.pubsubdb.getAppConfig(),
+      await this.pubsubdb.getAppConfig(),
       multi
     );
   }
@@ -161,7 +161,7 @@ class Activity {
         resolved: this.context.metadata.jid,
         jobId: this.context.metadata.jid,
       }
-      await this.pubsubdb.store.setSignal(signal, this.pubsubdb.getAppConfig(), multi);
+      await this.pubsubdb.store.setSignal(signal, await this.pubsubdb.getAppConfig(), multi);
     }
   }
 }

@@ -1,33 +1,33 @@
-import { PubSubDBApp, PubSubDBApps, PubSubDBSettings } from '../../typedefs/pubsubdb';
-import { KeyStore, KeyStoreParams, KeyType, PSNS } from './keyStore';
-import { Cache } from './cache';
-import { StoreService } from './store';
-import { JobStats, JobStatsRange, StatsType } from '../../typedefs/stats';
-import { SerializerService } from './serializer';
-import { AppVersion } from '../../typedefs/app';
-import { Signal } from '../../typedefs/signal';
-import { RedisClientType, RedisMultiType } from '../../typedefs/redis';
-import { ILogger } from '../logger';
+import { Cache } from '../cache';
+import { StoreService } from '../index';
+import { KeyService, KeyStoreParams, KeyType, PSNS } from '../key';
+import { SerializerService } from '../serializer';
+import { AppVersion } from '../../../typedefs/app';
+import { SubscriptionCallback } from '../../../typedefs/conductor';
+import { PubSubDBApp, PubSubDBSettings } from '../../../typedefs/pubsubdb';
+import { RedisClientType, RedisMultiType } from '../../../typedefs/redis';
+import { Signal } from '../../../typedefs/signal';
+import { JobStats, JobStatsRange, StatsType } from '../../../typedefs/stats';
+import { ILogger } from '../../logger';
 
 class RedisStoreService extends StoreService {
-  redisClient: any;
+  redisClient: RedisClientType;
+  redisSubscriber: RedisClientType;
   cache: Cache;
   namespace: string;
+  subscriptionHandler: SubscriptionCallback;
   logger: ILogger;
 
-  constructor(redisClient: any) {
+  constructor(redisClient: RedisClientType, redisSubscriber?: RedisClientType) {
     super();
     this.redisClient = redisClient;
+    //optional subscriber client (if running local with docker, this is optional)
+    this.redisSubscriber = redisSubscriber;
   }
 
   /**
-   * only the engine can call this method; it initializes the local cache. the developer
-   * must have the opportunity to set the cache namespace by init'ing the PSDB instance.
-   * That instance will call this mathod, providing the necessary namespace override
-   * and ensuring no collisions.
-   * @param namespace
-   * @param appId
-   * @returns {Promise<{[appId: string]: PubSubDBApp}>}
+   * the user calls the constructor to provide the redis instance(s);
+   * the engine calls this method to initialize the store
    */
   async init(namespace = PSNS, appId: string, logger: ILogger): Promise<{[appId: string]: PubSubDBApp}> {
     this.namespace = namespace;
@@ -39,7 +39,8 @@ class RedisStoreService extends StoreService {
   }
 
   getMulti(): RedisMultiType {
-    return this.redisClient.MULTI();
+    const multi = this.redisClient.MULTI();
+    return multi as unknown as RedisMultiType;
   }
 
   /**
@@ -50,7 +51,7 @@ class RedisStoreService extends StoreService {
    */
   mintKey(type: KeyType, params: KeyStoreParams): string {
     if (!this.namespace) throw new Error('namespace not set');
-    return KeyStore.mintKey(this.namespace, type, params);
+    return KeyService.mintKey(this.namespace, type, params);
   }
 
   /**
@@ -63,9 +64,6 @@ class RedisStoreService extends StoreService {
   /**
    * get the pubsubdb global settings ({hash}) from the store; 
    * the settings reveal information about the namespace, the version of the pubsubdb
-   * 
-   * @param {boolean} bCreate - if true, create the settings if they don't exist
-   * @returns {Promise<PubSubDBSettings>}
    */
   async getSettings(bCreate = false): Promise<PubSubDBSettings> {
     let settings = this.cache?.getSettings();
@@ -73,7 +71,7 @@ class RedisStoreService extends StoreService {
       return settings;
     } else {
       if (bCreate) {
-        const packageJson = await import('../../package.json');
+        const packageJson = await import('../../../package.json');
         const version: string = packageJson.version;
         settings = { namespace: PSNS, version } as PubSubDBSettings;
         await this.setSettings(settings);
@@ -84,10 +82,7 @@ class RedisStoreService extends StoreService {
   }
 
   /**
-   * sets the pubsubdb global settings ({hash}) in the store;
-   * 
-   * @param {any} manifest
-   * @returns {Promise<any>}
+   * sets the pubsubdb global settings ({hash}) in the store
    */
   async setSettings(manifest: PubSubDBSettings): Promise<any> {
     const params: KeyStoreParams = {};
@@ -95,56 +90,16 @@ class RedisStoreService extends StoreService {
     return await this.redisClient.HSET(key, manifest);
   }
 
-  async getApps(): Promise<{[appId: string]: PubSubDBApp}> {
-    let apps: PubSubDBApps = this.cache.getApps();
-    if (apps && Object.keys(apps).length > 0) {
-      return apps;
-    } else {
-      const key = this.mintKey(KeyType.APP, {});
-      const appKeys: string[] = [];
-      let cursor = '0', tuples = [];
-      // Collect app keys using hScan
-      do {
-        const val = await this.redisClient.HSCAN(key, cursor) as { cursor: string, tuples: string[] };
-        cursor = val.cursor;
-        tuples = val.tuples;
-        for (let i = 0; i < tuples.length; i += 2) {
-          const appId = tuples[i];
-          appKeys.push(appId);
-        }
-      } while (Number(cursor) !== 0);
-      // Create multi to fetch app data
-      const multi = this.redisClient.MULTI();
-      for (const appKey of appKeys) {
-        multi.hGetAll(appKey);
-      }
-      // Execute multi and process results
-      const multiResults = await multi.exec();
-      apps = {};
-      for (const [index, [err, appData]] of multiResults.entries()) {
-        if (err) {
-          throw err;
-        }
-        const appId = appKeys[index];
-        apps[appId] = JSON.parse(appData) as PubSubDBApp;
-      }
-      this.cache.setApps(apps);
-    }
-    return apps;
-  }  
-
   /**
-   * gets a specific app manifest revealing all versions and settings and status for
-   * the app.
-   * 
-   * @returns {Promise<any>}
+   * gets a specific app manifest revealing all versions and settings for the app
    */
-  async getApp(id: string): Promise<PubSubDBApp> {
+  async getApp(id: string, refresh = false): Promise<PubSubDBApp> {
     let app: Partial<PubSubDBApp> = this.cache.getApp(id);
-    if (!(app && Object.keys(app).length > 0)) {
+    if (refresh || !(app && Object.keys(app).length > 0)) {
       const params: KeyStoreParams = { appId: id };
       const key = this.mintKey(KeyType.APP, params);
       const sApp = await this.redisClient.HGETALL(key);
+      if (!sApp) return null;
       app = {};
       for (const field in sApp) {
         try {
@@ -167,7 +122,7 @@ class RedisStoreService extends StoreService {
       version,
       [versionId]: `deployed:${new Date().toISOString()}`,
     };
-    await this.redisClient.HSET(key, payload);
+    await this.redisClient.HSET(key, payload as any);
     this.cache.setApp(id, payload);
     return payload;
   }
@@ -195,7 +150,7 @@ class RedisStoreService extends StoreService {
       Object.entries(payload).forEach(([key, value]) => {
         payload[key] = JSON.stringify(value);
       });
-      return await this.redisClient.HSET(key, payload);
+      return await this.redisClient.HSET(key, payload as any);
     }
     throw new Error(`Version ${version} does not exist for app ${id}`);
   }
@@ -218,7 +173,7 @@ class RedisStoreService extends StoreService {
       version,
       [`versions/${version}`]: new Date().toISOString()
     };
-    return await this.redisClient.HSET(key, payload);
+    return await this.redisClient.HSET(key, payload as any);
   }
 
   /**
@@ -370,7 +325,7 @@ class RedisStoreService extends StoreService {
   async setActivity(jobId: string, activityId: string, data: Record<string, unknown>, metadata: Record<string, unknown>, appVersion: AppVersion, multi? : RedisClientType): Promise<RedisClientType|string>  {
     const hashKey = this.mintKey(KeyType.JOB_ACTIVITY_DATA, { appId: appVersion.id, jobId, activityId });
     const hashData = SerializerService.flattenHierarchy({ m: metadata, d: data});
-    const response = await (multi || this.redisClient).HSET(hashKey, hashData);
+    const response = await (multi || this.redisClient).HSET(hashKey, hashData as any);
     return multi || activityId;
   }
 
@@ -510,7 +465,7 @@ class RedisStoreService extends StoreService {
     });
     const response = await this.redisClient.HSET(key, _subscriptions);
     this.cache.setSubscriptions(appVersion.id, appVersion.version, subscriptions);
-    return response;
+    //return response as any;
   }
 
   async getSubscriptions(appVersion: { id: string; version: string }): Promise<Record<string, string>> {
@@ -597,8 +552,32 @@ class RedisStoreService extends StoreService {
   async getSignal(topic: string, resolved: string, appVersion: AppVersion): Promise<Signal | undefined> {
     const key = this.mintKey(KeyType.SIGNALS, { appId: appVersion.id });
     const signal = await this.redisClient.HGET(key, `${topic}:${resolved}`);
-    return signal ? signal : undefined;
-    //todo: should delete any signal that is returned
+    return signal ? signal as unknown as Signal : undefined;
+    //TODO: DELETE all signals that are found (self-clean in a single multi call)
+  }
+
+  async subscribe(keyType: KeyType.CONDUCTOR, subscriptionHandler: SubscriptionCallback, appVersion: AppVersion): Promise<void> {
+    if (this.redisSubscriber) {
+      const self = this;
+      const topic = this.mintKey(keyType, { appId: appVersion.id });
+      await this.redisSubscriber.subscribe(topic, (message) => {
+        try {
+          const payload = JSON.parse(message);
+          subscriptionHandler(topic, payload);
+        } catch (e) {
+          self.logger.error(`Error parsing message: ${message}`, e);
+        }
+      });
+    }
+  }
+
+  async unsubscribe(topic: string, appVersion: AppVersion): Promise<void> {
+    await this.redisSubscriber?.unsubscribe(topic);
+  }
+
+  async publish(keyType: KeyType.CONDUCTOR, message: Record<string, any>, appVersion: AppVersion): Promise<void> {
+    const topic = this.mintKey(keyType, { appId: appVersion.id });
+    this.redisClient.publish(topic, JSON.stringify(message));
   }
 
 }

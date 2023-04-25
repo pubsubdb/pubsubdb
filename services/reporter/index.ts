@@ -1,6 +1,6 @@
 import { GetStatsOptions, StatsResponse, AggregatedData, Measure, Segment, JobStatsRange } from '../../typedefs/stats';
 import { ILogger } from '../logger';
-import { StoreService as Store } from '../store/store';
+import { StoreService as Store } from '../store';
 
 class ReporterService {
   private appId: string;

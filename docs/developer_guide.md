@@ -492,7 +492,7 @@ import { PubSubDB, IORedisStore } from '@pubsubdb/pubsubdb';
 
 const pubSubDB = PubSubDB.init({ ... });
 
-const stats = pubSubDB.getJobStatistics('order.approval.price.requested', {
+const stats = pubSubDB.getJobStats('order.approval.price.requested', {
   key: 'widgetA',
   granularity: '1h',
   range: '24h',

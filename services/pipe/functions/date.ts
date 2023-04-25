@@ -1,4 +1,35 @@
+type DateInput = Date | string | number;
+
 class DateHandler {
+
+  /**
+   * It is so common in mapping operations to use a string (ISO) date as input. This helper
+   * method allows for a more-concise mapping ruleset by avoiding date initialization boilerplate
+   * code and instead handles the ISO, Milliseconds, and ECMAScript Date input types.
+   * @param input 
+   * @returns 
+   */
+  static getDateInstance(input: DateInput): Date {
+    const ISO_REGEX = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z)?$/;
+
+    if (typeof input === 'string') {
+      if (ISO_REGEX.test(input)) {
+        return new Date(input);
+      }
+
+      const milliseconds = parseInt(input, 10);
+      if (!isNaN(milliseconds)) {
+        return new Date(milliseconds);
+      }
+    } else if (input instanceof Date) {
+      return input;
+    } else if (typeof input === 'number') {
+      return new Date(input);
+    }
+
+    throw new Error("Invalid date format");
+  }
+
   fromISOString(isoString: string): Date {
     return new Date(isoString);
   }
@@ -11,171 +42,171 @@ class DateHandler {
     return Date.parse(dateString);
   }
 
-  getDate(date: Date): number {
-    return date.getDate();
+  getDate(date: DateInput): number {
+    return DateHandler.getDateInstance(date).getDate();
   }
 
-  getDay(date: Date): number {
-    return date.getDay();
+  getDay(date: DateInput): number {
+    return DateHandler.getDateInstance(date).getDay();
   }
 
-  getFullYear(date: Date): number {
-    return date.getFullYear();
+  getFullYear(date: DateInput): number {
+    return DateHandler.getDateInstance(date).getFullYear();
   }
 
-  getHours(date: Date): number {
-    return date.getHours();
+  getHours(date: DateInput): number {
+    return DateHandler.getDateInstance(date).getHours();
   }
 
-  getMilliseconds(date: Date): number {
-    return date.getMilliseconds();
+  getMilliseconds(date: DateInput): number {
+    return DateHandler.getDateInstance(date).getMilliseconds();
   }
 
-  getMinutes(date: Date): number {
-    return date.getMinutes();
+  getMinutes(date: DateInput): number {
+    return DateHandler.getDateInstance(date).getMinutes();
   }
 
-  getMonth(date: Date): number {
-    return date.getMonth();
+  getMonth(date: DateInput): number {
+    return DateHandler.getDateInstance(date).getMonth();
   }
 
-  getSeconds(date: Date): number {
-    return date.getSeconds();
+  getSeconds(date: DateInput): number {
+    return DateHandler.getDateInstance(date).getSeconds();
   }
 
-  getTime(date: Date): number {
-    return date.getTime();
+  getTime(date: DateInput): number {
+    return DateHandler.getDateInstance(date).getTime();
   }
 
-  getTimezoneOffset(date: Date): number {
-    return date.getTimezoneOffset();
+  getTimezoneOffset(date: DateInput): number {
+    return DateHandler.getDateInstance(date).getTimezoneOffset();
   }
 
-  getUTCDate(date: Date): number {
-    return date.getUTCDate();
+  getUTCDate(date: DateInput): number {
+    return DateHandler.getDateInstance(date).getUTCDate();
   }
 
-  getUTCDay(date: Date): number {
-    return date.getUTCDay();
+  getUTCDay(date: DateInput): number {
+    return DateHandler.getDateInstance(date).getUTCDay();
   }
 
-  getUTCFullYear(date: Date): number {
-    return date.getUTCFullYear();
+  getUTCFullYear(date: DateInput): number {
+    return DateHandler.getDateInstance(date).getUTCFullYear();
   }
 
-  getUTCHours(date: Date): number {
-    return date.getUTCHours();
+  getUTCHours(date: DateInput): number {
+    return DateHandler.getDateInstance(date).getUTCHours();
   }
 
-  getUTCMilliseconds(date: Date): number {
-    return date.getUTCMilliseconds();
+  getUTCMilliseconds(date: DateInput): number {
+    return DateHandler.getDateInstance(date).getUTCMilliseconds();
   }
 
-  getUTCMinutes(date: Date): number {
-    return date.getUTCMinutes();
+  getUTCMinutes(date: DateInput): number {
+    return DateHandler.getDateInstance(date).getUTCMinutes();
   }
 
-  getUTCMonth(date: Date): number {
-    return date.getUTCMonth();
+  getUTCMonth(date: DateInput): number {
+    return DateHandler.getDateInstance(date).getUTCMonth();
   }
 
-  getUTCSeconds(date: Date): number {
-    return date.getUTCSeconds();
+  getUTCSeconds(date: DateInput): number {
+    return DateHandler.getDateInstance(date).getUTCSeconds();
   }
 
-  setMilliseconds(date: Date, ms: number): number {
-    return date.setMilliseconds(ms);
+  setMilliseconds(date: DateInput, ms: number): number {
+    return DateHandler.getDateInstance(date).setMilliseconds(ms);
   }
 
-  setMinutes(date: Date, minutes: number, seconds?: number, ms?: number): number {
-    return date.setMinutes(minutes, seconds, ms);
+  setMinutes(date: DateInput, minutes: number, seconds?: number, ms?: number): number {
+    return DateHandler.getDateInstance(date).setMinutes(minutes, seconds, ms);
   }
 
-  setMonth(date: Date, month: number, day?: number): number {
-    return date.setMonth(month, day);
+  setMonth(date: DateInput, month: number, day?: number): number {
+    return DateHandler.getDateInstance(date).setMonth(month, day);
   }
 
-  setSeconds(date: Date, seconds: number, ms?: number): number {
-    return date.setSeconds(seconds, ms);
+  setSeconds(date: DateInput, seconds: number, ms?: number): number {
+    return DateHandler.getDateInstance(date).setSeconds(seconds, ms);
   }
 
-  setTime(date: Date, time: number): number {
-    return date.setTime(time);
+  setTime(date: DateInput, time: number): number {
+    return DateHandler.getDateInstance(date).setTime(time);
   }
 
-  setUTCDate(date: Date, day: number): number {
-    return date.setUTCDate(day);
+  setUTCDate(date: DateInput, day: number): number {
+    return DateHandler.getDateInstance(date).setUTCDate(day);
   }
 
-  setUTCFullYear(date: Date, year: number, month?: number, day?: number): number {
-    return date.setUTCFullYear(year, month, day);
+  setUTCFullYear(date: DateInput, year: number, month?: number, day?: number): number {
+    return DateHandler.getDateInstance(date).setUTCFullYear(year, month, day);
   }
 
-  setUTCHours(date: Date, hours: number, minutes?: number, seconds?: number, ms?: number): number {
-    return date.setUTCHours(hours, minutes, seconds, ms);
+  setUTCHours(date: DateInput, hours: number, minutes?: number, seconds?: number, ms?: number): number {
+    return DateHandler.getDateInstance(date).setUTCHours(hours, minutes, seconds, ms);
   }
 
-  setUTCMilliseconds(date: Date, ms: number): number {
-    return date.setUTCMilliseconds(ms);
+  setUTCMilliseconds(date: DateInput, ms: number): number {
+    return DateHandler.getDateInstance(date).setUTCMilliseconds(ms);
   }
 
-  setUTCMinutes(date: Date, minutes: number, seconds?: number, ms?: number): number {
-    return date.setUTCMinutes(minutes, seconds, ms);
+  setUTCMinutes(date: DateInput, minutes: number, seconds?: number, ms?: number): number {
+    return DateHandler.getDateInstance(date).setUTCMinutes(minutes, seconds, ms);
   }
 
-  setUTCMonth(date: Date, month: number, day?: number): number {
-    return date.setUTCMonth(month, day);
+  setUTCMonth(date: DateInput, month: number, day?: number): number {
+    return DateHandler.getDateInstance(date).setUTCMonth(month, day);
   }
 
-  setUTCSeconds(date: Date, seconds: number, ms?: number): number {
-    return date.setUTCSeconds(seconds, ms);
+  setUTCSeconds(date: DateInput, seconds: number, ms?: number): number {
+    return DateHandler.getDateInstance(date).setUTCSeconds(seconds, ms);
   }
   
-  setDate(date: Date, day: number): number {
-    return date.setDate(day);
+  setDate(date: DateInput, day: number): number {
+    return DateHandler.getDateInstance(date).setDate(day);
   }
 
-  setFullYear(date: Date, year: number, month?: number, day?: number): number {
-    return date.setFullYear(year, month, day);
+  setFullYear(date: DateInput, year: number, month?: number, day?: number): number {
+    return DateHandler.getDateInstance(date).setFullYear(year, month, day);
   }
 
-  setHours(date: Date, hours: number, minutes?: number, seconds?: number, ms?: number): number {
-    return date.setHours(hours, minutes, seconds, ms);
+  setHours(date: DateInput, hours: number, minutes?: number, seconds?: number, ms?: number): number {
+    return DateHandler.getDateInstance(date).setHours(hours, minutes, seconds, ms);
   }
-  toDateString(date: Date): string {
-    return date.toDateString();
-  }
-
-  toISOString(date: Date): string {
-    return date.toISOString();
+  toDateString(date: DateInput): string {
+    return DateHandler.getDateInstance(date).toDateString();
   }
 
-  toJSON(date: Date): string {
-    return date.toJSON();
+  toISOString(date: DateInput): string {
+    return DateHandler.getDateInstance(date).toISOString();
   }
 
-  toLocaleDateString(date: Date, locales?: string | string[], options?: Intl.DateTimeFormatOptions): string {
-    return date.toLocaleDateString(locales, options);
+  toJSON(date: DateInput): string {
+    return DateHandler.getDateInstance(date).toJSON();
   }
 
-  toLocaleString(date: Date, locales?: string | string[], options?: Intl.DateTimeFormatOptions): string {
-    return date.toLocaleString(locales, options);
+  toLocaleDateString(date: DateInput, locales?: string | string[], options?: Intl.DateTimeFormatOptions): string {
+    return DateHandler.getDateInstance(date).toLocaleDateString(locales, options);
   }
 
-  toLocaleTimeString(date: Date, locales?: string | string[], options?: Intl.DateTimeFormatOptions): string {
-    return date.toLocaleTimeString(locales, options);
+  toLocaleString(date: DateInput, locales?: string | string[], options?: Intl.DateTimeFormatOptions): string {
+    return DateHandler.getDateInstance(date).toLocaleString(locales, options);
   }
 
-  toString(date: Date): string {
-    return date.toString();
+  toLocaleTimeString(date: DateInput, locales?: string | string[], options?: Intl.DateTimeFormatOptions): string {
+    return DateHandler.getDateInstance(date).toLocaleTimeString(locales, options);
+  }
+
+  toString(date: DateInput): string {
+    return DateHandler.getDateInstance(date).toString();
   }
 
   UTC(year: number, month: number, date?: number, hours?: number, minutes?: number, seconds?: number, ms?: number): number {
     return Date.UTC(year, month, date, hours, minutes, seconds, ms);
   }
 
-  valueOf(date: Date): number {
-    return date.valueOf();
+  valueOf(date: DateInput): number {
+    return DateHandler.getDateInstance(date).valueOf();
   }
 
 }

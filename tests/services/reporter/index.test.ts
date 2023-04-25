@@ -1,12 +1,12 @@
 import { ReporterService } from '../../../services/reporter';
 import { ILogger } from '../../../services/logger';
-import { IORedisStoreService as IORedisStore } from '../../../services/store/ioredis';
+import { IORedisStoreService as IORedisStore } from '../../../services/store/stores/ioredis';
 import { RedisClientType, RedisConnection } from '../../../cache/ioredis';
 import { JobStatsRange } from '../../../typedefs/stats';
-import { PSNS } from '../../../services/store/keyStore';
+import { PSNS } from '../../../services/store/key';
 
 // Mock the IORedisStoreService class
-jest.mock('../../../services/store/ioredis', () => {
+jest.mock('../../../services/store/stores/ioredis', () => {
   return {
     IORedisStoreService: jest.fn().mockImplementation(() => {
       return {

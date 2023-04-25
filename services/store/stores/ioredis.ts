@@ -1,24 +1,28 @@
-import { PubSubDBApp, PubSubDBApps, PubSubDBSettings } from '../../typedefs/pubsubdb';
-import { KeyStore, KeyStoreParams, KeyType, PSNS } from './keyStore';
-import { Cache } from './cache';
-import { StoreService } from './store';
-import { JobStats, JobStatsRange, StatsType } from '../../typedefs/stats';
-import { SerializerService } from './serializer';
-import { AppVersion } from '../../typedefs/app';
-import { Signal } from '../../typedefs/signal';
-import { ILogger } from '../logger';
-import { RedisClientType } from '../../cache/ioredis';
+import { Cache } from '../cache';
+import { StoreService } from '../index';
+import { KeyService, KeyStoreParams, KeyType, PSNS } from '../key';
+import { SerializerService } from '../serializer';
+import { AppVersion } from '../../../typedefs/app';
+import { SubscriptionCallback } from '../../../typedefs/conductor';
+import { PubSubDBApp, PubSubDBSettings } from '../../../typedefs/pubsubdb';
+import { Signal } from '../../../typedefs/signal';
+import { JobStats, JobStatsRange, StatsType } from '../../../typedefs/stats';
+import { ILogger } from '../../logger';
+import { RedisClientType } from '../../../cache/ioredis';
 import { ChainableCommander } from 'ioredis';
 
 class IORedisStoreService extends StoreService {
   redisClient: RedisClientType;
+  redisSubscriber: RedisClientType;
+  subscriptionHandler: SubscriptionCallback;
   cache: Cache;
   namespace: string;
   logger: ILogger;
 
-  constructor(redisClient: RedisClientType) {
+  constructor(redisClient: RedisClientType, redisSubscriber?: RedisClientType) {
     super();
     this.redisClient = redisClient;
+    this.redisSubscriber = redisSubscriber;
   }
 
   /**
@@ -26,9 +30,6 @@ class IORedisStoreService extends StoreService {
    * must have the opportunity to set the cache namespace by init'ing the PSDB instance.
    * That instance will call this mathod, providing the necessary namespace override
    * and ensuring no collisions.
-   * @param namespace
-   * @param appId
-   * @returns {Promise<{[appId: string]: PubSubDBApp}>}
    */
   async init(namespace = PSNS, appId: string, logger: ILogger): Promise<{[appId: string]: PubSubDBApp}> {
     this.namespace = namespace;
@@ -51,7 +52,7 @@ class IORedisStoreService extends StoreService {
    */
   mintKey(type: KeyType, params: KeyStoreParams): string {
     if (!this.namespace) throw new Error('namespace not set');
-    return KeyStore.mintKey(this.namespace, type, params);
+    return KeyService.mintKey(this.namespace, type, params);
   }
 
   /**
@@ -64,9 +65,6 @@ class IORedisStoreService extends StoreService {
   /**
    * get the pubsubdb global settings ({hash}) from the store; 
    * the settings reveal information about the namespace, the version of the pubsubdb
-   * 
-   * @param {boolean} bCreate - if true, create the settings if they don't exist
-   * @returns {Promise<PubSubDBSettings>}
    */
   async getSettings(bCreate = false): Promise<PubSubDBSettings> {
     let settings = this.cache?.getSettings();
@@ -74,7 +72,7 @@ class IORedisStoreService extends StoreService {
       return settings;
     } else {
       if (bCreate) {
-        const packageJson = await import('../../package.json');
+        const packageJson = await import('../../../package.json');
         const version: string = packageJson.version;
         settings = { namespace: PSNS, version } as PubSubDBSettings;
         await this.setSettings(settings);
@@ -85,10 +83,7 @@ class IORedisStoreService extends StoreService {
   }
 
   /**
-   * sets the pubsubdb global settings ({hash}) in the store;
-   * 
-   * @param {any} manifest
-   * @returns {Promise<any>}
+   * sets the pubsubdb global settings ({hash}) in the store
    */
   async setSettings(manifest: PubSubDBSettings): Promise<any> {
     const params: KeyStoreParams = {};
@@ -96,54 +91,16 @@ class IORedisStoreService extends StoreService {
     return await this.redisClient.hmset(key, manifest);
   }
 
-  async getApps(): Promise<{[appId: string]: PubSubDBApp}> {
-    let apps: PubSubDBApps = this.cache.getApps();
-    if (apps && Object.keys(apps).length > 0) {
-      return apps;
-    } else {
-      const key = this.mintKey(KeyType.APP, {});
-      const appKeys: string[] = [];
-      let cursor = '0', tuples = [];
-      // Collect app keys using hScan
-      do {
-        [cursor, tuples] = await this.redisClient.hscan(key, cursor) as [string, string[]];
-        for (let i = 0; i < tuples.length; i += 2) {
-          const appId = tuples[i];
-          appKeys.push(appId);
-        }
-      } while (Number(cursor) !== 0);
-      // Create multi to fetch app data
-      const multi = this.redisClient.multi();
-      for (const appKey of appKeys) {
-        multi.hgetall(appKey);
-      }
-      // Execute multi and process results
-      const multiResults = await multi.exec();
-      apps = {};
-      for (const [index, [err, appData]] of multiResults.entries()) {
-        if (err) {
-          throw err;
-        }
-        const appId = appKeys[index];
-        apps[appId] = JSON.parse(appData as string) as PubSubDBApp;
-      }
-      this.cache.setApps(apps);
-    }
-    return apps;
-  }  
-
   /**
-   * gets a specific app manifest revealing all versions and settings and status for
-   * the app.
-   * 
-   * @returns {Promise<any>}
+   * gets a specific app manifest revealing all versions and settings for the app
    */
-  async getApp(id: string): Promise<PubSubDBApp> {
+  async getApp(id: string, refresh = false): Promise<PubSubDBApp> {
     let app: Partial<PubSubDBApp> = this.cache.getApp(id);
-    if (!(app && Object.keys(app).length > 0)) {
+    if (refresh || !(app && Object.keys(app).length > 0)) {
       const params: KeyStoreParams = { appId: id };
       const key = this.mintKey(KeyType.APP, params);
       const sApp = await this.redisClient.hgetall(key);
+      if (!sApp) return null;
       app = {};
       for (const field in sApp) {
         try {
@@ -598,6 +555,38 @@ class IORedisStoreService extends StoreService {
     //todo: MULTI: HGET/HDEL to ensure a signal is only used once
     const signal = await this.redisClient.hget(key, `${topic}:${resolved}`);
     return signal ? { topic, resolved, jobId: signal } : undefined;
+  }
+
+  async subscribe(keyType: KeyType.CONDUCTOR, subscriptionHandler: SubscriptionCallback, appVersion: AppVersion): Promise<void> {
+    if (this.redisSubscriber) {
+      const self = this;
+      const topic = this.mintKey(keyType, { appId: appVersion.id });
+      await this.redisSubscriber.subscribe(topic, (err, count) => {
+        if (err) {
+          self.logger.error(`Error subscribing to: ${topic}`, err);
+        }
+      });
+      this.redisSubscriber.on('message', (channel, message) => {
+        if (channel === topic) {
+          try {
+            const payload = JSON.parse(message);
+            subscriptionHandler(topic, payload);
+          } catch (e) {
+            console.log('Error parsing message:', message);
+            self.logger.error(`Error parsing message: ${message}`, e);
+          }
+        }
+      });
+    }
+  }
+
+  async unsubscribe(topic: string, appVersion: AppVersion): Promise<void> {
+    await this.redisSubscriber?.unsubscribe(topic);
+  }
+
+  async publish(keyType: KeyType.CONDUCTOR, message: Record<string, any>, appVersion: AppVersion): Promise<void> {
+    const topic = this.mintKey(keyType, { appId: appVersion.id });
+    await this.redisClient.publish(topic, JSON.stringify(message));
   }
 
 }

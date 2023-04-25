@@ -1,21 +1,26 @@
 import { PubSubDB, PubSubDBConfig, IORedisStore } from '../index';
 import { RedisConnection, RedisClientType } from '../cache/ioredis';
-import { PSNS } from '../services/store/keyStore';
+import { PSNS } from '../services/store/key';
 import { GetStatsOptions } from '../typedefs/stats';
 
 describe('pubsubdb', () => {
   const appConfig = { id: 'test-app', version: '1' };
   const CONNECTION_KEY = 'manual-test-connection';
+  const SUBSCRIPTION_KEY = 'manual-test-subscription';
   let pubSubDB: PubSubDB;
   let redisConnection: RedisConnection;
+  let subscriberConnection: RedisConnection;
   let redisClient: RedisClientType;
+  let redisSubscriber: RedisClientType;
   let redisStore: IORedisStore;
 
   beforeAll(async () => {
     redisConnection = await RedisConnection.getConnection(CONNECTION_KEY);
+    subscriberConnection = await RedisConnection.getConnection(SUBSCRIPTION_KEY);
     redisClient = await redisConnection.getClient();
+    redisSubscriber = await subscriberConnection.getClient();
     redisClient.flushdb();
-    redisStore = new IORedisStore(redisClient);
+    redisStore = new IORedisStore(redisClient, redisSubscriber);
   });
 
   afterAll(async () => {

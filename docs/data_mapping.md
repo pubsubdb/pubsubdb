@@ -3,13 +3,16 @@
 This tutorial covers various data mapping functions available in PubSubDB. The functions are organized based on their data type categories, such as array, object, number, string, etc., which should be familiar to JavaScript developers. However, it's essential to understand that the approach in PubSubDB is functional. Each transformation is a function that expects one or more input parameters from the prior row in the mapping rules.
 
  - [Array Functions](./functions/array.md)
- - [Object Functions](./functions/object.md)
- - [Number Functions](./functions/number.md)
- - [String Functions](./functions/string.md)
- - [Boolean Functions](./functions/boolean.md)
- - [Date and Time Functions](./functions/date_time.md)
+ - [Bitwise Functions](./functions/bitwise.md)
  - [Conditional Functions](./functions/conditional.md)
+ - [Date/Time Functions](./functions/date.md)
+ - [JSON Functions](./functions/json.md)
+ - [Math Functions](./functions/math.md)
+ - [Number Functions](./functions/number.md)
+ - [Object Functions](./functions/object.md)
+ - [String Functions](./functions/string.md)
  - [Symbol Functions](./functions/symbol.md)
+ - [Unary Functions](./functions/unary.md)
 
 Feel free to explore these function categories and learn more about how to use them effectively in your PubSubDB mapping rules.
 

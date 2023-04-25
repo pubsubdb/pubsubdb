@@ -1,5 +1,11 @@
 /**
- * cache is a key/value store and used to front Redis for commonly accessed data
+ * The Cache is a key/value store and used to store commonly accessed Redis metadata (namely,
+ * the execution rules for the app) to save time accessing the execution rules.
+ * 
+ * The cache should be regularly cleared every 5 minutes or so...it's not expensive and ensures
+ * that the cache is always up-to-date. A Conductor Service should be used to synchronize all
+ * running redis clients, so that they all switch versions simultaneously
+ * 
  */
 
 import { PubSubDBApp, PubSubDBSettings } from "../../typedefs/pubsubdb";

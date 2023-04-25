@@ -15,7 +15,7 @@ import { JobContext } from '../../../typedefs/job';
 import { StatsType, Stat } from '../../../typedefs/stats';
 import { MapperService } from '../../mapper';
 import { Pipe } from "../../pipe";
-import { KeyType } from '../../store/keyStore';
+import { KeyType } from '../../store/key';
 import { SerializerService } from '../../store/serializer';
 import { Activity } from "./activity";
 
@@ -74,7 +74,7 @@ class Trigger extends Activity {
    */
   async createContext(): Promise<void> {
     const utc = new Date().toISOString();
-    const { id, version } = this.pubsubdb.getAppConfig();
+    const { id, version } = await this.pubsubdb.getAppConfig();
     this.context = {
       metadata: {
         ...this.metadata,
@@ -191,7 +191,7 @@ class Trigger extends Activity {
       jobId,
       this.context.data,
       this.context.metadata,
-      this.pubsubdb.getAppConfig(),
+      await this.pubsubdb.getAppConfig(),
       multi
     );
   }
@@ -206,10 +206,10 @@ class Trigger extends Activity {
     const response = await this.pubsubdb.store.setActivityNX(
       jobId,
       activityId,
-      this.pubsubdb.getAppConfig()
+      await this.pubsubdb.getAppConfig()
     );
     if (response !== 1) {
-      const key = this.pubsubdb.store.mintKey(KeyType.JOB_ACTIVITY_DATA, { appId: this.pubsubdb.getAppConfig().id, jobId, activityId });
+      const key = this.pubsubdb.store.mintKey(KeyType.JOB_ACTIVITY_DATA, { appId: (await this.pubsubdb.getAppConfig()).id, jobId, activityId });
       throw new Error(`Duplicate Activity. Job/Activity ${key} already exists`);
     }
   }
@@ -227,7 +227,7 @@ class Trigger extends Activity {
       activityId,
       this.context[activityId].output.data,
       { ...this.metadata, jid: jobId, key: this.context.metadata.key },
-      this.pubsubdb.getAppConfig(),
+      await this.pubsubdb.getAppConfig(),
       multi
     );
   }
@@ -323,7 +323,7 @@ class Trigger extends Activity {
         this.context.metadata.jid,
         this.context.metadata.ts,
         this.resolveStats(),
-        this.pubsubdb.getAppConfig(),
+        await this.pubsubdb.getAppConfig(),
         multi
       );
     }
@@ -335,7 +335,7 @@ class Trigger extends Activity {
    * @returns {Promise<void>}
    */
   async pub(): Promise<void> {
-    const transitions = await this.pubsubdb.store.getTransitions(this.pubsubdb.getAppConfig());
+    const transitions = await this.pubsubdb.store.getTransitions(await this.pubsubdb.getAppConfig());
     const transition = transitions[`.${this.metadata.aid}`];
     if (transition) {
       for (let p in transition) {

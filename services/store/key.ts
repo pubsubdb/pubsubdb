@@ -1,3 +1,21 @@
+/**
+ * Keys
+ * 
+ * psdb ->                                            {hash}    pubsubdb config {version: "0.0.1", namespace: "psdb"}
+ * psdb:a:<appid> ->                                  {hash}    app profile { "id": "appid", "version": "2", "versions/1": "GMT", "versions/2": "GMT"}
+ * psdb:<appid>:j:<jobid> ->                          {hash}    job data
+ * psdb:<appid>:j:<jobid>:<activityId>  ->            {hash}    job activity data (a1)
+ * psdb:<appid>:s:<jobkey>:<dateTime> ->              {hash}    job stats (general)
+ * psdb:<appid>:s:<jobkey>:<dateTime>:mdn:<field/path>:<fieldvalue> ->      {zset}    job stats (median)
+ * psdb:<appid>:s:<jobkey>:<dateTime>:index:<field/path>:<fieldvalue> ->    {list}    job stats (index of jobid[])
+ * psdb:<appid>:v:<version>:activities ->             {hash}    schemas [cache]
+ * psdb:<appid>:v:<version>:transitions ->            {hash}    transitions [cache]
+ * psdb:<appid>:v:<version>:subscriptions ->          {hash}    subscriptions [cache]
+ * psdb:<appid>:hooks ->                              {hash}    hooks (rules); set at compile time
+ * psdb:<appid>:signals ->                            {hash}    dynamic signal list to hget/hdel to resolve (always self-clean); added/removed at runtime
+ */
+
+
 //default namespace for pubsubdb
 const PSNS = "psdb";
 
@@ -15,6 +33,7 @@ enum KeyType {
   SUBSCRIPTION_PATTERNS,
   HOOKS,
   SIGNALS,
+  CONDUCTOR,
 }
 
 //when minting a key, the following parameters are used to create a unique key per entity
@@ -28,7 +47,7 @@ type KeyStoreParams = {
   facet?: string;       //data path starting at root with values separated by colons (e.g. "object/type:bar")
 };
 
-class KeyStore {
+class KeyService {
 
   /**
    * returns a key that can be used to access a value in the key/value store
@@ -45,8 +64,9 @@ class KeyStore {
     switch (keyType) {
       case KeyType.PUBSUBDB:
         return namespace;
+      case KeyType.CONDUCTOR:
+        return `${namespace}:${params.appId}::conductor`;
       case KeyType.APP:
-        // the term 'app' must be reserved due to naked paths for job and activity keys
         return `${namespace}:a:${params.appId || ''}`;
       case KeyType.JOB_DATA:
         return `${namespace}:${params.appId}:j:${params.jobId}`;
@@ -76,30 +96,4 @@ class KeyStore {
   }
 }
 
-export { KeyStore, KeyType, KeyStoreParams, PSNS };
-
-//key/value namespace hierarchy
-/**
- * psdb ->                                            {hash}    pubsubdb config {version: "0.0.1", namespace: "psdb"}
- * psdb:a:<appid> ->                                  {hash}    app profile { "id": "appid", "version": "2", "versions/1": "GMT", "versions/2": "GMT"}
- * psdb:<appid>:j:<jobid> ->                          {hash}    job data
- * psdb:<appid>:j:<jobid>:<activityId>  ->            {hash}    job activity data (a1)
- * psdb:<appid>:s:<jobkey>:<dateTime> ->              {hash}    job stats (general)
- * psdb:<appid>:s:<jobkey>:<dateTime>:mdn:<field/path>:<fieldvalue> ->      {zset}    job stats (median)
- * psdb:<appid>:s:<jobkey>:<dateTime>:index:<field/path>:<fieldvalue> ->    {list}    job stats (index of jobid[])
- * psdb:<appid>:v:<version>:activities ->             {hash}    schemas [cache]
- * psdb:<appid>:v:<version>:transitions ->            {hash}    transitions [cache]
- * psdb:<appid>:v:<version>:subscriptions ->          {hash}    subscriptions [cache]
- * psdb:<appid>:hooks ->                              {hash}    hooks (rules); set at compile time
- * psdb:<appid>:signals ->                            {hash}    dynamic signal list to hget/hdel to resolve (always self-clean); added/removed at runtime
- */
-
-
-//enums
-/**
- * version:  app version
- * appid:    app id
- * jobid:    either a random guid based upon time or explicit passed as rule in graph
- * jobkey:   if present, job stats will be captured at a default granilarity of 1h
- * dateTime: date/time (20230312000000) GMT slice, representing a time like midnight, 1am, 2am, etc
- */
+export { KeyService, KeyType, KeyStoreParams, PSNS };

@@ -1,7 +1,7 @@
 import { ILogger } from "../services/logger";
 import { PubSubDBService } from "../services/pubsubdb";
-import { RedisStoreService } from "../services/store/redis";
-import { StoreService } from "../services/store/store";
+import { RedisStoreService } from "../services/store/stores/redis";
+import { StoreService } from "../services/store";
 
 type PubSubDB = typeof PubSubDBService;
 

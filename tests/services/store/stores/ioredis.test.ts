@@ -1,26 +1,31 @@
-import { RedisConnection, RedisClientType } from '../../../cache/redis';
-import { LoggerService } from '../../../services/logger';
-import { KeyType, PSNS } from '../../../services/store/keyStore';
-import { RedisStoreService } from '../../../services/store/redis';
-import { StatsType } from '../../../typedefs/stats';
+import { RedisConnection, RedisClientType } from '../../../../cache/ioredis';
+import { LoggerService } from '../../../../services/logger';
+import { KeyType, PSNS } from '../../../../services/store/key';
+import { IORedisStoreService } from '../../../../services/store/stores/ioredis';
+import { SubscriptionCallback } from '../../../../typedefs/conductor';
+import { StatsType } from '../../../../typedefs/stats';
 
-describe('RedisStoreService', () => {
+describe('IORedisStoreService', () => {
   const appConfig = { id: 'test-app', version: '1' };
   const cacheConfig = { appId: 'test-app', appVersion: '1' };
   let redisConnection: RedisConnection;
+  let subscriberConnection: RedisConnection;
   let redisClient: RedisClientType;
-  let redisStoreService: RedisStoreService;
+  let redisSubscriber: RedisClientType;
+  let redisStoreService: IORedisStoreService;
 
   beforeEach(async () => {
-    await redisClient.flushDb();
-    redisStoreService = new RedisStoreService(redisClient);
+    await redisClient.flushdb();
+    redisStoreService = new IORedisStoreService(redisClient, redisSubscriber);
     const appConfig = { id: 'APP_ID', version: 'APP_VERSION' };
     await redisStoreService.init(PSNS, appConfig.id, new LoggerService());
   });
 
   beforeAll(async () => {
     redisConnection = await RedisConnection.getConnection('test-connection-1');
+    subscriberConnection = await RedisConnection.getConnection('test-subscriber-1');
     redisClient = await redisConnection.getClient();
+    redisSubscriber = await subscriberConnection.getClient();
   });
 
   afterAll(async () => {
@@ -30,7 +35,6 @@ describe('RedisStoreService', () => {
   describe('mintKey', () => {
     it('should mint the key to access pubsubdb global settings', () => {
       const result = redisStoreService.mintKey(KeyType.PUBSUBDB, {});
-      //global settings are stored using the namespace and nothing else
       expect(result).toEqual(PSNS); 
     });
 
@@ -111,15 +115,15 @@ describe('RedisStoreService', () => {
       expect(result).not.toBeNull();
 
       const generalStatsKey = redisStoreService.mintKey(KeyType.JOB_STATS_GENERAL, { ...cacheConfig, jobId, jobKey, dateTime });
-      const generalStats = await redisClient.HGETALL(generalStatsKey);
+      const generalStats = await redisClient.hgetall(generalStatsKey);
       expect(generalStats[stats.general[0].target]).toEqual(stats.general[0].value.toString());
   
       const indexStatsKey = redisStoreService.mintKey(KeyType.JOB_STATS_INDEX, { ...cacheConfig, jobId, jobKey, dateTime, facet: stats.index[0].target });
-      const indexStats = await redisClient.LRANGE(indexStatsKey, 0, -1);
+      const indexStats = await redisClient.lrange(indexStatsKey, 0, -1);
       expect(indexStats[0]).toEqual(stats.index[0].value.toString());
   
       const medianStatsKey = redisStoreService.mintKey(KeyType.JOB_STATS_MEDIAN, { ...cacheConfig, jobId, jobKey, dateTime, facet: stats.median[0].target });
-      const medianStats = await redisClient.ZRANGE(medianStatsKey, 0, -1);
+      const medianStats = await redisClient.zrange(medianStatsKey, 0, -1);
       expect(medianStats[0]).toEqual(stats.median[0].value.toString());
     });
   });
@@ -165,7 +169,7 @@ describe('RedisStoreService', () => {
   
       // Verify that the activity data in the store is correct
       const hashKey = redisStoreService.mintKey(KeyType.JOB_ACTIVITY_DATA, { appId: appConfig.id, jobId, activityId });
-      const storedActivityId = await redisStoreService.redisClient.HGET(hashKey, 'm/aid');
+      const storedActivityId = await redisStoreService.redisClient.hget(hashKey, 'm/aid');
       expect(storedActivityId).toEqual(activityId);
     });
   });
@@ -236,7 +240,20 @@ describe('RedisStoreService', () => {
         },
       };
       const result = await redisStoreService.setSchemas(schemas, appConfig);
-      expect(result).toEqual(2);
+      expect(result).toEqual('OK');
+    });
+  });
+
+  describe('subscribe', () => {
+    it('subscribes to the `conductor` topic for cooordinating deployments', async () => {
+      const subscriptionHandler: SubscriptionCallback = (topic, message) => {
+        const topicKey = redisStoreService.mintKey(KeyType.CONDUCTOR, { appId: appConfig.id });
+        expect(topic).toEqual(topicKey);
+        expect(message).toEqual(payload);
+      };
+      const payload = { 'any': 'data' };
+      await redisStoreService.subscribe(KeyType.CONDUCTOR, subscriptionHandler, appConfig);
+      await redisStoreService.publish(KeyType.CONDUCTOR, payload, appConfig);
     });
   });
 });
