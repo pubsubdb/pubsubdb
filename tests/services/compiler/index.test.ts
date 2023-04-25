@@ -1,7 +1,7 @@
-import { IORedisStoreService as IORedisStore } from "../../../services/store/ioredis";
+import { IORedisStoreService as IORedisStore } from "../../../services/store/stores/ioredis";
 import { RedisConnection, RedisClientType } from "../../../cache/ioredis";
 import { CompilerService } from "../../../services/compiler";
-import { PSNS } from "../../../services/store/keyStore";
+import { PSNS } from "../../../services/store/key";
 import { LoggerService } from "../../../services/logger";
 
 describe("Compiler Service", () => {

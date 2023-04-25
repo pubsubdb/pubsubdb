@@ -6,12 +6,15 @@ import { PubSubDB, IORedisStore } from '../../../../index';
 describe("Trigger class", () => {
   let pubSubDB: PubSubDB;
   let redisConnection: RedisConnection;
+  let subscriberConnection: RedisConnection;
 
   beforeAll(async () => {
     // Connect to Redis
     redisConnection = await RedisConnection.getConnection('test-connection');
+    subscriberConnection = await RedisConnection.getConnection('test-subscriber');
     const redisClient = await redisConnection.getClient();
-    const redisStore = new IORedisStore(redisClient);
+    const redisSubscriber = await subscriberConnection.getClient();
+    const redisStore = new IORedisStore(redisClient, redisSubscriber);
     pubSubDB = await PubSubDB.init({ store: redisStore, appId: 'test-app' });
   });
 

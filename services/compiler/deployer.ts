@@ -1,6 +1,6 @@
 import { PubSubDBGraph, PubSubDBManifest } from "../../typedefs/pubsubdb";
 import { CollatorService } from "../collator";
-import { StoreService } from '../store/store';
+import { StoreService } from '../store';
 
 type JsonObject = { [key: string]: any };
 
