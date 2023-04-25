@@ -31,7 +31,7 @@ npm install @pubsubdb/pubsubdb
 Pass your Redis client library (The `redis` and `ioredis` NPM packages are supported) to serve as the backend Data Store used by PubSubDB:
 
 ```javascript
-import { PubSubDB, IORedisStore, RedisStore } from '../index';
+import { PubSubDB, IORedisStore, RedisStore } from '@pubsubdb/pubsubdb';
 
 //initialize two standard Redis client instances using `ioredis` or `redis` NPM packages
 //const redisClient = await getMyRedisClient...
@@ -45,7 +45,7 @@ pubSubDB = await PubSubDB.init({ appId: 'myapp', store});
 ```
 
 ### Plan
-PubSubDB is designed to protect the models from arbitrary changes, providing migration and planning tools to support hot deployments with no downtime. It's possible to plan the migration beforehand to better understand the scope of the change and whether or not a hot deployment is possible. Provide your app manifest to PubSubDB to generate the plan.
+It's possible to plan the migration beforehand to better understand the scope of the change and whether or not a hot deployment is possible. Provide your app manifest to PubSubDB to generate the plan.
 
 ```typescript
 import { PubSubDB, IORedisStore, RedisStore } from '@pubsubdb/pubsubdb';
@@ -55,7 +55,7 @@ const plan = pubSubDB.plan('./pubsubdb.yaml');
 ```
 
 ### Deploy
-Once you're satisfied with your plan, call `deploy` to officially compile and deploy the next version of your application.
+Once you're satisfied with your plan, call `deploy` to officially compile and deploy the next version of your application. (Your version isn't "live" quite yet...you still need to activate it.)
 
 ```typescript
 import { PubSubDB, IORedisStore, RedisStore } from '@pubsubdb/pubsubdb';
@@ -65,7 +65,7 @@ const status = await pubSubDB.deploy('./pubsubdb.yaml');
 ```
 
 ### Activate
-Call `activate` to set which deployment version to use. This step will coordinate the deployment across all connected client instances. Call a single instance to have the changes replicate simultaneously through the network of all connected clients.
+Call `activate` to set which deployment version to use. The call will replicate simultaneously through the network of all connected clients.
 
 ```typescript
 import { PubSubDB, IORedisStore, RedisStore } from '@pubsubdb/pubsubdb';
