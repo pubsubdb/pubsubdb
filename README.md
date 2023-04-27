@@ -1,40 +1,42 @@
 # PubSubDB
 ## Overview
-PubSubDB is a model-driven solution that simplifies integration, orchestration, and actionable analytics. Design your key business workflows using standard graph notation, while PubSubDB handles the implementation. PubSubDB is designed to work with any key/value store, with a reference implementation using *Redis*. Refer to the following guide for more information on how to use PubSubDB to simplify your workflow needs.
+PubSubDB is a unified integration, orchestration, and analytics platform. Design your key business workflows using standard graph notation, while PubSubDB handles the implementation. PubSubDB is designed to work with any backend data store, with a reference implementation using *Redis*. Refer to this guide for more information on how to get started with PubSubDB.
 
-### Benefit | Point-to-Point Integration
+## Benefits
+PubSubDB is distinguished by is its elegant twist on state management. The magic happens at compilation when the rules of the system are compiled down to pure events. The end result is a high-performance, low-latency system that can model the most complex business workflows at a fraction of the cost.
+
+### Point-to-Point Integration
 Map data between internal systems and external SaaS services, using standard Open API specs to define activities. Synchronize data between systems by mapping outputs from upstream activities.
 
-### Benefit | Workflow Orchestration
+### Workflow Orchestration
 Unify the third-party tools used by lines of business (e.g, Asana, Slack) with internal systems. Design long-running approval processes with complex conditional processing.
 
-### Benefit | Actionable Analytics
+### Actionable Analytics
 Design self-referential flows that react to events at scale. Gather process-level insights about aggregate processes over time.
 
-## Usage Examples
+## System Design
 PubSubDB uses standard graph notation to define the activities (nodes) and transitions (edges) between them. Consider the following sequence of 3 activities.
 
 ![Multistep Workflow](./docs/img/workflow.png)
 
-Multistep workflows like this are defined using a standard Open API extension. This approach allows PubSubDB to leverage the existing Open API definitions when orchestrating API endpoints. For example, the *input* and *output* schemas for the **[Create Asana Task]** activity above are already defined in the official Asana Open API specification, and the extension can reference them using a standard `$ref` tag.
+Multistep workflows like this are defined using YAML and adhere to the Open API 3.0 specfication. This approach allows PubSubDB to leverage standard Open API specs when orchestrating API endpoints. For example, the *input* and *output* schemas for the **[Create Asana Task]** activity above are already defined in the official Asana Open API specification, and the extension can reference them using a standard `$ref` tag.
 
-### Install
+## Install
 [![npm version](https://badge.fury.io/js/%40pubsubdb%2Fpubsubdb.svg)](https://badge.fury.io/js/%40pubsubdb%2Fpubsubdb)
-
-Install PubSubDB using NPM. 
 
 ```sh
 npm install @pubsubdb/pubsubdb
 ```
 
-Pass your Redis client library (The `redis` and `ioredis` NPM packages are supported) to serve as the backend Data Store used by PubSubDB:
+## Initialize
+Pass your Redis client library (`redis` and `ioredis` are supported) to serve as the backend Data Store used by PubSubDB:
 
-```javascript
+```ts
 import { PubSubDB, IORedisStore, RedisStore } from '@pubsubdb/pubsubdb';
 
 //initialize two standard Redis client instances using `ioredis` or `redis`
-//const redisClient = await getMyRedisClient...
-//const redisSubscriberClient = await getMyReadOnlyRedisClient...
+const redisClient = await getMyRedisClient(...)
+const redisSubscriberClient = await getMyReadOnlyRedisClient(...)
 
 //wrap your redisClient instances (this example uses `ioredis`)
 const store = new IORedisStore(redisClient, redisSubscriberClient)
@@ -43,107 +45,124 @@ const store = new IORedisStore(redisClient, redisSubscriberClient)
 pubSubDB = await PubSubDB.init({ appId: 'myapp', store});
 ```
 
-### Plan
-It's possible to plan the migration beforehand to better understand the scope of the change and whether or not a hot deployment is possible. Provide your app manifest to PubSubDB to generate the plan.
+## Design
+PubSub DB application graphs are modeled using YAML. These can be considered the execution instructions for the app, describing its activity and data flow. For introductory purposes, let's consider the simplest flow possible: *a single trigger activity*. 
 
-```typescript
-import { PubSubDB, IORedisStore, RedisStore } from '@pubsubdb/pubsubdb';
+A process with only one step can seem relatively unremarkable, but it serves to reveal the type of information that is tracked by the system and how to take advantage of it. Once deployed, this flow will listen to the `item.ordered` event and track key statistics about the order size.
 
-const pubSubDB = PubSubDB.init({ ... });
-const plan = pubSubDB.plan('./pubsubdb.yaml');
+```yaml
+app:
+  id: my-app
+  version: 1
+  graphs:
+  - subscribes: item.ordered
+    publishes: item.shipped
+    activities:
+      order:
+        title: Item Ordered
+        type: trigger
+        job:
+          schema:
+            type: object
+            properties:
+              email:
+                type: string
+              size:
+                type: string
+                description: The shirt size
+                enum:
+                - sm
+                - md
+                - lg
+          maps:
+            id: "{$self.input.data.email}"
+            size: "{$self.input.data.size}"
+        stats:
+          granularity: 5m
+          id: "{$self.input.data.email}"
+          key: orders
+          measures:
+          - measure: count
+            target: "{$self.input.data.size}"
+          - measure: index
+            target: "{$self.input.data.size}"
 ```
 
-### Deploy
-Once you're satisfied with your plan, call `deploy` to officially compile and deploy your flows. The compiler will save a static copy of the deployment manifest to your local file system and then transfer the execution instructions to Redis.
+Even though this flow doesn't yet model an actual process, it's already able to answer process-oriented questions about the data. 
 
->NOTE: It's good practice to execute this call in your local Git branch to generate the versioned source files for persistence to your VCS. It helps others reason about the version history for the application and the manner in which it changed over time.
+First let's start by inserting some data. This is handled through simple pub/sub semantics.
+
+```ts
+const order = pubSubDB.pub('item.ordered', { "email": "jim@email.com", "size": "lg" });
+```
+
+Now let's ask some questions about the `item.ordered` workflow.
+
+### Question 1
+*What is the order for the user, `jim@email.com`?*
+```ts
+const order = await pubSubDB.get('jim@email.com');
+```
+
+*Answer*
+```ts
+{ "email": "jim@email.com", "size": "lg" }
+```
+
+### Question 2
+*How many large (`lg`) items were ordered in the past hour?*
+```ts
+const payload = { data: { size: 'lg' }, range: '1h', end: 'NOW' };
+const stats = pubSubDB.getStats('item.ordered', payload);
+```
+
+*Answer*
+```json
+{
+  "key": "orders",
+  "granularity": "5m",
+  "range": "1h",
+  "end": "NOW",
+  "measures": [
+    {
+      "target": "size:lg",
+      "type": "count",
+      "value": 70
+    },
+    {
+      "target": "size:md",
+      "type": "count",
+      "value": 102
+    },
+    {
+      "target": "size:lg",
+      "type": "count",
+      "value": 40
+    }
+  ],
+  "segments": [
+    {
+      "time": "2023-04-04T00:00:00Z",
+      "measures": [
+        {
+          "target": "size:lg",
+          "type": "count",
+          "value": 31
+        }
+        ...
+      ]
+    }
+    ...
+  ]
+}
+```
+
+## Deploy
+Once you're satisfied with your application model, call `deploy` to officially compile and deploy your flows. The compiler will save a static copy of the deployment manifest to your local file system and then transfer the execution instructions to your backend datastore, distributing the version simultaneously to all connected clients.
 
 ```typescript
-import { PubSubDB, IORedisStore, RedisStore } from '@pubsubdb/pubsubdb';
-
 const pubSubDB = PubSubDB.init({ ... });
 const status = await pubSubDB.deploy('./pubsubdb.yaml');
-```
-
-### Activate
-Call `activate` to set which deployment version to use. The update will be applied system-wide to all running clients.
-
-```typescript
-import { PubSubDB, IORedisStore, RedisStore } from '@pubsubdb/pubsubdb';
-
-const pubSubDB = PubSubDB.init({ ... });
-await pubSubDB.activate('2');
-```
-
-### Trigger Workflow Job
-Publish events to trigger any flow. In this example, the workflow is triggered by publishing the `order.approval.requested` event.
-
-```ts
-import { PubSubDB, IORedisStore, RedisStore } from '@pubsubdb/pubsubdb';
-
-const pubSubDB = PubSubDB.init({ ... });
-
-const payload = {
-  id: 'order_123',
-  price: 47.99,
-  object_type: 'widgetA'
-};
-const jobId = pubSubDB.pub('order.approval.requested', payload);
-```
-
-### Get Job Data
-Get the job data for a single workflow using the job ID.
-
-```ts
-import { PubSubDB, IORedisStore, RedisStore } from '@pubsubdb/pubsubdb';
-
-const pubSubDB = PubSubDB.init({ ... });
-const job = pubSubDB.get('order_123');
-```
-
-### Get Job Metadata
-Query the status of a single workflow using the job ID. (*This query desccribes all state transitions for the job and the rate at which each activity was processed.*)
-
-```ts
-import { PubSubDB, IORedisStore, RedisStore } from '@pubsubdb/pubsubdb';
-
-const pubSubDB = PubSubDB.init({ ... });
-const jobMetadata = pubSubDB.getJobMetadata('order_123');
-```
-
-### Get Job Statistics
-Query for aggregation statistics by providing a time range and the data you're interested in. In this example, the stats for the `order.approval.requested` topic have been requested for the past 24 hours (`24h`). The `data` field is used to target the desired records and will limit the statistics to just those records with the provided characteristics.
-
-```ts
-import { PubSubDB, IORedisStore, RedisStore } from '@pubsubdb/pubsubdb';
-
-const pubSubDB = PubSubDB.init({ ... });
-
-const payload = {
-  data: {
-    object_type: 'widgetA'
-  },
-  range: '24h',
-  end: 'NOW'
-};
-const stats = pubSubDB.getStats('order.approval.requested', payload);
-```
-
-### Get Job Ids
-All workflow jobs are persisted as time-series data, enabling you to track specific jobs according to their payload. In this example, the stats for the `order.approval.requested` topic have been requested for the past 30 minutes (`30m`). The `data` field is used to specify the *shape* of the data, limiting ids to those jobs where the `object_type` is *widgetA*.
-```ts
-import { PubSubDB, IORedisStore, RedisStore } from '@pubsubdb/pubsubdb';
-
-const pubSubDB = PubSubDB.init({ ... });
-
-const payload = {
-  data: {
-    object_type: 'widgetA'
-  },
-  range: '30m',
-  end: 'NOW'
-};
-const ids = pubSubDB.getIds('order.approval.requested', payload);
 ```
 
 ## Developer Guide
