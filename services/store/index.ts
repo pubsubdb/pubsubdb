@@ -1,6 +1,6 @@
 import { AppVersion } from '../../typedefs/app';
 import { Signal } from '../../typedefs/signal';
-import { JobStatsRange, StatsType } from '../../typedefs/stats';
+import { IdsData, JobStatsRange, StatsType } from '../../typedefs/stats';
 import { ILogger } from '../logger';
 import { Cache } from './cache';
 import { KeyStoreParams, KeyType } from './key';
@@ -27,9 +27,10 @@ abstract class StoreService {
   abstract getApp(appId: string, refresh?: boolean): Promise<PubSubDBApp>;
   abstract setApp(appId: string, appVersion: string): Promise<any>;
   abstract activateAppVersion(appId: string, version: string): Promise<any>;
-  abstract setJob(jobId: any, data: Record<string, unknown>, metadata: Record<string, unknown>, config: AppVersion, multi? : any): Promise<any|string>
-  abstract setJobStats(jobKey: string, jobId: string, dateTime: string, stats: StatsType, appVersion: AppVersion, multi? : any): Promise<any|string>
-  abstract getJobStats(jobKeys: string[], config: AppVersion): Promise<JobStatsRange>
+  abstract setJob(jobId: any, data: Record<string, unknown>, metadata: Record<string, unknown>, config: AppVersion, multi? : any): Promise<any|string>;
+  abstract setJobStats(jobKey: string, jobId: string, dateTime: string, stats: StatsType, appVersion: AppVersion, multi? : any): Promise<any|string>;
+  abstract getJobStats(jobKeys: string[], config: AppVersion): Promise<JobStatsRange>;
+  abstract getJobIds(indexKeys: string[], config: AppVersion): Promise<IdsData>;
   abstract updateJobStatus(jobId: string, collationKeyStatus: number, appVersion: AppVersion, multi? : any): Promise<any>
   abstract getJobMetadata(jobId: string, config: AppVersion): Promise<any>;
   abstract getJobData(jobId: string, config: AppVersion): Promise<any>;

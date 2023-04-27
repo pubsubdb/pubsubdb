@@ -96,8 +96,8 @@ class Trigger extends Activity {
        },
     };
 
-    this.context.metadata.jid = await this.getJobId();
-    this.context.metadata.key = await this.getJobKey();
+    this.context.metadata.jid = this.resolveJobId();
+    this.context.metadata.key = this.resolveJobKey();
   }
 
   /**
@@ -111,45 +111,39 @@ class Trigger extends Activity {
     return this.config.collationKey - (this.config.collationInt * 3);
   }
 
-  /**
-   * use stats field for trigger to get job id and key
-   * @returns 
-   */
-  async getJobId(): Promise<string> {
+  resolveJobId(): string {
     const stats = this.config.stats;
     const jobId = stats?.id;
     if (jobId) {
       const pipe = new Pipe([[jobId]], this.context);
-      return await pipe.process();
+      return pipe.process();
     } else {
-      //todo: create synchronizer service to coordinate cache invalidation, new app deployments, etc
       return `${Date.now().toString()}.${parseInt((Math.random() * 1000).toString(), 10)}`;
     }
   }
 
-  async getJobKey(): Promise<string> {
+  resolveJobKey(): string {
     const stats = this.config.stats;
     const jobKey = stats?.key;
     if (jobKey) {
       let pipe: Pipe;
       if (Pipe.isPipeObject(jobKey)) {
-        //this is the more complex pipe syntax (an array of arrays)
+        //pipe syntax
         pipe = new Pipe(jobKey['@pipe'], this.context);
       } else {
-        //this is the simple inline syntax (wrap in two arrays to adhere to the pipe syntax)
+        //concise syntax
         pipe = new Pipe([[jobKey]], this.context);
       }
-      return await pipe.process();
+      return pipe.process();
     } else {
-      //todo: use server-assigned instance id to assign the random number slot at startup (001-999)
-      return `${Date.now().toString()}.${parseInt((Math.random() * 1000).toString(), 10)}`;
+      //no job key means no data isolation (which is fine)
+      return '';
     }
   }
 
   /**
    * If the job returns data, and the trigger includes a map ruleset to seed it with the
-   * incoming event payload, then map the data per the ruleset..
-   * @returns {Promise<void>}
+   * incoming event payload, then map the data per the ruleset
    */
   async mapJobData(): Promise<void> {
     if(this.config.job?.maps) {
@@ -159,13 +153,13 @@ class Trigger extends Activity {
   }
 
   /**
-   * only map those fields of data in the payload that are specified in the downstream mapping rules for other activities
-   * @returns {Promise<void>}
+   * only map those fields of data in the payload that are specified in the
+   * downstream mapping rules for other activities
    */
   async mapOutputData(): Promise<void> {
     const aid = this.metadata.aid;
     const filteredData: FlattenedDataObject = {};
-    //flatten the payload to make comparison easier
+    //flattening the payload simplifies filtering
     const toFlatten = { [aid]: { output: { data: this.data } } };
     const rulesSet = new Set(this.config.dependents.map(rule => rule.slice(1, -1).replace(/\./g, '/')));
     const flattenedData = SerializerService.flattenHierarchy(toFlatten);
@@ -174,7 +168,6 @@ class Trigger extends Activity {
         filteredData[key as string] = value as string;
       }
     }
-    //expand the payload now that we've removed those fields not specified by downstream mapping rules
     const restoredData = SerializerService.restoreHierarchy(filteredData);
     if (restoredData[aid]) {
       this.context[aid].output.data = restoredData[aid].output.data;
@@ -183,7 +176,6 @@ class Trigger extends Activity {
 
   /**
    * saves job data (if any) and metadata
-   * @param multi - Redis multi object
    */
   async saveJob(multi?: any): Promise<void> {
     const jobId = this.context.metadata.jid;
@@ -198,7 +190,6 @@ class Trigger extends Activity {
 
   /**
    * saves just the activity id to ensure no dupes before proceeding with the multi insert
-   * @param {any} multi - Redis multi object
    */
   async saveActivityNX(multi?: any): Promise<void> {
     const jobId = this.context.metadata.jid;
@@ -215,9 +206,8 @@ class Trigger extends Activity {
   }
 
   /**
-   * saves activity data; (NOTE: This data represents a subset of the incoming event payload.
-   * those fields that are not specified in the mapping rules for other activities will not be saved.)
-   * @param {any} multi - Redis multi object
+   * saves activity meta/data; only data relevant to downstream activities
+   * will be persisted.
    */
   async saveActivity(multi?: any): Promise<void> {
     const jobId = this.context.metadata.jid;
@@ -278,14 +268,13 @@ class Trigger extends Activity {
   }
 
   isCardinalMetric(metric: string): boolean {
-    //these metrics isolate the metric based on value cardinality
     return metric === 'index' || metric === 'count';
   }
 
   resolveTarget(metric: string, target: string, resolvedValue: string): string {
     const trimmed = target.substring(1, target.length - 1);
     const trimmedTarget = trimmed.split('.').slice(3).join('/');
-    let resolvedTarget;
+    let resolvedTarget: string;
     if (this.isCardinalMetric(metric)) {
       resolvedTarget = `${metric}:${trimmedTarget}:${resolvedValue}`;
     } else {
@@ -300,7 +289,7 @@ class Trigger extends Activity {
    */
   getTimeSeriesStamp(): string {
     const now = new Date();
-    const granularity = this.config.stats.granularity || '1h';
+    const granularity = this.resolveGranularity();
     const granularityUnit = granularity.slice(-1);
     const granularityValue = parseInt(granularity.slice(0, -1), 10);
     if (granularityUnit === 'm') {
@@ -310,6 +299,10 @@ class Trigger extends Activity {
       now.setUTCMinutes(0, 0, 0);
     }
     return now.toISOString().replace(/:\d\d\..+|-|T/g, '').replace(':','');
+  }
+
+  resolveGranularity(): string {
+    return this.config.stats?.granularity || '1h';
   }
     
   /**

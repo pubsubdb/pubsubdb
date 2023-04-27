@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { GetStatsOptions } from '../../typedefs/stats';
+import { JobStatsInput, GetStatsOptions } from '../../typedefs/stats';
 import { PubSubDB } from '../../index';
 import { Params, Query, Body } from '../../typedefs/http';
 
@@ -9,9 +9,24 @@ export const registerAppRoutes = (server: FastifyInstance, pubSubDB: PubSubDB) =
     return await pubSubDB.pub(request.params.topic, request.body);
   });
 
-  server.get<{ Querystring: Query }>('/v1/stats', async (request, reply) => {
-    const options: GetStatsOptions = request.query as unknown as GetStatsOptions;
-    return await pubSubDB.getStats(options);
+  server.post<{ Params: Params; Body: Body }>('/v1/stats/general/:topic', async (request, reply) => {
+    const jobStats: JobStatsInput = {
+      data: request.body.data as unknown as Record<string, unknown>,
+      start: request.body.start,
+      end: request.body.end,
+      range: request.body.range,
+    }
+    return await pubSubDB.getStats(request.params.topic, jobStats);
+  });
+
+  server.post<{ Params: Params; Body: Body }>('/v1/stats/index/:topic', async (request, reply) => {
+    const jobStats: JobStatsInput = {
+      data: request.body.data as unknown as Record<string, unknown>,
+      start: request.body.start,
+      end: request.body.end,
+      range: request.body.range,
+    }
+    return await pubSubDB.getIds(request.params.topic, jobStats, request.body.facets as unknown as string[]);
   });
 
   server.get<{ Params: Params }>('/v1/jobs/:job_id', async (request, reply) => {
