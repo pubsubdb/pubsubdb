@@ -26,10 +26,7 @@ class IORedisStoreService extends StoreService {
   }
 
   /**
-   * only the engine can call this method; it initializes the local cache. the developer
-   * must have the opportunity to set the cache namespace by init'ing the PSDB instance.
-   * That instance will call this mathod, providing the necessary namespace override
-   * and ensuring no collisions.
+   * only the engine can call this method; it initializes the local cache
    */
   async init(namespace = PSNS, appId: string, logger: ILogger): Promise<{[appId: string]: PubSubDBApp}> {
     this.namespace = namespace;
@@ -46,9 +43,6 @@ class IORedisStoreService extends StoreService {
 
   /**
    * mint a key to access a given entity (KeyType) in the store
-   * @param type 
-   * @param params 
-   * @returns 
    */
   mintKey(type: KeyType, params: KeyStoreParams): string {
     if (!this.namespace) throw new Error('namespace not set');
@@ -129,12 +123,7 @@ class IORedisStoreService extends StoreService {
   }
 
   /**
-   * sets/locks the active version for an app; this is used to track the versions of the app that are
-   * currently "active". this is set at deploy time after the segmenter has persisted all models to the store.
-   * 
-   * @param {string} id
-   * @param {string} version
-   * @returns {Promise<any>}
+   * sets/locks the active version for an app
    */
   async activateAppVersion(id: string, version: string): Promise<any> {
     const params: KeyStoreParams = { appId: id };
@@ -157,14 +146,7 @@ class IORedisStoreService extends StoreService {
   }
 
   /**
-   * registers an app version; this is used to track known versions of the app in any state.
-   * The version is set at compile time for an app BEFORE the segmenter
-   * starts persisting definitions to the store. The corresponding lifecycle method,
-   * `activateAppVersion`, can be called to lock the active version once the segmenter has
-   * verified that all models have been persisted to the store.
-   * 
-   * @param {any} manifest
-   * @returns {Promise<any>}
+   * registers an app version; this is used to track known versions of the app in any state
    */
   async registerAppVersion(appId: string, version: string): Promise<any> {
     const params: KeyStoreParams = { appId };
@@ -178,41 +160,28 @@ class IORedisStoreService extends StoreService {
   }
 
   /**
-   * every job that includes a 'stats' field will have its stats aggregated into various
-   * data structures that can be used to query the store for job stats. The `general`
-   * stats are persisted to a HASH; `index` uses LIST; and `median` uses ZSET.
-   * 
-   * @param jobKey
-   * @param jobId
-   * @param dateTime 
-   * @param stats 
-   * @param appVersion
-   * @returns 
+   * every job that includes a 'stats' field will have its stats aggregated
    */
   async setJobStats(jobKey: string, jobId: string, dateTime: string, stats: StatsType, appVersion: AppVersion, multi? : any): Promise<any> {
     const params: KeyStoreParams = { appId: appVersion.id, jobId, jobKey, dateTime };
     const privateMulti = multi || await this.redisClient.multi();
-    //general
     if (stats.general.length) {
       const generalStatsKey = this.mintKey(KeyType.JOB_STATS_GENERAL, params);
       for (const { target, value } of stats.general) {
         privateMulti.hincrbyfloat(generalStatsKey, target, value as number);
       }
     }
-    //index
     for (const { target, value } of stats.index) {
       const indexParams = { ...params, facet: target };
       const indexStatsKey = this.mintKey(KeyType.JOB_STATS_INDEX, indexParams);
       privateMulti.rpush(indexStatsKey, value.toString());
     }
-    //median
     for (const { target, value } of stats.median) {
       const medianParams = { ...params, facet: target };
       const medianStatsKey = this.mintKey(KeyType.JOB_STATS_MEDIAN, medianParams);
       privateMulti.zadd(medianStatsKey, value.toString(), value.toString());
     }
     if (!multi) {
-      //always execute the multi if it's not passed in
       return await privateMulti.exec();
     }
   }
@@ -258,21 +227,21 @@ class IORedisStoreService extends StoreService {
     return output;
   }
 
+  /**
+   * See the CollationService for details
+   */
   async updateJobStatus(jobId: string, collationKeyStatus: number, appVersion: AppVersion, multi? : any): Promise<any> {
     const jobKey = this.mintKey(KeyType.JOB_DATA, { appId: appVersion.id, jobId });
     await (multi || this.redisClient).hincrbyfloat(jobKey, 'm/js', collationKeyStatus);
   }
 
   /**
-   * adds a job (data), metadata, and aggregation stats to the store; the jobId is provided
-   * by the engine and can be used to retrieve the job later. The ID is either created by the engine
-   * or is provided by the user as part of the job data. The schema for the activity data contains
-   * the definition, necessary to resolve which jobId to use.
+   * adds a job (data), metadata, and aggregation stats to the store
    */
   async setJob(jobId: string, data: Record<string, unknown>, metadata: Record<string, unknown>, appVersion: AppVersion, multi? : any): Promise<any|string> {
     const hashKey = this.mintKey(KeyType.JOB_DATA, { appId: appVersion.id, jobId });
     const hashData = SerializerService.flattenHierarchy({ m: metadata, d: data});
-    const response = await (multi || this.redisClient).hmset(hashKey, hashData);
+    await (multi || this.redisClient).hmset(hashKey, hashData);
     return multi || jobId;
   }
 
@@ -293,14 +262,7 @@ class IORedisStoreService extends StoreService {
   }
 
   /**
-   * gets the job data;
-   * 1) returns `undefined` if the job does not exist at all
-   * 2) returns `null` if the job exists, but no data was stored 
-   *    (which can happen if no `job` map rules existed on the trigger)
-   * 
-   * @param jobId 
-   * @param appVersion 
-   * @returns 
+   * Gets the job data (undefined if non-existent or null if no data)
    */
   async getJobData(jobId: string, appVersion: AppVersion): Promise<any> {
     const params: KeyStoreParams = { appId: appVersion.id, jobId };
@@ -311,31 +273,21 @@ class IORedisStoreService extends StoreService {
   }
 
   /**
-   * convenience method to get the job data
-   * @param jobId 
-   * @returns 
+   * Convenience method to get the job data
    */
   async getJob(jobId: string, appVersion: AppVersion): Promise<any> {
     return await this.getJobData(jobId, appVersion);
   }
 
   /**
-   * convenience method to get the job data
-   * @param jobId 
-   * @returns 
+   * Convenience method to get the job data
    */
   async get(jobId: string, appVersion: AppVersion): Promise<any> {
     return await this.getJobData(jobId, appVersion);
   }
 
   /**
-   * adds an activity (data), metadata, and aggregation stats to the store; the jobId is provided
-   * @param jobId 
-   * @param activityId 
-   * @param data 
-   * @param metadata 
-   * @param appVersion 
-   * @returns 
+   * Adds an activity (data), metadata, and aggregation stats to the store.
    */
   async setActivity(jobId: string, activityId: string, data: Record<string, unknown>, metadata: Record<string, unknown>, appVersion: AppVersion, multi? : RedisClientType): Promise<RedisClientType|string>  {
     const hashKey = this.mintKey(KeyType.JOB_ACTIVITY_DATA, { appId: appVersion.id, jobId, activityId });
@@ -345,13 +297,7 @@ class IORedisStoreService extends StoreService {
   }
 
   /**
-   * ALWAYS called first before running any activity (including triggers); if the activity
-   * already exists, this is a dupe and the activity should not be run.
-   * 
-   * @param jobId 
-   * @param activityId 
-   * @param config 
-   * @returns 
+   * ALWAYS the first call when running a job to ensure no duplicate job ids
    */
   async setActivityNX(jobId: string, activityId: any, config: AppVersion): Promise<number> {
     const hashKey = this.mintKey(KeyType.JOB_ACTIVITY_DATA, { appId: config.id, jobId, activityId });
@@ -360,12 +306,7 @@ class IORedisStoreService extends StoreService {
   }
   
   /**
-   * gets the activity metadata; returns undefined if the activity does not exist; can happen
-   * if the activity was garbage collected
-   * @param jobId 
-   * @param activityId 
-   * @param appVersion 
-   * @returns {undefined|Record<string, any>}
+   * Gets the activity metadata; returns undefined if the activity does not exist;
    */
   async getActivityMetadata(jobId: string, activityId: string, appVersion: AppVersion): Promise<any> {
     const metadataFields = ['m/aid', 'm/atp', 'm/stp', 'm/ac', 'm/au', 'm/jid', 'm/key'];
@@ -384,15 +325,7 @@ class IORedisStoreService extends StoreService {
   }
 
   /**
-   * gets the activity data;
-   * 1) returns `undefined` if the activity does not exist at all
-   * 2) returns `null` if the activity exists, but no data was stored 
-   *    (which can happen if no downstream activities are mapped to its output)
-   * 
-   * @param jobId 
-   * @param activityId 
-   * @param appVersion 
-   * @returns {undefined|null|Record<string, any>}
+   * gets the activity data (`undefined` if nonexistent or `null` if no data)
    */
   async getActivityData(jobId: string, activityId: string, appVersion: AppVersion): Promise<any> {
     const params: KeyStoreParams = { appId: appVersion.id, jobId, activityId };
@@ -404,10 +337,6 @@ class IORedisStoreService extends StoreService {
 
   /**
    * convenience method to get the activity data
-   * @param jobId 
-   * @param activityId 
-   * @param appVersion 
-   * @returns 
    */
   async getActivity(jobId: string, activityId: string, appVersion: AppVersion): Promise<any> {
     return await this.getActivityData(jobId, activityId, appVersion);
@@ -415,9 +344,6 @@ class IORedisStoreService extends StoreService {
 
   /**
    * Checks the cache for the schema and if not found, fetches it from the store
-   * 
-   * @param topic 
-   * @returns 
    */
   async getSchema(activityId: string, appVersion: AppVersion): Promise<any> {
     let schema = this.cache.getSchema(appVersion.id, appVersion.version, activityId);
@@ -431,7 +357,6 @@ class IORedisStoreService extends StoreService {
 
   /**
    * Always fetches the schemas from the store and caches them in memory
-   * @returns 
    */
   async getSchemas(appVersion: AppVersion): Promise<any> {
     let schemas = this.cache.getSchemas(appVersion.id, appVersion.version);
@@ -451,8 +376,6 @@ class IORedisStoreService extends StoreService {
 
   /**
    * Sets the schemas for all topics in the store and in memory
-   * @param schemas 
-   * @returns 
    */
   async setSchemas(schemas: Record<string, any>, appVersion: AppVersion): Promise<any> {
     const params: KeyStoreParams = { appId: appVersion.id, appVersion: appVersion.version };
@@ -468,9 +391,6 @@ class IORedisStoreService extends StoreService {
 
   /**
    * Registers handlers for public subscriptions for the given topic in the store
-   * @param subscriptions 
-   * @param appVersion 
-   * @returns 
    */
   async setSubscriptions(subscriptions: Record<string, any>, appVersion: AppVersion): Promise<void> {
     const params: KeyStoreParams = { appId: appVersion.id, appVersion: appVersion.version };
@@ -602,7 +522,6 @@ class IORedisStoreService extends StoreService {
     const topic = this.mintKey(keyType, { appId: appVersion.id });
     await this.redisClient.publish(topic, JSON.stringify(message));
   }
-
 }
 
 export { IORedisStoreService };
