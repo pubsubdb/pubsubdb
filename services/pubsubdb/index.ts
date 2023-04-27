@@ -1,11 +1,11 @@
-import { ActivityMetadata } from '../../typedefs/activity';
+import { ActivityMetadata, TriggerActivity } from '../../typedefs/activity';
 import { JobContext } from '../../typedefs/job';
 import {
   PubSubDBApps,
   PubSubDBConfig,
   PubSubDBManifest,
   PubSubDBSettings } from '../../typedefs/pubsubdb';
-import { GetStatsOptions, StatsResponse } from '../../typedefs/stats';
+import { JobStatsInput, GetStatsOptions, IdsResponse, StatsResponse } from '../../typedefs/stats';
 import { AdapterService } from '../adapter';
 import { CompilerService } from '../compiler';
 import { LoggerService, ILogger } from '../logger';
@@ -38,6 +38,10 @@ class PubSubDBService {
   untilVersion: string | null = null;
   quorum: number | null = null;
 
+  /**
+   * every object persisted to the backend will be namespaced with this value
+   * @param namespace 
+   */
   verifyNamespace(namespace?: string) {
     if (!namespace) {
       this.namespace = PSNS;
@@ -48,6 +52,9 @@ class PubSubDBService {
     }
   }
 
+  /**
+   * verifies that the app id is valid and not reserved (a)
+   */
   verifyAppId(appId: string) {
     if (!appId?.match(/^[A-Za-z0-9-]+$/)) {
       throw new Error(`config.appId [${appId}] is invalid`);
@@ -58,6 +65,11 @@ class PubSubDBService {
     }
   }
 
+  /**
+   * Redis (ioredis and redis) serves as the reference implementation for the `store`
+   * interface. However, the `store` interface is designed to be pluggable so that
+   * other databases can be used as well. Subclass `StoreService` to implement.
+   */
   async verifyStore(store: StoreService) {
     if (!(store instanceof StoreService)) {
       throw new Error(`store ${store} is invalid`);
@@ -68,10 +80,9 @@ class PubSubDBService {
   }
 
   /**
-   * Initializes `pubsubdb` and its `store`. The `store` is critical as it
-   * represents a common API layer between the pubsubdb client and the redis backend;
-   * It surfaces the low-level redis commands ('hget', 'set') with domain-specific
-   * constructs like 'app', 'activity', and 'job'.
+   * Initializes `pubsubdb` and its bound `store`. The `store` serves to hide the
+   * low-level, native Redis commands and provides a higher-level API for
+   * interacting with the database that is more suitable for modeling workflows.
    */
   static async init(config: PubSubDBConfig) {
     instance = new PubSubDBService();
@@ -89,51 +100,14 @@ class PubSubDBService {
     return instance;
   }
 
-
   /**
-   * The BE server (Redis) stores all state, including all application metadata
-   * and execution instructions. In order to run at scale, the client must
-   * resolve the app version and then cache the execution instructions for that version.
-   * By doing so, only data is ever sent over the wire in a typical read/write exchange.
-   * This obviously scales well, but it also allows the client to get out of step
-   * and run a stale version. As part of the lifecycle to prevent this, the client can
-   * temporarily run in a 'nocache' mode, which will force the client to confirm the
-   * app version before executing any instructions. This is a minor delay as it is
-   * a read operation against Redis.
-   *
-   * When a message published to the topic `psdb:${appId}::conductor`,
-   * and it has the payload {type:'activate', cache_mode:'nocache|cache' until_version:string},
-   * it triggers all connected PubSubDB clients to run in 'nocache' mode. (It means
-   * a new version is about to be activated.)
-   *
-   * At this point in the process, the new version will already be deployed to the
-   * BE server, but the the `app` version flag will not yet be updated to use it. Once the
-   * message is published to run in `nocache` mode, the version to use will be updated
-   * on the BE. Every connected client will be running in nocache mode and will pick
-   * up the change on their very next call to the BE.
-   * 
-   * The moment a client returns an app version with this expected value, it will lock
-   * the version locally as the version to use and cease running in 'nocache' mode. From
-   * this point forward all clients will use a cached instance of the app schema
-   * and execution instructions for the new version. The entire operation is stateless
-   * yet coordinated without requiring a shutdown to ensure the singular version.
-   *
-   * TODO: Run a 3-part ping/pong exchange to verify a full quorum of clients given
-   *       the stateless nature of the system. If all three runs produce the exact
-   *       same client count, then all clients are in a "healthy" state and
-   *       able to respond to the about-to-be-issued-upgrade-request. If not, then
-   *       the system will throw a 'busy...' error and the caller can try again.
-   *       The event will use the same `psdb:${appId}::schedule` topic
-   *       but the payload will be {type:'ping'}. Clients are expected
-   *       to respond with {type:'pong', guid:string} on the same topic.
-   * 
-   * @returns
+   * Returns the app id and version to use when processing messages.
    */
   async getAppConfig() {
     if (this.cacheMode === 'nocache') {
       const app = await this.store.getApp(this.appId, true);
       if (app.version.toString() === this.untilVersion.toString()) {
-        //new version is deployed; cache execution instructions
+        //new version is deployed; OK to cache again
         if (!this.apps) this.apps = {};
         this.apps[this.appId] = app;
         this.setCacheMode('cache', app.version.toString());
@@ -145,7 +119,20 @@ class PubSubDBService {
   }
 
   /**
-   * Returns scoped callback handler function for the subscription channel
+   * when possible, pubsubdb instances will attempt to cache the 
+   * execution instructions for an app+version. Caching is disabled during
+   * a version upgrade, and re-enabled once the new version is deployed.
+   */
+  setCacheMode(cacheMode: 'nocache' | 'cache', untilVersion: string) {
+    this.logger.info(`setting mode to ${cacheMode}`);
+    this.cacheMode = cacheMode;
+    this.untilVersion = untilVersion;
+  }
+  
+  /**
+   * Returns a scoped callback handler for processing subscription messages.
+   * Redis subscription messages are used to coordinate fleet behavior, particularly
+   * during new version activation.
    */
   subscriptionHandler(): SubscriptionCallback {
     const self = this;
@@ -157,7 +144,7 @@ class PubSubDBService {
         self.store.publish(KeyType.CONDUCTOR, { type: 'pong', guid: self.guid, originator: message.originator }, await this.getAppConfig());
       } else if (message.type === 'pong') {
         if (self.guid === message.originator) {
-          //count the pong responses (we originated the ping)
+          //the originator counts the quorum
           self.quorum = self.quorum + 1;
         }
       }
@@ -166,9 +153,8 @@ class PubSubDBService {
 
   /**
    * resets the quorum count and returns the prior count
-   * @returns 
    */
-  async requestQuorum() {
+  async requestQuorum(): Promise<number> {
     const quorum = this.quorum;
     this.quorum = 0;
     await this.store.publish(KeyType.CONDUCTOR, { type: 'ping', originator: this.guid }, await this.getAppConfig())
@@ -176,26 +162,29 @@ class PubSubDBService {
     return quorum;
   };
 
-  /**
-   * pubsubdb instances cache their execution instructions for their target app/version;
-   * this method will toggle the cache mode to force the instance to confirm
-   * which version of the app to use before executing any isntructions.
-   * @param cacheMode
-   */
-  setCacheMode(cacheMode: 'nocache' | 'cache', untilVersion: string) {
-    this.logger.info(`setting mode to ${cacheMode}`);
-    this.cacheMode = cacheMode;
-    this.untilVersion = untilVersion;
-  }
 
 
   // ************* METADATA/MODEL METHODS *************
-  /**
-   * returns a tuple with the activity [id, schema] when provided a subscription topic
-   * todo: check `hooks` first for topic and then resolve using `signals` table
-   * @param {string} topic - for example: 'trigger.test.requested' OR '.a1'
-   * @returns {Promise<[activityId: string, activity: ActivityType]>}
-   */
+  async initActivity(topic: string, data: Record<string, unknown>, context?: JobContext): Promise<any> {
+    if (!data) {
+      throw new Error(`payload data is required and must be an object`);
+    }
+    const [activityId, activity] = await this.getActivity(topic);
+    const ActivityHandler = Activities[activity.type];
+    if (ActivityHandler) {
+      const utc = new Date().toISOString();
+      const metadata: ActivityMetadata = {
+        aid: activityId,
+        atp: activity.type,
+        stp: activity.subtype,
+        ac: utc,
+        au: utc
+      };
+      return new ActivityHandler(activity, data, metadata, this, context);
+    } else {
+      throw new Error(`activity type ${activity.type} not found`);
+    }
+  }
   async getActivity(topic: string): Promise<[activityId: string, activity: ActivityType]> {
     const app = await this.store.getApp(this.appId);
     if (app) {
@@ -216,15 +205,14 @@ class PubSubDBService {
     }
     throw new Error(`no app found for id ${this.appId}`);
   }
-  /**
-   * get the pubsubdb manifest
-   */
   async getSettings(): Promise<PubSubDBSettings> {
     return await this.store.getSettings();
   }
   isPrivate(topic: string) {
     return topic.startsWith('.');
   }
+
+
 
   // ************* COMPILER METHODS *************
   async plan(path: string): Promise<PubSubDBManifest> {
@@ -266,15 +254,34 @@ class PubSubDBService {
 
 
   // ************* REPORTER METHODS *************
-  async getStats(options: GetStatsOptions): Promise<StatsResponse> {
+  async getStats(topic: string, inputs: JobStatsInput): Promise<StatsResponse> {
     const { id, version } = await this.getAppConfig();
     const reporter = new Reporter(id, version, this.store, this.logger);
+    const options = await this.createOptions(topic, inputs);
     return await reporter.getStats(options);
+  }
+  async getIds(topic: string, inputs: JobStatsInput, facets = []): Promise<IdsResponse> {
+    const { id, version } = await this.getAppConfig();
+    const reporter = new Reporter(id, version, this.store, this.logger);
+    const options = await this.createOptions(topic, inputs);
+    return await reporter.getIds(options, facets);
+  }
+  async createOptions(topic: string, inputs: JobStatsInput): Promise<GetStatsOptions> {
+    //convert user-provided data into the job key, etc
+    const trigger = await this.initActivity(topic, inputs.data);
+    await trigger.createContext();
+    return {
+      end: inputs.end,
+      start: inputs.start,
+      range: inputs.range,
+      granularity: trigger.resolveGranularity(topic),
+      key: trigger.resolveJobKey(topic)
+    } as GetStatsOptions;
   }
 
 
 
-  // ************* TODO: BATCH.PUB METHODS *************
+  // ********************** TODO: BATCH.PUB METHODS ***********************
   //expose batch method: <this>.pub(topic, data, context)
   //   this targets a specific jobkey+dateTimeSlice
   //   it is a "job" where the queue is the jobkey+dateTimeSlice:index
@@ -283,62 +290,35 @@ class PubSubDBService {
 
 
 
-  // ************* PUB/SUB METHODS *************
-  /**
-   * trigger a job by publishing a payload to its assigned topic
-   * @param {string} topic - for example: 'trigger.test.requested'
-   * @param {Promise<Record<string, unknown>>} data
-   * @param {JobContext} context
-   */
+  // ************************** PUB/SUB METHODS **************************
   async pub(topic: string, data: Record<string, unknown>, context?: JobContext) {
-    const [activityId, activity] = await this.getActivity(topic);
-    const ActivityHandler = Activities[activity.type];
-    if (ActivityHandler) {
-      const utc = new Date().toISOString();
-      const metadata: ActivityMetadata = {
-        aid: activityId,
-        atp: activity.type,
-        stp: activity.subtype,
-        ac: utc,
-        au: utc
-      };
-      const activityHandler = new ActivityHandler(activity, data, metadata, this, context);
+    const activityHandler = await this.initActivity(topic, data, context);
+    if (activityHandler) {
       return await activityHandler.process();
+    } else {
+      throw new Error(`unable to process activity for topic ${topic}`);
     }
   }
-  /**
-   * subscribe to a topic as a read-only listener
-   * 
-   * @param topic
-   * @param callback 
-   */
   sub(topic: string, callback: (data: Record<string, any>) => void) {
-    //Declarative YAML app models represent the "primary" subscription type.
-    //This method represents the "secondary" subscription type and allows 
-    //PubSubDB to be used as a standard fan-out event publisher with no
-    //jobs, tracking or anything else...essentially a read-only mechanism
-    //to be alerted when events happen on the server.
+    //local, ephemeral subscription
   }
 
 
 
-  // ************* STORE METHODS (ACTIVITY/JOB DATA) *************
+  // ***************** STORE METHODS (ACTIVITY/JOB DATA) *****************
   /**
    * return a job by its id
-   * @param key 
-   * @returns 
    */
   async get(key: string) {
     return this.store.get(key, await this.getAppConfig());
   }
 
   static stop(config: Record<string, string|number|boolean>) {
-    //shut down the entire system (every write call is disabled)
-    //todo: topic based, filter? allow read, read/write, etc
+    //disable db access (read? readwrite? write?)
   }
 
   async start(config: Record<string, string|number|boolean>) {
-    //start up again (todo: a portion? read only? readwrite?)
+    //enable db access (read? readwrite? write?)
   }
 }
 

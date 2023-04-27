@@ -27,17 +27,16 @@ Install PubSubDB using NPM.
 npm install @pubsubdb/pubsubdb
 ```
 
-
 Pass your Redis client library (The `redis` and `ioredis` NPM packages are supported) to serve as the backend Data Store used by PubSubDB:
 
 ```javascript
 import { PubSubDB, IORedisStore, RedisStore } from '@pubsubdb/pubsubdb';
 
-//initialize two standard Redis client instances using `ioredis` or `redis` NPM packages
+//initialize two standard Redis client instances using `ioredis` or `redis`
 //const redisClient = await getMyRedisClient...
 //const redisSubscriberClient = await getMyReadOnlyRedisClient...
 
-//wrap your redisClient instances (this example uses IORedisStore)
+//wrap your redisClient instances (this example uses `ioredis`)
 const store = new IORedisStore(redisClient, redisSubscriberClient)
 
 //initialize PubSubDB
@@ -55,7 +54,9 @@ const plan = pubSubDB.plan('./pubsubdb.yaml');
 ```
 
 ### Deploy
-Once you're satisfied with your plan, call `deploy` to officially compile and deploy the next version of your application. (Your version isn't "live" quite yet...you still need to activate it.)
+Once you're satisfied with your plan, call `deploy` to officially compile and deploy your flows. The compiler will save a static copy of the deployment manifest to your local file system and then transfer the execution instructions to Redis.
+
+>NOTE: It's good practice to execute this call in your local Git branch to generate the versioned source files for persistence to your VCS. It helps others reason about the version history for the application and the manner in which it changed over time.
 
 ```typescript
 import { PubSubDB, IORedisStore, RedisStore } from '@pubsubdb/pubsubdb';
@@ -65,7 +66,7 @@ const status = await pubSubDB.deploy('./pubsubdb.yaml');
 ```
 
 ### Activate
-Call `activate` to set which deployment version to use. The call will replicate simultaneously through the network of all connected clients.
+Call `activate` to set which deployment version to use. The update will be applied system-wide to all running clients.
 
 ```typescript
 import { PubSubDB, IORedisStore, RedisStore } from '@pubsubdb/pubsubdb';
@@ -111,19 +112,38 @@ const jobMetadata = pubSubDB.getJobMetadata('order_123');
 ```
 
 ### Get Job Statistics
-Query for aggregation statistics by providing a time range and measures. In this example, the stats for the `order.approval.price.requested` topic have been requested for the past 24 hours. The granularity is set to `1h`, so an array with 24 distinct time slices will be returned.
+Query for aggregation statistics by providing a time range and the data you're interested in. In this example, the stats for the `order.approval.requested` topic have been requested for the past 24 hours (`24h`). The `data` field is used to target the desired records and will limit the statistics to just those records with the provided characteristics.
 
 ```ts
 import { PubSubDB, IORedisStore, RedisStore } from '@pubsubdb/pubsubdb';
 
 const pubSubDB = PubSubDB.init({ ... });
 
-const stats = pubSubDB.getJobStats('order.approval.price.requested', {
-  key: 'widgetA',
-  granularity: '1h',
+const payload = {
+  data: {
+    object_type: 'widgetA'
+  },
   range: '24h',
   end: 'NOW'
-});
+};
+const stats = pubSubDB.getStats('order.approval.requested', payload);
+```
+
+### Get Job Ids
+All workflow jobs are persisted as time-series data, enabling you to track specific jobs according to their payload. In this example, the stats for the `order.approval.requested` topic have been requested for the past 30 minutes (`30m`). The `data` field is used to specify the *shape* of the data, limiting ids to those jobs where the `object_type` is *widgetA*.
+```ts
+import { PubSubDB, IORedisStore, RedisStore } from '@pubsubdb/pubsubdb';
+
+const pubSubDB = PubSubDB.init({ ... });
+
+const payload = {
+  data: {
+    object_type: 'widgetA'
+  },
+  range: '30m',
+  end: 'NOW'
+};
+const ids = pubSubDB.getIds('order.approval.requested', payload);
 ```
 
 ## Developer Guide

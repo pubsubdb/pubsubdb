@@ -483,24 +483,24 @@ const jobMetadata = pubSubDB.getJobMetadata('order_123');
 ```
 
 ## Get Job Statistics
-Query for aggregation statistics by providing a time range and measures. In this example, the stats for the `order.approval.price.requested` topic have been requested fr the past 24 hours. The granularity is set to `1h`, so an array with 24 distinct time slices will be returned.
-
->The count for any target field is distributed across cardinal values. Getting the count for a boolean field will return the total number of both `true` and `false` values.
+Query for aggregation statistics by providing a time range and the data you're interested in. In this example, the stats for the `order.approval.price.requested` topic have been requested for the past 24 hours (`24h`). The `data` field is used to target the desired records and will limit the statistics to just those records with this characteristic.
 
 ```ts
-import { PubSubDB, IORedisStore } from '@pubsubdb/pubsubdb';
+import { PubSubDB, IORedisStore, RedisStore } from '@pubsubdb/pubsubdb';
 
 const pubSubDB = PubSubDB.init({ ... });
 
-const stats = pubSubDB.getJobStats('order.approval.price.requested', {
-  key: 'widgetA',
-  granularity: '1h',
+const payload = {
+  data: {
+    object_type: 'widgetA'
+  },
   range: '24h',
   end: 'NOW'
-});
+};
+const stats = pubSubDB.getStats('order.approval.price.requested', payload);
 ```
 
-The specific measures that will be returned are defined by the trigger, `a5`. That activity has sole responsibility for the topic. Accordingly, here are the target meeasures as defined in the workflow for `a5`. 
+The specific measures that will be returned are defined by the trigger, `a5`. That activity has sole responsibility for the topic. Accordingly, here are the target measures as defined in the workflow for `a5`. 
 
 ```yaml
 stats:
@@ -584,6 +584,68 @@ When the response is returned, the *average* for the `price` field and the *coun
       ]
     },
     ...
+  ]
+}
+```
+
+## Get Job Ids
+All workflow jobs are persisted as time-series data, enabling you to track specific jobs according to their payload. In this example, the stats for the `order.approval.requested` topic have been requested for the past 24 hours (`24h`). The `data` field is used to specify the *shape* of the data, limiting ids to those jobs where the `object_type` is *widgetA*.
+
+```ts
+import { PubSubDB, IORedisStore, RedisStore } from '@pubsubdb/pubsubdb';
+
+const pubSubDB = PubSubDB.init({ ... });
+
+const payload = {
+  data: {
+    object_type: 'widgetA'
+  },
+  range: '24h',
+  end: 'NOW'
+};
+const ids = pubSubDB.getIds('order.approval.requested', payload);
+```
+
+When the response is returned, the *average* for the `price` field and the *count* for the cardinal `object_type` values will be provided, along withe the 1 hour sub-measures.
+
+```json
+{
+  "key": "widgetA",
+  "facets": ["object_type:widgetA"],
+  "granularity": "5m",
+  "range": "5m",
+  "start": "2023-04-26T16:45Z",
+  "counts": [
+      {
+        "facet": "color:blue",
+        "count": 3
+      }
+  ],
+  "segments": [
+    {
+      "time": "2023-04-26T16:45Z",
+      "measures": [
+        {
+          "type": "ids",
+          "target": "object_type:widgetA",
+          "time": "2023-04-26T16:45Z",
+          "count": 3,
+          "ids": ["ord_4005", "ord_4006", "ord_4007"]
+        }
+      ]
+    },
+    {
+        "time": "2023-04-26T16:50Z",
+        "measures": [
+            {
+                "type": "ids",
+                "target": "object_type:widgetA",
+                "time": "2023-04-26T16:50Z",
+                "count": 0,
+                "ids": []
+            }
+        ]
+    }
   ]
 }
 ```

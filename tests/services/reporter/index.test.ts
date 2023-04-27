@@ -11,6 +11,7 @@ jest.mock('../../../services/store/stores/ioredis', () => {
     IORedisStoreService: jest.fn().mockImplementation(() => {
       return {
         getJobStats: jest.fn(),
+        getJobIds: jest.fn(),
       };
     }),
   };
@@ -48,7 +49,6 @@ describe('ReporterService', () => {
   };
 
   beforeAll(async () => {
-    //set up the redis connection
     redisConnection = await RedisConnection.getConnection(CONNECTION_KEY);
     redisClient = await redisConnection.getClient();
     redisClient.flushdb();
@@ -72,7 +72,6 @@ describe('ReporterService', () => {
         range: '1h',
         end: 'NOW',
       };
-
       const sampleRedisData: JobStatsRange = {
         [`${PSNS}:${appId}:s:${options.key}:${getTimeSeriesStamp(options.granularity, 10)}`]: {
           'count': 25,
@@ -108,6 +107,32 @@ describe('ReporterService', () => {
       expect(stats.granularity).toBe(options.granularity);
       expect(stats.range).toBe(options.range);
       expect(stats.end).toBe(options.end);
+    });
+  });
+
+  describe('getJobIds', () => {
+    it('should return ids data based on given options and facets', async () => {
+      const getStatsOptions = {
+        key: 'testKey',
+        granularity: '5m',
+        range: '1h',
+        end: 'NOW',
+      };
+      const facets = ['facet1', 'facet2'];
+      const mockedJobIds = {
+        'some:key:index:facet1': ['id1', 'id2'],
+        'some:key:index:facet2': ['id3', 'id4'],
+      };
+
+      (redisStore.getJobIds as jest.Mock).mockResolvedValue(mockedJobIds);
+      const result = await reporter.getIds(getStatsOptions, facets);
+      expect(redisStore.getJobIds).toHaveBeenCalledWith(expect.any(Array), expect.any(Object));
+      expect(result).toHaveProperty('key', getStatsOptions.key);
+      expect(result).toHaveProperty('facets', facets);
+      expect(result).toHaveProperty('granularity', getStatsOptions.granularity);
+      expect(result).toHaveProperty('range', getStatsOptions.range);
+      expect(result).toHaveProperty('counts');
+      expect(result).toHaveProperty('segments');
     });
   });
 });

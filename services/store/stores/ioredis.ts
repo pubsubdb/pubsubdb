@@ -6,7 +6,7 @@ import { AppVersion } from '../../../typedefs/app';
 import { SubscriptionCallback } from '../../../typedefs/conductor';
 import { PubSubDBApp, PubSubDBSettings } from '../../../typedefs/pubsubdb';
 import { Signal } from '../../../typedefs/signal';
-import { JobStats, JobStatsRange, StatsType } from '../../../typedefs/stats';
+import { IdsData, JobStats, JobStatsRange, StatsType } from '../../../typedefs/stats';
 import { ILogger } from '../../logger';
 import { RedisClientType } from '../../../cache/ioredis';
 import { ChainableCommander } from 'ioredis';
@@ -239,6 +239,25 @@ class IORedisStoreService extends StoreService {
     return output;
   }
 
+  async getJobIds(indexKeys: string[], config: AppVersion): Promise<IdsData> {
+    const multi = this.getMulti();
+    for (const idsKey of indexKeys) {
+      multi.lrange(idsKey, 0, -1);
+    }
+    const results = await multi.exec();
+    const output: IdsData = {};
+    for (const [index, result] of results.entries()) {
+      const key = indexKeys[index];
+      const idsList: string[] = result[1] as string[];
+      if (idsList && idsList.length > 0) {
+        output[key] = idsList;
+      } else {
+        output[key] = [];
+      }
+    }
+    return output;
+  }
+
   async updateJobStatus(jobId: string, collationKeyStatus: number, appVersion: AppVersion, multi? : any): Promise<any> {
     const jobKey = this.mintKey(KeyType.JOB_DATA, { appId: appVersion.id, jobId });
     await (multi || this.redisClient).hincrbyfloat(jobKey, 'm/js', collationKeyStatus);
@@ -249,11 +268,6 @@ class IORedisStoreService extends StoreService {
    * by the engine and can be used to retrieve the job later. The ID is either created by the engine
    * or is provided by the user as part of the job data. The schema for the activity data contains
    * the definition, necessary to resolve which jobId to use.
-   * 
-   * @param jobId
-   * @param data 
-   * @param metadata 
-   * @returns 
    */
   async setJob(jobId: string, data: Record<string, unknown>, metadata: Record<string, unknown>, appVersion: AppVersion, multi? : any): Promise<any|string> {
     const hashKey = this.mintKey(KeyType.JOB_DATA, { appId: appVersion.id, jobId });

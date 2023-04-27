@@ -1,7 +1,7 @@
 import { PubSubDB, PubSubDBConfig, IORedisStore } from '../index';
 import { RedisConnection, RedisClientType } from '../cache/ioredis';
 import { PSNS } from '../services/store/key';
-import { GetStatsOptions } from '../typedefs/stats';
+import { JobStatsInput } from '../typedefs/stats';
 
 describe('pubsubdb', () => {
   const appConfig = { id: 'test-app', version: '1' };
@@ -119,15 +119,34 @@ describe('pubsubdb', () => {
   });
 
   describe('getStats()', () => {
-    it('should return stats', async () => {
-      const options: GetStatsOptions = {
-        key: 'redprimarylg',
-        granularity: '5m',  //should come from schema
+    it('should return job stats for matching jobs', async () => {
+      const options: JobStatsInput = {
+        data: {
+          color: 'red',
+          primacy: 'primary',
+          size: 'lg',
+        },
         range: '1h',
         end: 'NOW',
       };
-      const stats = await pubSubDB.getStats(options);
-      expect(stats.segments.length).toEqual(13); //13 5m segments in 1h ( 00 to 00 inclusive)
+      const stats = await pubSubDB.getStats('order.scheduled', options);
+      expect(stats.segments.length).toEqual(13); //13 5m segments in 1h (range is inclusive (00 to 00))
     });
-  } );
+  });
+
+  describe('getIds()', () => {
+    it('should return ids for matching jobs', async () => {
+      const options: JobStatsInput = {
+        data: {
+          color: 'red',
+          primacy: 'primary',
+          size: 'lg',
+        },
+        range: '1h',
+        end: 'NOW',
+      };
+      const ids = await pubSubDB.getIds('order.scheduled', options);
+      expect(ids.counts.length).toEqual(2);
+    });
+  });
 });

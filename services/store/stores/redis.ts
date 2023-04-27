@@ -7,7 +7,7 @@ import { SubscriptionCallback } from '../../../typedefs/conductor';
 import { PubSubDBApp, PubSubDBSettings } from '../../../typedefs/pubsubdb';
 import { RedisClientType, RedisMultiType } from '../../../typedefs/redis';
 import { Signal } from '../../../typedefs/signal';
-import { JobStats, JobStatsRange, StatsType } from '../../../typedefs/stats';
+import { IdsData, JobStats, JobStatsRange, StatsType } from '../../../typedefs/stats';
 import { ILogger } from '../../logger';
 
 class RedisStoreService extends StoreService {
@@ -234,6 +234,25 @@ class RedisStoreService extends StoreService {
         output[key] = statsHash as JobStats;
       } else {
         output[key] = {} as JobStats;
+      }
+    }
+    return output;
+  }
+
+  async getJobIds(indexKeys: string[], config: AppVersion): Promise<IdsData> {
+    const multi = this.getMulti();
+    for (const idsKey of indexKeys) {
+      multi.LRANGE(idsKey, 0, -1);
+    }
+    const results = await multi.exec();
+    const output: IdsData = {};
+    for (const [index, result] of results.entries()) {
+      const key = indexKeys[index];
+      const idsList: string[] = result[1];
+      if (idsList && idsList.length > 0) {
+        output[key] = idsList;
+      } else {
+        output[key] = [];
       }
     }
     return output;

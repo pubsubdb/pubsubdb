@@ -50,10 +50,10 @@ describe("Trigger class", () => {
     const trigger = new Trigger(ActivityType, activityData, activityMetadata, pubSubDB);
 
     // Spy on the createJob method to check if it's called and to inspect the job created
-    const createJobSpy = jest.spyOn(trigger, 'getJobId');
+    const createJobSpy = jest.spyOn(trigger, 'resolveJobId');
 
     // Call restoreJobContext to trigger the createJob method
-    await trigger.getJobId();
+    await trigger.resolveJobId();
 
     // Check if the createJob method was called
     expect(createJobSpy).toHaveBeenCalledTimes(1);

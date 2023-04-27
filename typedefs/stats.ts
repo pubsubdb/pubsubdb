@@ -33,9 +33,16 @@ interface JobStatsRange {
   [key: string]: JobStats
 }
 
+interface JobStatsInput {
+  data: Record<string, unknown>;
+  range?: string;
+  start?: string;
+  end?: string;
+}
+
 interface GetStatsOptions {
   key: string;
-  granularity?: string;
+  granularity: string;
   range?: string;
   start?: string;
   end?: string;
@@ -55,4 +62,37 @@ interface AggregatedData {
   [key: string]: number;
 }
 
-export { StatsType, Stat, MetricTypes, JobStats, JobStatsRange, GetStatsOptions, StatsResponse, AggregatedData, Measure, Segment };
+interface IdsData {
+  [target: string]: string[];
+}
+
+interface MeasureIds {
+  time: string;
+  target: string;
+  count: number;
+  type: 'ids';
+  ids: string[];
+}
+
+interface TimeSegment {
+  time: string;
+  measures: MeasureIds[];
+}
+
+
+interface CountByFacet {
+  facet: string;
+  count: number;
+}
+
+interface IdsResponse {
+  key: string;
+  facets: string[];
+  granularity: string;
+  range: string;
+  start: string;
+  counts: CountByFacet[];
+  segments: TimeSegment[];
+}
+
+export { StatsType, Stat, MetricTypes, JobStats, JobStatsRange, JobStatsInput, GetStatsOptions, StatsResponse, AggregatedData, Measure, Segment, IdsData, MeasureIds, TimeSegment, IdsResponse, CountByFacet };

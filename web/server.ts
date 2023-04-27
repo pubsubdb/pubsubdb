@@ -14,15 +14,19 @@ server.register(fastifyMultipart, { /* Multipart options here */ });
 
 //init redis connection and pubsubdb interface
 const initPubSubDB = async () => {
+  //initialize the redis connection for the rw client and the subscriber client
   const redisConnection = await RedisConnection.getConnection('instance1');
   const redisClient = await redisConnection.getClient();
-  const redisStore = new IORedisStore(redisClient);
+  const redisSubConnection = await RedisConnection.getConnection('subscriber1');
+  const redisSubClient = await redisSubConnection.getClient();
+
   const config: PubSubDBConfig = {
     appId: 'test-app',
     namespace: 'psdb',
-    store: redisStore
+    store: new IORedisStore(redisClient, redisSubClient)
   };
-  //deploy app version 1 (it doesn't break anything if it's already deployed)
+
+  //deploy app version 1 (if v1 is already active this has no impact)
   const pubSubDB = await PubSubDB.init(config);
   await pubSubDB.plan('/app/seeds/pubsubdb.yaml');
   await pubSubDB.deploy('/app/seeds/pubsubdb.yaml');
