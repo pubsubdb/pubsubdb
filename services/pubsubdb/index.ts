@@ -20,6 +20,9 @@ import { SubscriptionCallback } from '../../typedefs/conductor';
 //todo: can be multiple instances; track as a Map
 let instance: PubSubDBService;
 
+//wait time to see if quorum is reached
+const QUORUM_DELAY = 250;
+
 /**
  * PubSubDBService orchestrates the activity flow
  * in the running application by locating the instructions for each activity
@@ -158,7 +161,7 @@ class PubSubDBService {
     const quorum = this.quorum;
     this.quorum = 0;
     await this.store.publish(KeyType.CONDUCTOR, { type: 'ping', originator: this.guid }, await this.getAppConfig())
-    await new Promise(resolve => setTimeout(resolve, 25));
+    await new Promise(resolve => setTimeout(resolve, QUORUM_DELAY));
     return quorum;
   };
 
@@ -234,7 +237,7 @@ class PubSubDBService {
     this.logger.info(`Quorum Roll Call Results: q1: ${q1}, q2: ${q2}, q3: ${q3}`);
     if (q1 && q1 === q2 && q2 === q3) {
       this.store.publish(KeyType.CONDUCTOR, { type: 'activate', cache_mode: 'nocache', until_version: version }, await this.getAppConfig())
-      await new Promise(resolve => setTimeout(resolve, 25));
+      await new Promise(resolve => setTimeout(resolve, QUORUM_DELAY));
       //confirm we received the activation message
       if (this.untilVersion === version) {
         this.logger.info(`Quorum reached. Activating version ${this.untilVersion}`);
