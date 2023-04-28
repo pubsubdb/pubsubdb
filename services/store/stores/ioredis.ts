@@ -8,7 +8,7 @@ import { PubSubDBApp, PubSubDBSettings } from '../../../typedefs/pubsubdb';
 import { Signal } from '../../../typedefs/signal';
 import { IdsData, JobStats, JobStatsRange, StatsType } from '../../../typedefs/stats';
 import { ILogger } from '../../logger';
-import { RedisClientType } from '../../../cache/ioredis';
+import { RedisClientType } from '../../../tests/$setup/cache/ioredis';
 import { ChainableCommander } from 'ioredis';
 
 class IORedisStoreService extends StoreService {
@@ -269,7 +269,7 @@ class IORedisStoreService extends StoreService {
     const key = this.mintKey(KeyType.JOB_DATA, params);
     const jobData = await this.redisClient.hgetall(key);
     const data = SerializerService.restoreHierarchy(jobData);
-    return data.d ? data. d : (data.m ? null : undefined);
+    return data.d ? data. d : data.m ? null : undefined;
   }
 
   /**
@@ -332,7 +332,7 @@ class IORedisStoreService extends StoreService {
     const key = this.mintKey(KeyType.JOB_ACTIVITY_DATA, params);
     const activityData = await this.redisClient.hgetall(key);
     const data = SerializerService.restoreHierarchy(activityData);
-    return data.d ? data. d : (data.m ? null : undefined);
+    return data.d ? data. d : data.m ? null : undefined;
   }
 
   /**
@@ -346,7 +346,7 @@ class IORedisStoreService extends StoreService {
    * Checks the cache for the schema and if not found, fetches it from the store
    */
   async getSchema(activityId: string, appVersion: AppVersion): Promise<any> {
-    let schema = this.cache.getSchema(appVersion.id, appVersion.version, activityId);
+    const schema = this.cache.getSchema(appVersion.id, appVersion.version, activityId);
     if (schema) {
       return schema
     } else {
@@ -420,7 +420,7 @@ class IORedisStoreService extends StoreService {
   }
 
   async getSubscription(topic: string, appVersion: { id: string; version: string }): Promise<string | undefined> {
-    let subscriptions = await this.getSubscriptions(appVersion);
+    const subscriptions = await this.getSubscriptions(appVersion);
     return subscriptions[topic];
   }
 
@@ -495,7 +495,7 @@ class IORedisStoreService extends StoreService {
     if (this.redisSubscriber) {
       const self = this;
       const topic = this.mintKey(keyType, { appId: appVersion.id });
-      await this.redisSubscriber.subscribe(topic, (err, count) => {
+      await this.redisSubscriber.subscribe(topic, (err) => {
         if (err) {
           self.logger.error(`Error subscribing to: ${topic}`, err);
         }
@@ -514,7 +514,7 @@ class IORedisStoreService extends StoreService {
     }
   }
 
-  async unsubscribe(topic: string, appVersion: AppVersion): Promise<void> {
+  async unsubscribe(topic: string, _: AppVersion): Promise<void> {
     await this.redisSubscriber?.unsubscribe(topic);
   }
 

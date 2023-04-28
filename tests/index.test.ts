@@ -1,5 +1,5 @@
 import { PubSubDB, PubSubDBConfig, IORedisStore } from '../index';
-import { RedisConnection, RedisClientType } from '../cache/ioredis';
+import { RedisConnection, RedisClientType } from './$setup/cache/ioredis';
 import { PSNS } from '../services/store/key';
 import { JobStatsInput } from '../typedefs/stats';
 
@@ -40,13 +40,13 @@ describe('pubsubdb', () => {
 
   describe('plan()', () => {
     it('should plan an app version deployment using a source path', async () => {
-      await pubSubDB.plan('/app/seeds/pubsubdb.yaml');
+      await pubSubDB.plan('/app/tests/$setup/seeds/pubsubdb.yaml');
     });
   });
 
   describe('deploy()', () => {
     it('should deploy an app version using a source path', async () => {
-      await pubSubDB.deploy('/app/seeds/pubsubdb.yaml');
+      await pubSubDB.deploy('/app/tests/$setup/seeds/pubsubdb.yaml');
     });
   });
 

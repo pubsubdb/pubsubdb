@@ -54,14 +54,14 @@ class Activity {
       return this.context.metadata.aid;
     } catch (error) {
       this.logger.error('activity.process:error', error);
-      if (error instanceof DuplicateActivityError) {
-      } else if (error instanceof RestoreJobContextError) {
-      } else if (error instanceof MapInputDataError) {
-      } else if (error instanceof SubscribeToResponseError) {
-      } else if (error instanceof RegisterTimeoutError) {
-      } else if (error instanceof ExecActivityError) {
-      } else {
-      }
+      // if (error instanceof DuplicateActivityError) {
+      // } else if (error instanceof RestoreJobContextError) {
+      // } else if (error instanceof MapInputDataError) {
+      // } else if (error instanceof SubscribeToResponseError) {
+      // } else if (error instanceof RegisterTimeoutError) {
+      // } else if (error instanceof ExecActivityError) {
+      // } else {
+      // }
     }
   }
 

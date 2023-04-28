@@ -606,7 +606,7 @@ const payload = {
 const ids = pubSubDB.getIds('order.approval.requested', payload);
 ```
 
-When the response is returned, the *average* for the `price` field and the *count* for the cardinal `object_type` values will be provided, along withe the 1 hour sub-measures.
+When the response is returned, specific job IDs are returned and will correspond to the count statistics described earlier.
 
 ```json
 {
@@ -653,10 +653,10 @@ When the response is returned, the *average* for the `price` field and the *coun
 ## Composite Examples
 As a helpful reference, we have provided links to the files that were discussed throughout this guide. 
 
-First, you can find the graph for **Approve Order** in the file [order.approval.requested.yaml](../seeds/graphs/order.approval.requested.yaml). 
+First, you can find the graph for **Approve Order** in the file [order.approval.requested.yaml](../tests/%24setup/seeds/graphs/order.approval.requested.yaml). 
 
-Second, the graph for **Approve Order Price** can be found in the file [order.approval.price.requested.yaml](../seeds/graphs/order.approval.price.requested.yaml). 
+Second, the graph for **Approve Order Price** can be found in the file [order.approval.price.requested.yaml](../tests/%24setup/seeds/graphs/order.approval.price.requested.yaml). 
 
-Lastly, the composite file, which shows the resolved schema with all $refs resolved, is located at [.pubsubdb.json](../seeds/.pubsubdb.test-app.1.json).
+Lastly, the composite file, which shows the resolved schema with all $refs resolved, is located at [.pubsubdb.json](../tests/%24setup/seeds/.pubsubdb.test-app.1.json).
 
-In general, the `seeds` directory is a good place to start for better understanding of how to reference the various components in a PubSubDB Application.
+In general, the `/tests/$setup/seeds` directory is a good place to start for better understanding of how to reference the various components in a PubSubDB Application.

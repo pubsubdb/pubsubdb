@@ -1,4 +1,4 @@
-import { RedisConnection, RedisClientType } from '../../../../cache/ioredis';
+import { RedisConnection, RedisClientType } from '../../../$setup/cache/ioredis';
 import { LoggerService } from '../../../../services/logger';
 import { KeyType, PSNS } from '../../../../services/store/key';
 import { IORedisStoreService } from '../../../../services/store/stores/ioredis';

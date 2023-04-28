@@ -217,7 +217,7 @@ class RedisStoreService extends StoreService {
     return output;
   }
 
-  async getJobIds(indexKeys: string[], config: AppVersion): Promise<IdsData> {
+  async getJobIds(indexKeys: string[], _: AppVersion): Promise<IdsData> {
     const multi = this.getMulti();
     for (const idsKey of indexKeys) {
       multi.LRANGE(idsKey, 0, -1);
@@ -247,7 +247,7 @@ class RedisStoreService extends StoreService {
   async setJob(jobId: string, data: Record<string, unknown>, metadata: Record<string, unknown>, appVersion: AppVersion, multi? : any): Promise<any|string> {
     const hashKey = this.mintKey(KeyType.JOB_DATA, { appId: appVersion.id, jobId });
     const hashData = SerializerService.flattenHierarchy({ m: metadata, d: data});
-    const response = await (multi || this.redisClient).HSET(hashKey, hashData);
+    await (multi || this.redisClient).HSET(hashKey, hashData);
     return multi || jobId;
   }
 
@@ -277,7 +277,7 @@ class RedisStoreService extends StoreService {
     const key = this.mintKey(KeyType.JOB_DATA, params);
     const jobData = await this.redisClient.HGETALL(key);
     const data = SerializerService.restoreHierarchy(jobData);
-    return data.d ? data. d : (data.m ? null : undefined);
+    return data.d ? data. d : data.m ? null : undefined;
   }
 
   /**
@@ -302,7 +302,7 @@ class RedisStoreService extends StoreService {
   async setActivity(jobId: string, activityId: string, data: Record<string, unknown>, metadata: Record<string, unknown>, appVersion: AppVersion, multi? : RedisClientType): Promise<RedisClientType|string>  {
     const hashKey = this.mintKey(KeyType.JOB_ACTIVITY_DATA, { appId: appVersion.id, jobId, activityId });
     const hashData = SerializerService.flattenHierarchy({ m: metadata, d: data});
-    const response = await (multi || this.redisClient).HSET(hashKey, hashData as any);
+    await (multi || this.redisClient).HSET(hashKey, hashData as any);
     return multi || activityId;
   }
 
@@ -341,7 +341,7 @@ class RedisStoreService extends StoreService {
     const key = this.mintKey(KeyType.JOB_ACTIVITY_DATA, params);
     const activityData = await this.redisClient.HGETALL(key);
     const data = SerializerService.restoreHierarchy(activityData);
-    return data.d ? data. d : (data.m ? null : undefined);
+    return data.d ? data. d : data.m ? null : undefined;
   }
 
   /**
@@ -355,7 +355,7 @@ class RedisStoreService extends StoreService {
    * Checks the cache for the schema and if not found, fetches it from the store
    */
   async getSchema(activityId: string, appVersion: AppVersion): Promise<any> {
-    let schema = this.cache.getSchema(appVersion.id, appVersion.version, activityId);
+    const schema = this.cache.getSchema(appVersion.id, appVersion.version, activityId);
     if (schema) {
       return schema
     } else {
@@ -408,7 +408,7 @@ class RedisStoreService extends StoreService {
     Object.entries(_subscriptions).forEach(([key, value]) => {
       _subscriptions[key] = JSON.stringify(value);
     });
-    const response = await this.redisClient.HSET(key, _subscriptions);
+    await this.redisClient.HSET(key, _subscriptions);
     this.cache.setSubscriptions(appVersion.id, appVersion.version, subscriptions);
   }
 
@@ -429,7 +429,7 @@ class RedisStoreService extends StoreService {
   }
 
   async getSubscription(topic: string, appVersion: { id: string; version: string }): Promise<string | undefined> {
-    let subscriptions = await this.getSubscriptions(appVersion);
+    const subscriptions = await this.getSubscriptions(appVersion);
     return subscriptions[topic];
   }
 
@@ -515,7 +515,7 @@ class RedisStoreService extends StoreService {
     }
   }
 
-  async unsubscribe(topic: string, appVersion: AppVersion): Promise<void> {
+  async unsubscribe(topic: string, _: AppVersion): Promise<void> {
     await this.redisSubscriber?.unsubscribe(topic);
   }
 
