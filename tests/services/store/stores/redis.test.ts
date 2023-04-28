@@ -1,4 +1,4 @@
-import { RedisConnection, RedisClientType } from '../../../../cache/redis';
+import { RedisConnection, RedisClientType } from '../../../$setup/cache/redis';
 import { LoggerService } from '../../../../services/logger';
 import { KeyType, PSNS } from '../../../../services/store/key';
 import { RedisStoreService } from '../../../../services/store/stores/redis';
@@ -63,7 +63,6 @@ describe('RedisStoreService', () => {
 
   describe('getJobMetadata', () => {
     it('should get the metadata for the given job ID', async () => {
-      const multi = redisStoreService.redisClient.MULTI();
       const jobId = 'JOB_ID';
       const metadata = { jid: jobId };
       await redisStoreService.setJob(jobId, {}, metadata, appConfig);

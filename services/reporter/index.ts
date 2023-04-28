@@ -44,7 +44,7 @@ class ReporterService {
 
   private validateOptions(options: GetStatsOptions): void {
     const { start, end, range } = options;
-    if ((start && end && range) || (!start && !end && !range)) {
+    if (start && end && range || !start && !end && !range) {
       throw new Error('Invalid combination of start, end, and range values. Provide either start+end, end+range, or start+range.');
     }
   }
@@ -73,10 +73,10 @@ class ReporterService {
     let endTime;
     if (start) {
       startTime = new Date(start);
-      endTime = new Date(startTime.getTime() + (rangeMinutes * 60 * 1000));
+      endTime = new Date(startTime.getTime() + rangeMinutes * 60 * 1000);
     } else {
       endTime = end === 'NOW' ? new Date() : new Date(end);
-      startTime = new Date(endTime.getTime() - (rangeMinutes * 60 * 1000));
+      startTime = new Date(endTime.getTime() - rangeMinutes * 60 * 1000);
     }
     // Round the start time to the nearest granularity unit
     startTime.setUTCMinutes(

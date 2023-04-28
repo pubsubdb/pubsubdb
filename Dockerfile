@@ -8,7 +8,7 @@ COPY . .
 # Development stage
 FROM base AS development
 ENV NODE_ENV=development
-CMD ["npm", "run", "dev"]
+CMD ["tail", "-f", "/dev/null"]
 
 # Build stage
 FROM base AS builder
@@ -23,4 +23,4 @@ COPY --from=builder /app/package*.json ./
 RUN npm ci --only=production
 COPY --from=builder /app/build ./build
 
-CMD ["node", "build/web/server.js"]
+CMD ["npm", "run", "test"]

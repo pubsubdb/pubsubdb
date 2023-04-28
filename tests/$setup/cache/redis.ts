@@ -1,29 +1,43 @@
-import { Redis, RedisOptions as RedisClientOptions } from 'ioredis';
+import { createClient, RedisClientOptions } from 'redis';
 import config from '../config';
-import { RedisClientType, RedisMultiType } from '../typedefs/ioredis';
+import { RedisClientType, RedisMultiType } from '../../../typedefs/redis';
 
 class RedisConnection {
-  private connection: any | null = null;
+  private connection: RedisClientType | null = null;
   private static instances: Map<string, RedisConnection> = new Map();
   private id: string | null = null;
 
   private static clientOptions: RedisClientOptions = {
-    host: config.REDIS_HOST,
-    port: config.REDIS_PORT,
+    socket: {
+      host: config.REDIS_HOST,
+      port: config.REDIS_PORT,
+      tls: false,
+    },
     password: config.REDIS_PASSWORD,
-    db: config.REDIS_DATABASE,
+    database: config.REDIS_DATABASE,
   };
 
-  private async createConnection(options: RedisClientOptions): Promise<Redis> {
+  private async createConnection(options: RedisClientOptions): Promise<RedisClientType> {
     return new Promise((resolve, reject) => {
-      resolve(new Redis(options));
+      const client = createClient(options);
+
+      client.on('error', (error) => {
+        reject(error);
+      });
+
+      client.on('ready', () => {
+        resolve(client);
+      });
+
+      client.connect();
     });
   }
 
-  public async getClient(): Promise<Redis> {
+  public async getClient(): Promise<RedisClientType> {
     if (!this.connection) {
       throw new Error('Redis client is not connected');
     }
+
     return this.connection;
   }
 
@@ -32,6 +46,7 @@ class RedisConnection {
       await this.connection.quit();
       this.connection = null;
     }
+
     if (this.id) {
       RedisConnection.instances.delete(this.id);
     }
@@ -41,6 +56,7 @@ class RedisConnection {
     if (this.instances.has(id)) {
       return this.instances.get(id)!;
     }
+
     const instance = new RedisConnection();
     const mergedOptions = { ...this.clientOptions, ...options };
     instance.connection = await instance.createConnection(mergedOptions);

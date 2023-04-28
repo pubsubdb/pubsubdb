@@ -1,4 +1,4 @@
-import { RedisConnection } from '../../cache/redis';
+import { RedisConnection } from '../$setup/cache/redis';
 
 describe('RedisConnection', () => {
 

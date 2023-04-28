@@ -1,5 +1,5 @@
 import { Trigger } from "../../../../services/pubsubdb/activities/trigger";
-import { RedisConnection } from '../../../../cache/ioredis';
+import { RedisConnection } from '../../../$setup/cache/ioredis';
 import { ActivityType, ActivityData, ActivityMetadata } from "../../../../typedefs/activity";
 import { PubSubDB, IORedisStore } from '../../../../index';
 

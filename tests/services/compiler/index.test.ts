@@ -1,5 +1,5 @@
 import { IORedisStoreService as IORedisStore } from "../../../services/store/stores/ioredis";
-import { RedisConnection, RedisClientType } from "../../../cache/ioredis";
+import { RedisConnection, RedisClientType } from "../../$setup/cache/ioredis";
 import { CompilerService } from "../../../services/compiler";
 import { PSNS } from "../../../services/store/key";
 import { LoggerService } from "../../../services/logger";
@@ -27,14 +27,14 @@ describe("Compiler Service", () => {
   describe("plan()", () => {
     it("should plan an app deployment, using a path", async () => {
       const compilerService = new CompilerService(redisStore, new LoggerService());
-      await compilerService.plan('/app/seeds/pubsubdb.yaml');
+      await compilerService.plan('/app/tests/$setup/seeds/pubsubdb.yaml');
     });
   });
 
   describe("deploy()", () => {
     it("should deploy an app to Redis, using a path", async () => {
       const compilerService = new CompilerService(redisStore, new LoggerService());
-      await compilerService.deploy('/app/seeds/pubsubdb.yaml');
+      await compilerService.deploy('/app/tests/$setup/seeds/pubsubdb.yaml');
     });
   });
 

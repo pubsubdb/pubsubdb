@@ -1,4 +1,4 @@
-import { RedisConnection } from '../../cache/ioredis';
+import { RedisConnection } from '../$setup/cache/ioredis';
 
 describe('RedisConnection', () => {
 
@@ -52,10 +52,8 @@ describe('RedisConnection', () => {
     const subscriber = await RedisConnection.getConnection('subscriber');
     const publisherClient = await publisher.getClient();
     const subscriberClient = await subscriber.getClient();
-    await subscriberClient.subscribe('article', (err, count) => {
-      //expect(message).toBe('message');
-    });
-    subscriberClient.on('message', (channel, message) => {
+    await subscriberClient.subscribe('article', () => {});
+    subscriberClient.on('message', (_, message) => {
       expect(message).toBe('message');
     });
     await publisherClient.publish('article', 'message');

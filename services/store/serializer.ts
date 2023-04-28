@@ -8,7 +8,7 @@ type FlatObject = { [key: string]: string | number | boolean | null | any[] };
  */
 class SerializerService {
 
-  static flattenHierarchy(obj: any, prefix: string = ''): FlatObject {
+  static flattenHierarchy(obj: any, prefix = ''): FlatObject {
     const result: FlatObject = {};
     for (const key in obj) {
       if (obj.hasOwnProperty(key)) {

@@ -1,43 +1,29 @@
-import { createClient, RedisClientOptions } from 'redis';
+import { Redis, RedisOptions as RedisClientOptions } from 'ioredis';
 import config from '../config';
-import { RedisClientType, RedisMultiType } from '../typedefs/redis';
+import { RedisClientType, RedisMultiType } from '../../../typedefs/ioredis';
 
 class RedisConnection {
-  private connection: RedisClientType | null = null;
+  private connection: any | null = null;
   private static instances: Map<string, RedisConnection> = new Map();
   private id: string | null = null;
 
   private static clientOptions: RedisClientOptions = {
-    socket: {
-      host: config.REDIS_HOST,
-      port: config.REDIS_PORT,
-      tls: false,
-    },
+    host: config.REDIS_HOST,
+    port: config.REDIS_PORT,
     password: config.REDIS_PASSWORD,
-    database: config.REDIS_DATABASE,
+    db: config.REDIS_DATABASE,
   };
 
-  private async createConnection(options: RedisClientOptions): Promise<RedisClientType> {
-    return new Promise((resolve, reject) => {
-      const client = createClient(options);
-
-      client.on('error', (error) => {
-        reject(error);
-      });
-
-      client.on('ready', () => {
-        resolve(client);
-      });
-
-      client.connect();
+  private async createConnection(options: RedisClientOptions): Promise<Redis> {
+    return new Promise((resolve) => {
+      resolve(new Redis(options));
     });
   }
 
-  public async getClient(): Promise<RedisClientType> {
+  public async getClient(): Promise<Redis> {
     if (!this.connection) {
       throw new Error('Redis client is not connected');
     }
-
     return this.connection;
   }
 
@@ -46,7 +32,6 @@ class RedisConnection {
       await this.connection.quit();
       this.connection = null;
     }
-
     if (this.id) {
       RedisConnection.instances.delete(this.id);
     }
@@ -54,9 +39,8 @@ class RedisConnection {
 
   public static async getConnection(id: string, options?: Partial<RedisClientOptions>): Promise<RedisConnection> {
     if (this.instances.has(id)) {
-      return this.instances.get(id)!;
+      return this.instances.get(id);
     }
-
     const instance = new RedisConnection();
     const mergedOptions = { ...this.clientOptions, ...options };
     instance.connection = await instance.createConnection(mergedOptions);

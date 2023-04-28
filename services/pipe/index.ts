@@ -61,7 +61,7 @@ class Pipe {
     let [prefix, suffix] = functionName.split('.');
     prefix = prefix.substring(2);
     suffix = suffix.substring(0, suffix.length - 1);
-    let domain = FUNCTIONS[prefix];
+    const domain = FUNCTIONS[prefix];
     if (!domain) {
       throw new Error(`Unknown domain name [${functionName}]: ${prefix}`);
     }
