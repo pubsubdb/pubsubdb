@@ -1,8 +1,7 @@
-                                 Apache License
-                           Version 2.0, January 2004
-                        http://www.apache.org/licenses/
+PubSubDB Source Available License
+Version 1.0, Apr 2023
 
-   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+Terms and Conditions for Use, Reproduction, and Distribution
 
    1. Definitions.
 
@@ -173,26 +172,37 @@
       incurred by, or claims asserted against, such Contributor by reason
       of your accepting any such warranty or additional liability.
 
+  10. Commercial Service Restrictions.
+      You are not permitted to use the Work, or any modified or derivative
+      version of the Work, for the purpose of offering the Work, or any
+      product that includes the Work or any part of it, as a commercial
+      service to third parties, or in any other commercial context where
+      you derive direct or indirect financial benefit from the use of the
+      Work. This includes, but is not limited to, providing bpm-as-a-service, integration-as-a-service, operational-data-as-a-service or any other
+      similar service that would compete with PubSubDb's commercial offering
+      of workflow-related services. Any such use requires explicit written
+      permission from the Licensor.
+
    END OF TERMS AND CONDITIONS
 
-   APPENDIX: How to apply the Apache License to your work.
+   APPENDIX: How to apply the PubSubDB Source Available License to your work.
 
-      To apply the Apache License to your work, attach the following
-      boilerplate notice, with the fields enclosed by brackets "[]"
-      replaced with your own identifying information. (Don't include
-      the brackets!)  The text should be enclosed in the appropriate
-      comment syntax for the file format. We also recommend that a
-      file or class name and description of purpose be included on the
-      same "printed page" as the copyright notice for easier
-      identification within third-party archives.
+   To apply the PubSubDB Source Available License to your work,
+   attach the following boilerplate notice, with the fields enclosed by
+   brackets "[]" replaced with your own identifying information. (Don't
+   include the brackets!)  The text should be enclosed in the appropriate
+   comment syntax for the file format. We also recommend that a
+   file or class name and description of purpose be included on the
+   same "printed page" as the copyright notice for easier
+   identification within third-party archives.
 
    Copyright [yyyy] [name of copyright owner]
 
-   Licensed under the Apache License, Version 2.0 (the "License");
+   Licensed under the PubSubDB Source Available License;
    you may not use this file except in compliance with the License.
    You may obtain a copy of the License at
 
-       http://www.apache.org/licenses/LICENSE-2.0
+   https://github.com/pubsubdb/pubsubdb/blob/main/LICENSE
 
    Unless required by applicable law or agreed to in writing, software
    distributed under the License is distributed on an "AS IS" BASIS,

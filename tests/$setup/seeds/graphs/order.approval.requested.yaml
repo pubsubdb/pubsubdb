@@ -25,13 +25,13 @@ activities:
         $ref: '../schemas/order.approval.requested.yaml#/a2/output'
   a3:
     title: Return True
-    type: job
+    type: activity
     job:
       maps:
         $ref: '../maps/order.approval.requested.yaml#/a3/job'
   a4:
     title: Return False
-    type: job
+    type: activity
     job:
       maps:
         $ref: '../maps/order.approval.requested.yaml#/a4/job'

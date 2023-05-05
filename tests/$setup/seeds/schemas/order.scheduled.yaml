@@ -61,3 +61,6 @@ route:
       id:
         type: string
         description: The unique identifier for the order.
+      actual_release_series:
+        type: string
+        description: The actual time series slice when the order was released.

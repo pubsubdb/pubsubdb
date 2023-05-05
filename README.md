@@ -1,9 +1,12 @@
 # PubSubDB
 ## Overview
-PubSubDB is a unified integration, orchestration, and analytics platform. Design your key business workflows using standard graph notation, while PubSubDB handles the implementation. PubSubDB is designed to work with any backend data store, with a reference implementation using *Redis*. Refer to this guide for more information on how to get started with PubSubDB.
+PubSubDB is a unified *integration*, *orchestration*, and *operational data* platform. Design your key business workflows using standard graph notation, while PubSubDB handles the implementation. PubSubDB is designed to work with any backend data store, with a reference implementation using *Redis*. Refer to this guide for more information on how to get started with PubSubDB.
 
 ## Benefits
-PubSubDB is distinguished by is its elegant twist on state management. The magic happens at compilation when the rules of the system are compiled down to pure events. The end result is a high-performance, low-latency system that can model the most complex business workflows at a fraction of the cost.
+PubSubDB is distinguished by is its elegant twist on state management. The magic happens at compilation when the rules of the system are compiled down to pure events. The end result is a high-performance, low-latency workflow engine that can model any complex business process at a fraction of the cost.
+
+### Operationalized Data
+Expose a real-time operational data layer with microsecond latency. The correlation engine will manage the entire cascade of business events, implicitly orchestrating the event stream through its conclusion.
 
 ### Point-to-Point Integration
 Map data between internal systems and external SaaS services, using standard Open API specs to define activities. Synchronize data between systems by mapping outputs from upstream activities.
@@ -46,7 +49,7 @@ pubSubDB = await PubSubDB.init({ appId: 'myapp', store});
 ```
 
 ## Design
-PubSub DB application graphs are modeled using YAML. These can be considered the execution instructions for the app, describing its activity and data flow. For introductory purposes, let's consider the simplest flow possible: *a single trigger activity*. 
+PubSub DB application graphs are modeled using YAML. These can be considered the execution instructions for the app, describing its activity and data flow. For introductory purposes, let's consider the simplest flow possible: *a one-step process*. 
 
 A process with only one step can seem relatively unremarkable, but it serves to reveal the type of information that is tracked by the system and how to take advantage of it. Once deployed, this flow will listen to the `item.ordered` event and track key statistics about the order size.
 
@@ -69,7 +72,7 @@ app:
                 type: string
               size:
                 type: string
-                description: The shirt size
+                description: The item size
                 enum:
                 - sm
                 - md
@@ -88,25 +91,23 @@ app:
             target: "{$self.input.data.size}"
 ```
 
-Even though this flow doesn't yet model an actual process, it's already able to answer process-oriented questions about the data. 
-
-First let's start by inserting some data. This is handled through simple pub/sub semantics.
+Once deployed, this process will listen to the `item.ordered` event and will persist information as described by the YAML. Let's start by inserting some data which is handled through simple pub/sub semantics.
 
 ```ts
-const order = pubSubDB.pub('item.ordered', { "email": "jim@email.com", "size": "lg" });
+const order = pubSubDB.pub('item.ordered', { "email": "jdoe@email.com", "size": "lg" });
 ```
 
 Now let's ask some questions about the `item.ordered` workflow.
 
 ### Question 1
-*What is the order for the user, `jim@email.com`?*
+*What is the order for the user, `jdoe@email.com`?*
 ```ts
-const order = await pubSubDB.get('jim@email.com');
+const order = await pubSubDB.get('jdoe@email.com');
 ```
 
 *Answer*
 ```ts
-{ "email": "jim@email.com", "size": "lg" }
+{ "id": "jdoe@email.com", "size": "lg" }
 ```
 
 ### Question 2
@@ -158,7 +159,7 @@ const stats = pubSubDB.getStats('item.ordered', payload);
 ```
 
 ## Deploy
-Once you're satisfied with your application model, call `deploy` to officially compile and deploy your flows. The compiler will save a static copy of the deployment manifest to your local file system and then transfer the execution instructions to your backend datastore, distributing the version simultaneously to all connected clients.
+Once you're satisfied with your application model, call `deploy` to compile and deploy your flows. The compiler will save a static copy of the deployment manifest to your local file system and then transfer the execution instructions to your backend datastore, distributing the version simultaneously to all connected clients.
 
 ```typescript
 const pubSubDB = PubSubDB.init({ ... });

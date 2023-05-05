@@ -11,6 +11,8 @@ import { ConductorMessage, SubscriptionCallback } from '../../typedefs/conductor
 import { JobContext, JobData } from '../../typedefs/job';
 import { PubSubDBApps, PubSubDBConfig, PubSubDBManifest, PubSubDBSettings } from '../../typedefs/pubsubdb';
 import { JobStatsInput, GetStatsOptions, IdsResponse, StatsResponse } from '../../typedefs/stats';
+import { SignalerService } from '../signaler';
+import { AppVersion } from '../../typedefs/app';
 
 //todo: can be multiple instances; track as a Map
 let instance: PubSubDBService;
@@ -24,15 +26,13 @@ class PubSubDBService {
   store: StoreService | null;
   apps: PubSubDBApps | null;
   adapterService: AdapterService | null;
+  signalerService: SignalerService | null;
   logger: ILogger;
   guid: string;
   cacheMode: 'nocache' | 'cache' = 'cache';
   untilVersion: string | null = null;
   quorum: number | null = null;
 
-  /**
-   * every object persisted to the backend will be namespaced with this value
-   */
   verifyNamespace(namespace?: string) {
     if (!namespace) {
       this.namespace = PSNS;
@@ -43,9 +43,6 @@ class PubSubDBService {
     }
   }
 
-  /**
-   * verifies that the app id is valid and not reserved (a)
-   */
   verifyAppId(appId: string) {
     if (!appId?.match(/^[A-Za-z0-9-]+$/)) {
       throw new Error(`config.appId [${appId}] is invalid`);
@@ -56,34 +53,38 @@ class PubSubDBService {
     }
   }
 
-  /**
-   * Redis (ioredis and redis) are reference implementations. Subclass `StoreService` if desired.
-   */
-  async verifyStore(store: StoreService) {
+  async verifyStore(store: StoreService): Promise<AppVersion> {
     if (!(store instanceof StoreService)) {
       throw new Error(`store ${store} is invalid`);
     } else {
       this.store = store;
       this.apps = await this.store.init(this.namespace, this.appId, this.logger);
+      return { id: this.appId, version: this.apps[this.appId].version};
     }
   }
 
   /**
-   * User entry point for starting up PSDB and sending/receiving for messages.
+   * Entry point. Once called, every method is available for use.
    */
   static async init(config: PubSubDBConfig) {
     instance = new PubSubDBService();
     instance.logger = new LoggerService(config.logger);
     instance.verifyNamespace(config.namespace);
     instance.verifyAppId(config.appId);
-    await instance.verifyStore(config.store);
+    const appConfig = await instance.verifyStore(config.store);
     await instance.store.subscribe(
       KeyType.CONDUCTOR,
       instance.subscriptionHandler(),
-      await instance.getAppConfig()
+      appConfig
     );
     instance.guid = Math.floor(Math.random() * 100000000).toString();
     instance.adapterService = new AdapterService();
+    instance.signalerService = new SignalerService(
+      appConfig,
+      instance.store,
+      instance.logger,
+      instance
+    );
     return instance;
   }
 
@@ -98,7 +99,7 @@ class PubSubDBService {
       }
       return { id: this.appId, version: app.version };
     } else {
-      return { id: this.appId, version: this.apps![this.appId].version };
+      return { id: this.appId, version: this.apps?.[this.appId].version };
     }
   }
 
@@ -152,7 +153,8 @@ class PubSubDBService {
         ac: utc,
         au: utc
       };
-      return new ActivityHandler(activity, data, metadata, this, context);
+      const hook = null;
+      return new ActivityHandler(activity, data, metadata, hook, this, context);
     } else {
       throw new Error(`activity type ${activity.type} not found`);
     }
@@ -248,14 +250,30 @@ class PubSubDBService {
       start: inputs.start,
       range: inputs.range,
       granularity: trigger.resolveGranularity(topic),
-      key: trigger.resolveJobKey(topic)
+      key: trigger.resolveJobKey(trigger.createInputContext())
     } as GetStatsOptions;
   }
 
 
-  // ********************** TODO: BATCH.PUB METHODS ***********************
-  //expose batch method: <this>.pub(topic, data, context)
-  //   this targets a specific jobkey+dateTimeSlice
+  // ********************** HOOK METHODS ***********************
+  async hook(topic: string, data: JobData) {
+    const hookRule = await this.signalerService.getHookRule(topic);
+    if (hookRule) {
+      const activityHandler = await this.initActivity(`.${hookRule.to}`, data);
+      return await activityHandler.processHookSignal();
+    } else {
+      throw new Error(`unable to process hook for topic ${topic}`);
+    }
+  }
+  async hookAll(topic: string, data: JobData, where: JobStatsInput) {
+    const hookRule = await this.signalerService.getHookRule(topic);
+    if (hookRule) {
+      const activityHandler = await this.initActivity(topic, data);
+      return await activityHandler.processHookSignal();
+    } else {
+      throw new Error(`unable to process hook for topic ${topic}`);
+    }
+  }
 
 
   // ************************** PUB/SUB METHODS **************************
@@ -275,13 +293,14 @@ class PubSubDBService {
   // ***************** STORE METHODS (ACTIVITY/JOB DATA) *****************
   async get(key: string) {
     //get job by id
-    return this.store.get(key, await this.getAppConfig());
+    return this.store.getJob(key, await this.getAppConfig());
   }
 
+
+  // ********************** LIFECYCLE METHODS ****************************
   static stop(config: Record<string, string|number|boolean>) {
     //disable db access (read? readwrite? write?)
   }
-
   async start(config: Record<string, string|number|boolean>) {
     //enable db access (read? readwrite? write?)
   }

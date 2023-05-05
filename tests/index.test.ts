@@ -56,8 +56,8 @@ describe('pubsubdb', () => {
     });
   });
 
-  describe('pub()', () => {
-    it('should should publish a message', async () => {
+  describe('run()', () => {
+    it('should should publish a message to Flow A', async () => {
       let payload: any;
       for (let i = 0; i < 1; i++) {
         payload = { 
@@ -68,6 +68,31 @@ describe('pubsubdb', () => {
         await pubSubDB.pub('order.approval.price.requested', payload);
       }
     });
+
+    it('should should publish a message to Flow B', async () => {
+      const payload = {
+        id: `ord_10000002`,
+        size: 'lg',
+        primacy: 'primary',
+        color: 'red',
+        send_date: new Date(),
+        must_release_series: '202304120015'
+      };
+      const pubResponse = await pubSubDB.pub('order.scheduled', payload);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      expect(pubResponse).not.toBeNull();
+    }, 100000);
+
+    it('should should signal a hook to resume Flow B', async () => {
+      const payload = {
+        id: `ord_10000002`,
+        facility: 'acme',
+        actual_release_series: '202304110015'
+      };
+      const hookResponse = await pubSubDB.hook('order.routed', payload);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      expect(hookResponse).not.toBeNull();
+    }, 100000);
 
     it('should distribute messages to different job queues', async () => {
       const sizes = ['sm', 'md', 'lg'];
@@ -147,6 +172,19 @@ describe('pubsubdb', () => {
       };
       const ids = await pubSubDB.getIds('order.scheduled', options);
       expect(ids.counts.length).toEqual(2);
+    });
+  });
+
+  describe('hook()', () => {
+    it('should resolve the hook for', async () => {
+      const payload = {
+        id: 'ord_1055',
+        facility:'acme',
+        actual_release_series: '202304110015',
+      };
+      const response = await pubSubDB.hook('order.routed', payload);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      expect(response).not.toBeNull();
     });
   });
 });

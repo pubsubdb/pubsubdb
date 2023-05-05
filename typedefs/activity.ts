@@ -8,14 +8,15 @@ interface ActivityBase {
   output?: Record<string, any>;
   settings?: Record<string, any>;
   dependents?: string[];
+  depends?: Record<string, string[]>;
   hook?: Record<string, any>;
   collationInt?: number;
+  job?: Record<string, any>;
 }
 
 interface TriggerActivity extends ActivityBase {
   type: 'trigger';
   stats?: Record<string, any>;
-  job?: Record<string, any>;
   collationKey?: number;
 }
 
@@ -44,26 +45,48 @@ interface AwaitActivity extends ActivityBase {
   timeout: number;
 }
 
-interface JobActivity extends ActivityBase {
-  type: 'job';
-  job?: Record<string, any>;
-}
-
-type ActivityType = TriggerActivity | AwaitActivity | JobActivity | OpenAPIActivity | RequestActivity | IterateActivity;
+type ActivityType = TriggerActivity | AwaitActivity  | OpenAPIActivity | RequestActivity | IterateActivity;
 
 type ActivityData = Record<string, any>;
 type ActivityMetadata = {
-  aid: string; //activity_id
-  atp: string; //activity_type
-  stp: string; //activity_subtype
+  aid: string;  //activity_id
+  atp: string;  //activity_type
+  stp: string;  //activity_subtype
   jid?: string; //job_id
-  ac: string; //GMT created //activity_created
-  au: string; //GMT updated //activity_updated
+  key?: string; //job_key
+  ac: string;   //GMT created //activity_created
+  au: string;   //GMT updated //activity_updated
 };
 
-type ActivityContext = {
-  data: ActivityData;
-  metadata: ActivityMetadata;
-}
+type HookData = Record<string, any>;
 
-export { ActivityType, ActivityContext, ActivityData, ActivityMetadata, TriggerActivity, AwaitActivity, JobActivity, OpenAPIActivity, RequestActivity, IterateActivity };
+type ActivityContext = {
+  data?: ActivityData | null;
+  metadata: ActivityMetadata;
+  hook?: HookData
+};
+
+type FlattenedDataObject = {
+  [key: string]: string
+};
+
+type ActivityDataType = {
+  data?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  hook?: Record<string, unknown>;
+};
+
+export {
+  ActivityType,
+  ActivityDataType,
+  ActivityContext,
+  ActivityData,
+  ActivityMetadata,
+  HookData,
+  TriggerActivity,
+  AwaitActivity,
+  OpenAPIActivity,
+  RequestActivity,
+  IterateActivity,
+  FlattenedDataObject
+};

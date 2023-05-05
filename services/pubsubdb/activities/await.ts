@@ -1,12 +1,17 @@
 import { PubSubDBService } from "..";
-import { ActivityData, ActivityMetadata, AwaitActivity } from "../../../typedefs/activity";
+import { ActivityData, ActivityMetadata, AwaitActivity, HookData } from "../../../typedefs/activity";
 import { Activity, ActivityType } from "./activity";
 
 class Await extends Activity {
   config: AwaitActivity;
 
-  constructor(config: ActivityType, data: ActivityData, metadata: ActivityMetadata, pubsubdb: PubSubDBService) {
-    super(config, data, metadata, pubsubdb);
+  constructor(
+    config: ActivityType,
+    data: ActivityData,
+    metadata: ActivityMetadata,
+    hook: HookData | null,
+    pubsubdb: PubSubDBService) {
+      super(config, data, metadata, hook, pubsubdb);
   }
 
   async restoreJobContext(): Promise<void> {
