@@ -1,8 +1,11 @@
+import { ReverseAbbreviationMap } from "./abbreviation";
+
 type JobData = Record<string, unknown>;
 type JobsData = Record<string, unknown>;
 
 type ActivityData = {
   data: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
 };
 
 type JobMetadata = {
@@ -19,15 +22,20 @@ type JobMetadata = {
   stp: string;  //activity_subtype
 };
 
+type AbbreviatedJobMetadata = {
+  [key in keyof JobMetadata]: JobMetadata[keyof ReverseAbbreviationMap & key];
+};
+
 type JobContext = {
-  metadata: JobMetadata;
+  metadata: AbbreviatedJobMetadata;
   data: JobData;
   [activityId: symbol]: {
     input: ActivityData;
     output: ActivityData;
+    hook: ActivityData;
     settings: ActivityData;
     errors: ActivityData;
   };
 };
 
-export { JobContext, JobData, JobsData, JobMetadata };
+export { JobContext, JobData, JobsData, JobMetadata, AbbreviatedJobMetadata };

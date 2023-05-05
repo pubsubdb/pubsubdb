@@ -2,6 +2,7 @@ import { ILogger } from "../services/logger";
 import { PubSubDBService } from "../services/pubsubdb";
 import { RedisStoreService } from "../services/store/stores/redis";
 import { StoreService } from "../services/store";
+import { Hooks } from "./hook";
 
 type PubSubDB = typeof PubSubDBService;
 
@@ -18,7 +19,7 @@ type PubSubDBGraph = {
   publishes: string;
   activities: Record<string, any>;
   transitions: Record<string, any>;
-  hooks: Record<string, any>;
+  hooks: Hooks;
 };
 
 type PubSubDBSettings = {

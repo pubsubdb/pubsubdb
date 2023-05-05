@@ -158,7 +158,9 @@ Proper file organization and directory schemes play a crucial role in maintainin
 
 ```
 /src
+  |
   ├── /pubsubdb.yaml
+  |
   ├── /graphs
   │   ├── order.approval.requested.yaml
   │   ├── order.approval.price.requested.yaml
@@ -176,7 +178,7 @@ Proper file organization and directory schemes play a crucial role in maintainin
       └── ...
 ```
 
-The file, `pubsubdb.yaml`, serves as the app manifest and should include a reference to every flow that should be included when the version is compiled and deployed. Removing a flow from deployment is as easy as removing its reference from the `pubsubdb.yaml` file and redeploying the app. (*The final deployment step is described [here](#deploy).*)
+The file, `pubsubdb.yaml`, serves as the app manifest and should include a reference to every flow that should be included when the version is compiled and deployed. Removing a flow from deployment is as easy as removing its reference from the `pubsubdb.yaml` file, incrementing the version, and redeploying the app. (*The final deployment step is described [here](#deploy).*)
 
 ```yaml
 # ./src/pubsubdb.yaml

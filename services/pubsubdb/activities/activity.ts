@@ -1,5 +1,3 @@
-import { ActivityType, ActivityData, ActivityMetadata } from "../../../typedefs/activity";
-import { JobContext } from "../../../typedefs/job";
 import { RestoreJobContextError, 
          MapInputDataError, 
          SubscribeToResponseError, 
@@ -7,53 +5,70 @@ import { RestoreJobContextError,
          ExecActivityError, 
          DuplicateActivityError} from '../../../modules/errors';
 import { PubSubDBService } from "..";
-import { Signal } from "../../../typedefs/signal";
 import { ILogger } from "../../logger";
+import { SignalerService } from "../../signaler";
+import { 
+  ActivityType,
+  ActivityData,
+  ActivityMetadata,
+  FlattenedDataObject, 
+  HookData} from "../../../typedefs/activity";
+import { JobContext } from "../../../typedefs/job";
+import { SerializerService } from '../../store/serializer';
+import { MapperService } from '../../mapper';
 
 /**
- * Both the base class for all activities as well as a class that can be used to create a generic activity.
- * This activity type is useful for precalculating values that might be used repeatedly in a workflow,
- * allowing downstream activities to use the precalculated values instead of recalculating them.
- * 
- * The typical flow for this type of activity is to restore the job context, map in upstream data,
- * get the list of subscription patterns and then publish to trigger downstream activities.
+ * The base class for all activities
  */
 class Activity {
   config: ActivityType;
   data: ActivityData;
   metadata: ActivityMetadata;
+  hook: HookData;
   context: JobContext;
   pubsubdb: PubSubDBService;
   logger: ILogger;
 
-  constructor(config: ActivityType, data: ActivityData, metadata: ActivityMetadata, pubsubdb: PubSubDBService, context?: JobContext) {
-    this.config = config;
-    this.data = data;
-    this.metadata = metadata;
-    this.pubsubdb = pubsubdb;
-    this.context = context;
-    this.logger = this.pubsubdb.logger;
+  constructor(
+    config: ActivityType,
+    data: ActivityData,
+    metadata: ActivityMetadata,
+    hook: HookData | null,
+    pubsubdb: PubSubDBService,
+    context?: JobContext) {
+      this.config = config;
+      this.data = data;
+      this.metadata = metadata;
+      this.hook = hook;
+      this.pubsubdb = pubsubdb;
+      this.logger = this.pubsubdb.logger;
+      this.context = context || { data: {}, metadata: {} } as JobContext;
   }
 
+  //********  INITIAL ENTRY POINT (A)  ********//
   async process(): Promise<string> {
-    try {
-      await this.restoreJobContext();
-      await this.mapInputData();
-      await this.subscribeToResponse();
+    //try {
+      await this.restoreJobContext(this.context.metadata.jid);
+      await this.mapJobData();
 
-      /////// MULTI ///////
+      /////// MULTI: START ///////
       const multi = this.pubsubdb.store.getMulti();
+      //await this.mapInputData();     //subclasses implement this
+      //await this.registerResponse(); //subclasses implement this
+      //await this.registerTimeout();  //subclasses implement this
       await this.saveActivity(multi);
-      await this.saveActivityStatus(multi);
-      await this.subscribeToHook(multi);
+      const shouldSleep = await this.registerExpectedHook(multi);
+      const decrementBy = shouldSleep ? 4 : 3;
+      await this.saveActivityStatus(decrementBy, multi);
+      //await this.saveJob(multi);
       await multi.exec();
-      /////// MULTI ///////
+      /////// MULTI: END ///////
 
-      await this.registerTimeout();
-      await this.execActivity();
+      //await this.execActivity();      //subclasses implement this
+      !shouldSleep && this.pub();       //spawn downstream activities
       return this.context.metadata.aid;
-    } catch (error) {
-      this.logger.error('activity.process:error', error);
+    //} catch (error) {
+      //this.logger.error('activity.process:error', error);
       // if (error instanceof DuplicateActivityError) {
       // } else if (error instanceof RestoreJobContextError) {
       // } else if (error instanceof MapInputDataError) {
@@ -62,106 +77,167 @@ class Activity {
       // } else if (error instanceof ExecActivityError) {
       // } else {
       // }
+    //}
+  }
+
+  //********  RESPONDER ENTRY POINT (B)  ********//
+  async registerResponse(): Promise<void> {
+    //register to receive eventual async/open-api call response (duplex by default)
+  }
+  async processResponse(): Promise<void> {
+    //persist those output data fields mapped by downstream activities
+    //await this.serializeMappedData('output');
+    //note: response payloads have a status field (pending, success, error)
+    //      pending responses can be persisted to the job as necessary
+    //      the job will stay in state '8' until a status of error or success is recieved
+  }
+
+  //********  SIGNALER ENTRY POINT (C)  ********//
+  async registerExpectedHook(multi?): Promise<string | void> {
+    if (this.config.hook?.topic) {
+      const signalerService = new SignalerService(
+        await this.pubsubdb.getAppConfig(),
+        this.pubsubdb.store,
+        this.pubsubdb.logger,
+        this.pubsubdb
+      );
+      return await signalerService.register(this.config.hook.topic, this.context, multi);
+    }
+  }
+  async processHookSignal(): Promise<void> {
+    const signalerService = new SignalerService(
+      await this.pubsubdb.getAppConfig(),
+      this.pubsubdb.store,
+      this.pubsubdb.logger,
+      this.pubsubdb
+    );
+    const jobId = await signalerService.process(this.config.hook.topic, this.data);
+    if (jobId) {
+      await this.restoreJobContext(jobId);
+      //when this activity is initialized via the constructor,
+      // `this.data` represents signal data
+      this.context[this.metadata.aid].hook.data = this.data;
+      await this.mapJobData();
+      await this.serializeMappedData('hook');
+
+      /////// MULTI: START ///////
+      const multi = this.pubsubdb.store.getMulti();
+      await this.saveActivity(multi);
+      await this.saveJob(multi);
+      await this.saveActivityStatus(1, multi);
+      await multi.exec();
+      /////// MULTI: END ///////
+
+      this.pub();
     }
   }
 
-  async restoreJobContext(): Promise<void> {
-    if(!this.context) {
-      //todo: restore job context if not passed in
-      throw new RestoreJobContextError();
-    } else {
-      this.context[this.metadata.aid] = {
-        input: {
-          data: this.data,
-          metadata: this.metadata,
-        },
-        output: {
-          data: {},
-          metadata: {},
-        },
-      };
+  async restoreJobContext(jobId: string): Promise<void> {
+    const config = await this.pubsubdb.getAppConfig();
+    this.context = await this.pubsubdb.store.restoreContext(
+      jobId,
+      this.config.depends,
+      config
+    ) as JobContext;
+    if (!this.context[this.metadata.aid]) {
+      this.context[this.metadata.aid] = { data: {}, metadata: {}, hook: {} };
+    }
+    //alias '$self' to the activity id
+    this.context['$self'] = this.context[this.metadata.aid];
+  }
+
+  async serializeMappedData(target: string): Promise<void> {
+    const aid = this.metadata.aid;
+    const filteredData: FlattenedDataObject = {};
+    const toFlatten = { [aid]: { [target]: { data: this.data } } };
+    const rulesSet = new Set(this.config.dependents.map(rule => rule.slice(1, -1).replace(/\./g, '/')));
+    const flattenedData = SerializerService.flattenHierarchy(toFlatten);
+    for (const [key, value] of Object.entries(flattenedData)) {
+      if (rulesSet.has(key)) {
+        filteredData[key as string] = value as string;
+      }
+    }
+    const restoredData = SerializerService.restoreHierarchy(filteredData);
+    if (restoredData[aid]) {
+      this.context[aid][target].data = restoredData[aid][target].data;
+    }
+  }
+
+  async mapJobData(): Promise<void> {
+    if(this.config.job?.maps) {
+      const mapper = new MapperService(this.config.job.maps, this.context);
+      this.context.data = await mapper.mapRules();
     }
   }
 
   async mapInputData(): Promise<void> {
-    // Placeholder for mapInputData
+    //todo: implement, since common to all subclasses
   }
 
   async subscribeToResponse(): Promise<void> {
-    // Placeholder for subscribeToResponse
+    //base `activity` type doesn't execute anything
+    //`async` and `openapi` subtypes will override this method
   }
 
   async registerTimeout(): Promise<void> {
-    // Placeholder for registerTimeout
-    //throw new RegisterTimeoutError();
+    //base `activity` type doesn't execute anything
+    //`async` and `openapi` subtypes will override this method
   }
 
   async execActivity(): Promise<void> {
-    // Placeholder for execActivity
-    //throw new ExecActivityError();
+    //base `activity` type doesn't execute anything
+    //`async` and `openapi` subtypes will override this method
   }
 
-  /**
-   * saves activity data; (NOTE: This data represents a subset of the incoming event payload.
-   * those fields that are not specified in the mapping rules for other activities will not be saved.)
-   */
+  saveJobMetadata(): boolean {
+    return false;
+  }
+
+  async saveJob(multi?: any): Promise<void> {
+    const jobId = this.context.metadata.jid;
+    await this.pubsubdb.store.setJob(
+      jobId,
+      this.context.data,
+      this.saveJobMetadata() ? this.context.metadata : {},
+      await this.pubsubdb.getAppConfig(),
+      multi
+    );
+  }
+
   async saveActivity(multi?): Promise<void> {
     const jobId = this.context.metadata.jid;
     const activityId = this.metadata.aid;
     await this.pubsubdb.store.setActivity(
       jobId,
       activityId,
-      this.context[activityId].output.data,
-      { ...this.metadata,
-        jid: jobId,
-        key: this.context.metadata.key
-      },
+      this.context[activityId]?.output?.data || {},
+      { ...this.metadata, jid: this.context.metadata.jid, key: this.context.metadata.key },
+      this.context[activityId]?.hook?.data || {},
       await this.pubsubdb.getAppConfig(),
       multi,
     );
   }
 
-  /**
-   * update the job collation key to indicate that the activity is running (1)
-   * @param multi 
-   */
-  async saveActivityStatus(multi?): Promise<void> {
+  async saveActivityStatus(multiplier = 1, multi?): Promise<void> {
     await this.pubsubdb.store.updateJobStatus(
       this.context.metadata.jid,
-      -this.config.collationInt,
+      -this.config.collationInt * multiplier,
       await this.pubsubdb.getAppConfig(),
       multi
     );
   }
 
-  /**
-   * if this activity has `hook` config, it means it should sleep and NOT publish
-   * to activate the next downstream activity. only the key that is generated by this method
-   * will awaken the activity.
-   * 
-   * TODO: construct the key (and/or gate) in a way that is unique to the activity
-   * 
-   * @example
-   * hooks:
-   *   lob.1.order.routed:
-   *     - to: route
-   *       conditions:
-   *         gate: and
-   *         match:
-   *           - expected: "{schedule.output.data.id}"
-   *             actual: "{$self.hook.data.id}"
-   * 
-   * @param multi 
-   */
-  async subscribeToHook(multi?): Promise<void> {
-    if (this.config.hook) {
-      const hook = this.config.hook;
-      const signal: Signal = {
-        topic: hook.topic,
-        resolved: this.context.metadata.jid,
-        jobId: this.context.metadata.jid,
+  async pub(): Promise<void> {
+    const transitions = await this.pubsubdb.store.getTransitions(await this.pubsubdb.getAppConfig());
+    const transition = transitions[`.${this.metadata.aid}`];
+    if (transition) {
+      for (const p in transition) {
+        await this.pubsubdb.pub(
+          `.${p}`,
+          {},
+          this.context
+        );
       }
-      await this.pubsubdb.store.setSignal(signal, await this.pubsubdb.getAppConfig(), multi);
     }
   }
 }

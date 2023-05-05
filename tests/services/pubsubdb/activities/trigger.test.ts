@@ -9,7 +9,6 @@ describe("Trigger class", () => {
   let subscriberConnection: RedisConnection;
 
   beforeAll(async () => {
-    // Connect to Redis
     redisConnection = await RedisConnection.getConnection('test-connection');
     subscriberConnection = await RedisConnection.getConnection('test-subscriber');
     const redisClient = await redisConnection.getClient();
@@ -23,7 +22,6 @@ describe("Trigger class", () => {
   });
 
   it("should create a job with the correct metadata", async () => {
-    // Prepare test data
     const ActivityType: ActivityType = {
       title: "Some title",
       type: "trigger",
@@ -32,12 +30,10 @@ describe("Trigger class", () => {
         id: "job_id"
       }
     };
-
     const activityData: ActivityData = {
       input: {},
       output: {},
     };
-
     const activityMetadata: ActivityMetadata = {
       aid: "a1",
       atp: "trigger",
@@ -45,17 +41,11 @@ describe("Trigger class", () => {
       ac: "2021-01-01T00:00:00.000Z",
       au: "2021-01-01T00:00:00.000Z",
     };
+    const activityHookData = null;
 
-    // Create Trigger instance
-    const trigger = new Trigger(ActivityType, activityData, activityMetadata, pubSubDB);
-
-    // Spy on the createJob method to check if it's called and to inspect the job created
+    const trigger = new Trigger(ActivityType, activityData, activityMetadata, activityHookData, pubSubDB);
     const createJobSpy = jest.spyOn(trigger, 'resolveJobId');
-
-    // Call restoreJobContext to trigger the createJob method
-    await trigger.resolveJobId();
-
-    // Check if the createJob method was called
+    trigger.resolveJobId(trigger.createInputContext());
     expect(createJobSpy).toHaveBeenCalledTimes(1);
   });
 });

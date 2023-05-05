@@ -8,6 +8,7 @@
  * 
  */
 
+import { HookRule } from "../../typedefs/hook";
 import { PubSubDBApp, PubSubDBSettings } from "../../typedefs/pubsubdb";
 
 class Cache {
@@ -17,7 +18,8 @@ class Cache {
   schemas: Record<string, Record<string, unknown>>;
   subscriptions: Record<string, Record<string, string>>;
   transitions: Record<string, Record<string, unknown>>;
-  hookPatterns: Record<string, Record<string, unknown>>;
+  hookRules: Record<string, Record<string, HookRule[]>>;
+  workItems: Record<string, string>;
 
   /**
    * The cache is ALWAYS initialized with PubSubDBSettings. The other parameters are optional.
@@ -26,16 +28,17 @@ class Cache {
    * @param schemas 
    * @param subscriptions 
    * @param transitions 
-   * @param hookPatterns 
+   * @param hookRules 
    */
-  constructor(appId: string, settings: PubSubDBSettings, apps: Record<string, PubSubDBApp> = {}, schemas: Record<string, Record<string, unknown>> = {}, subscriptions: Record<string, Record<string, string>> = {}, transitions: Record<string, Record<string, unknown>> = {}, hookPatterns: Record<string, Record<string, unknown>> = {}) {
+  constructor(appId: string, settings: PubSubDBSettings, apps: Record<string, PubSubDBApp> = {}, schemas: Record<string, Record<string, unknown>> = {}, subscriptions: Record<string, Record<string, string>> = {}, transitions: Record<string, Record<string, unknown>> = {}, hookRules: Record<string, Record<string, HookRule[]>> = {}, workItems: Record<string, string> = {}) {
     this.appId = appId;
     this.settings = settings;
     this.apps = apps;
     this.schemas = schemas;
     this.subscriptions = subscriptions;
     this.transitions = transitions;
-    this.hookPatterns = hookPatterns;
+    this.hookRules = hookRules;
+    this.workItems = workItems;
   }
 
   /**
@@ -46,7 +49,7 @@ class Cache {
     this.schemas = {};
     this.subscriptions = {};
     this.transitions = {};
-    this.hookPatterns = {};
+    this.hookRules = {};
   }
 
   getSettings(): PubSubDBSettings {
@@ -109,12 +112,12 @@ class Cache {
     this.transitions[`${appId}/${version}`] = transitions;
   }
 
-  getHookPatterns(appId: string): Record<string, unknown> {
-    return this.hookPatterns[`${appId}`];
+  getHookRules(appId: string): Record<string, HookRule[]> {
+    return this.hookRules[`${appId}`];
   }
 
-  setHookPatterns(appId: string, hookPatterns: Record<string, unknown>): void {
-    this.hookPatterns[`${appId}`] = hookPatterns;
+  setHookRules(appId: string, hookRules: Record<string, HookRule[]>): void {
+    this.hookRules[`${appId}`] = hookRules;
   }
 
   getSignals(appId: string, version: string): Record<string, unknown> {
@@ -123,6 +126,18 @@ class Cache {
 
   setSignals(appId: string, version: string): Record<string, unknown> {
     throw new Error("SIGNAL (setHook) is not supported");
+  }
+
+  getActiveTaskQueue(appId: string): string {
+    return this.workItems[appId];
+  }
+
+  setWorkItem(appId: string, workItem: string): void {
+    this.workItems[appId] = workItem;
+  }
+
+  removeWorkItem(appId: string): void {
+    delete this.workItems[appId];
   }
 }
 

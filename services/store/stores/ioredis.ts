@@ -1,15 +1,18 @@
+import { ChainableCommander } from 'ioredis';
+
 import { Cache } from '../cache';
 import { StoreService } from '../index';
 import { KeyService, KeyStoreParams, KeyType, PSNS } from '../key';
 import { SerializerService } from '../serializer';
+import { ILogger } from '../../logger';
+import { ActivityDataType } from '../../../typedefs/activity';
 import { AppVersion } from '../../../typedefs/app';
 import { SubscriptionCallback } from '../../../typedefs/conductor';
+import { HookRule, HookSignal } from '../../../typedefs/hook';
+import { RedisClientType } from '../../../typedefs/ioredis';
+import { JobContext } from '../../../typedefs/job';
 import { PubSubDBApp, PubSubDBSettings } from '../../../typedefs/pubsubdb';
-import { Signal } from '../../../typedefs/signal';
 import { IdsData, JobStats, JobStatsRange, StatsType } from '../../../typedefs/stats';
-import { ILogger } from '../../logger';
-import { RedisClientType } from '../../../tests/$setup/cache/ioredis';
-import { ChainableCommander } from 'ioredis';
 
 class IORedisStoreService extends StoreService {
   redisClient: RedisClientType;
@@ -25,9 +28,6 @@ class IORedisStoreService extends StoreService {
     this.redisSubscriber = redisSubscriber;
   }
 
-  /**
-   * only the engine can call this method; it initializes the local cache
-   */
   async init(namespace = PSNS, appId: string, logger: ILogger): Promise<{[appId: string]: PubSubDBApp}> {
     this.namespace = namespace;
     this.logger = logger;
@@ -41,25 +41,15 @@ class IORedisStoreService extends StoreService {
     return this.redisClient.multi();
   }
 
-  /**
-   * mint a key to access a given entity (KeyType) in the store
-   */
   mintKey(type: KeyType, params: KeyStoreParams): string {
     if (!this.namespace) throw new Error('namespace not set');
     return KeyService.mintKey(this.namespace, type, params);
   }
 
-  /**
-   * invalidates the local cache; would be called if a new version were to be deployed
-   */
   invalidateCache() {
     this.cache.invalidate();
   }
 
-  /**
-   * get the pubsubdb global settings ({hash}) from the store; 
-   * the settings reveal information about the namespace, the version of the pubsubdb
-   */
   async getSettings(bCreate = false): Promise<PubSubDBSettings> {
     let settings = this.cache?.getSettings();
     if (settings) {
@@ -76,18 +66,13 @@ class IORedisStoreService extends StoreService {
     throw new Error('settings not found');
   }
 
-  /**
-   * sets the pubsubdb global settings ({hash}) in the store
-   */
   async setSettings(manifest: PubSubDBSettings): Promise<any> {
+    //if a connection is made, set the PubSubDB NPM package version
     const params: KeyStoreParams = {};
     const key = this.mintKey(KeyType.PUBSUBDB, params);
     return await this.redisClient.hmset(key, manifest);
   }
 
-  /**
-   * gets a specific app manifest revealing all versions and settings for the app
-   */
   async getApp(id: string, refresh = false): Promise<PubSubDBApp> {
     let app: Partial<PubSubDBApp> = this.cache.getApp(id);
     if (refresh || !(app && Object.keys(app).length > 0)) {
@@ -122,9 +107,6 @@ class IORedisStoreService extends StoreService {
     return payload;
   }
 
-  /**
-   * sets/locks the active version for an app
-   */
   async activateAppVersion(id: string, version: string): Promise<any> {
     const params: KeyStoreParams = { appId: id };
     const key = this.mintKey(KeyType.APP, params);
@@ -145,9 +127,6 @@ class IORedisStoreService extends StoreService {
     throw new Error(`Version ${version} does not exist for app ${id}`);
   }
 
-  /**
-   * registers an app version; this is used to track known versions of the app in any state
-   */
   async registerAppVersion(appId: string, version: string): Promise<any> {
     const params: KeyStoreParams = { appId };
     const key = this.mintKey(KeyType.APP, params);
@@ -159,9 +138,6 @@ class IORedisStoreService extends StoreService {
     return await this.redisClient.hmset(key, payload);
   }
 
-  /**
-   * every job that includes a 'stats' field will have its stats aggregated
-   */
   async setJobStats(jobKey: string, jobId: string, dateTime: string, stats: StatsType, appVersion: AppVersion, multi? : any): Promise<any> {
     const params: KeyStoreParams = { appId: appVersion.id, jobId, jobKey, dateTime };
     const privateMulti = multi || await this.redisClient.multi();
@@ -227,25 +203,28 @@ class IORedisStoreService extends StoreService {
     return output;
   }
 
-  /**
-   * See the CollationService for details
-   */
   async updateJobStatus(jobId: string, collationKeyStatus: number, appVersion: AppVersion, multi? : any): Promise<any> {
     const jobKey = this.mintKey(KeyType.JOB_DATA, { appId: appVersion.id, jobId });
     await (multi || this.redisClient).hincrbyfloat(jobKey, 'm/js', collationKeyStatus);
   }
 
-  /**
-   * adds a job (data), metadata, and aggregation stats to the store
-   */
   async setJob(jobId: string, data: Record<string, unknown>, metadata: Record<string, unknown>, appVersion: AppVersion, multi? : any): Promise<any|string> {
     const hashKey = this.mintKey(KeyType.JOB_DATA, { appId: appVersion.id, jobId });
-    const hashData = SerializerService.flattenHierarchy({ m: metadata, d: data});
-    await (multi || this.redisClient).hmset(hashKey, hashData);
-    return multi || jobId;
+    const jobData = { }
+    if (data && Object.keys(data).length > 0) {
+      jobData['d'] = data;
+    }
+    if (metadata && Object.keys(metadata).length > 0) {
+      jobData['m'] = metadata;
+    }
+    if (Object.keys(jobData).length !== 0) {
+      const hashData = SerializerService.flattenHierarchy({ m: metadata, d: data});
+      await (multi || this.redisClient).hmset(hashKey, hashData);
+      return multi || jobId;
+    }
   }
 
-  async getJobMetadata(jobId: string, appVersion: AppVersion): Promise<any> {
+  async getJobMetadata(jobId: string, appVersion: AppVersion): Promise<object | undefined> {
     const metadataFields = ['m/aid', 'm/atp', 'm/stp', 'm/jc', 'm/ju', 'm/jid', 'm/key', 'm/ts', 'm/js'];
     const params: KeyStoreParams = { appId: appVersion.id, jobId };
     const key = this.mintKey(KeyType.JOB_DATA, params);
@@ -261,62 +240,104 @@ class IORedisStoreService extends StoreService {
     return metadata.m;
   }
 
-  /**
-   * Gets the job data (undefined if non-existent or null if no data)
-   */
-  async getJobData(jobId: string, appVersion: AppVersion): Promise<any> {
+  async getJobContext(jobId: string, appVersion: AppVersion): Promise<JobContext | undefined> {
     const params: KeyStoreParams = { appId: appVersion.id, jobId };
     const key = this.mintKey(KeyType.JOB_DATA, params);
     const jobData = await this.redisClient.hgetall(key);
     const data = SerializerService.restoreHierarchy(jobData);
-    return data.d ? data. d : data.m ? null : undefined;
+    return data?.m ? { data: data.d, metadata: data.m} : undefined;
   }
 
-  /**
-   * Convenience method to get the job data
-   */
-  async getJob(jobId: string, appVersion: AppVersion): Promise<any> {
+  async getJobData(jobId: string, appVersion: AppVersion): Promise<object | undefined> {
+    const context = await this.getJobContext(jobId, appVersion);
+    return context?.data || undefined;
+  }
+
+  async getJob(jobId: string, appVersion: AppVersion): Promise<object | undefined> {
     return await this.getJobData(jobId, appVersion);
   }
 
-  /**
-   * Convenience method to get the job data
-   */
-  async get(jobId: string, appVersion: AppVersion): Promise<any> {
-    return await this.getJobData(jobId, appVersion);
-  }
+  async restoreContext(
+    jobId: string,
+    dependsOn: Record<string, string[]>,
+    config: AppVersion
+  ): Promise<Partial<JobContext>> {
+    const multi = this.getMulti();
+    const keysAndFields: { activityId: string; key: string; fields: string[] }[] = [];
 
-  /**
-   * Adds an activity (data), metadata, and aggregation stats to the store.
-   */
-  async setActivity(jobId: string, activityId: string, data: Record<string, unknown>, metadata: Record<string, unknown>, appVersion: AppVersion, multi? : RedisClientType): Promise<RedisClientType|string>  {
+    // 1) get the job metadata
+    const jobKey = this.mintKey(KeyType.JOB_DATA, { appId: config.id, jobId });
+    const jobMetdataIds = ['m/jid', 'm/key', 'm/ts', 'm/js', 'm/jc', 'm/ju'];
+    // @ts-ignore
+    multi.hmget(jobKey, jobMetdataIds);
+    keysAndFields.push({ activityId: '$JOB', key: jobKey, fields: jobMetdataIds });
+
+    // 2) iterate dependency list to target-and-pluck data, metadata, and/or hookdata
+    for (const [activityId, dependsOnIds] of Object.entries(dependsOn)) {
+      const params: KeyStoreParams = { appId: config.id, jobId, activityId };
+      const key = this.mintKey(KeyType.JOB_ACTIVITY_DATA, params);
+      // @ts-ignore
+      multi.hmget(key, dependsOnIds);
+      keysAndFields.push({ activityId, key, fields: dependsOnIds });
+    }
+    const results = await multi.exec();
+
+    //3) return the restored Context
+    const restoredData: Partial<JobContext> = {};
+    for (let i = 0; i < keysAndFields.length; i++) {
+      const { activityId, fields } = keysAndFields[i];
+      const data = results[i][1];
+      const upstreamData = SerializerService.restoreHierarchy(fields.reduce(
+        (accumulator: Record<string, any>, field, index) => {
+          if (data[index] !== null) accumulator[field] = data[index];
+          return accumulator;
+        },
+        {}
+      ));
+
+      if (activityId === '$JOB') {
+        restoredData.metadata = upstreamData?.m;
+      } else {
+        restoredData[activityId] = {
+          input: {
+            data: upstreamData?.i,
+            metadata: upstreamData?.m,
+          },
+          output: {
+            data: upstreamData?.d,
+            metadata: upstreamData?.m,
+          },
+          hook: {
+            data: upstreamData?.h,
+            metadata: upstreamData?.m,
+          },
+        };
+      }
+    }
+    return restoredData;
+  }
+  
+  async setActivity(jobId: string, activityId: string, data: Record<string, unknown>, metadata: Record<string, unknown>, hook: Record<string, unknown> | null, appVersion: AppVersion, multi? : RedisClientType): Promise<RedisClientType|string>  {
     const hashKey = this.mintKey(KeyType.JOB_ACTIVITY_DATA, { appId: appVersion.id, jobId, activityId });
-    const hashData = SerializerService.flattenHierarchy({ m: metadata, d: data});
-    const response = await (multi || this.redisClient).hmset(hashKey, hashData);
+    const hashData = SerializerService.flattenHierarchy({ m: metadata, d: data, h: hook && Object.keys(hook).length ? hook : undefined });
+    await (multi || this.redisClient).hmset(hashKey, hashData);
     return multi || activityId;
   }
 
-  /**
-   * ALWAYS the first call when running a job to ensure no duplicate job ids
-   */
   async setActivityNX(jobId: string, activityId: any, config: AppVersion): Promise<number> {
     const hashKey = this.mintKey(KeyType.JOB_ACTIVITY_DATA, { appId: config.id, jobId, activityId });
     const response = await this.redisClient.hsetnx(hashKey, 'm/aid', activityId);
     return response as number;
   }
-  
-  /**
-   * Gets the activity metadata; returns undefined if the activity does not exist;
-   */
+
   async getActivityMetadata(jobId: string, activityId: string, appVersion: AppVersion): Promise<any> {
     const metadataFields = ['m/aid', 'm/atp', 'm/stp', 'm/ac', 'm/au', 'm/jid', 'm/key'];
     const params: KeyStoreParams = { appId: appVersion.id, jobId, activityId };
     const key = this.mintKey(KeyType.JOB_ACTIVITY_DATA, params);
     // @ts-ignore
     const arrMetadata = await this.redisClient.hmget(key, metadataFields);
-    //iterate to create an object where the keys are the metadata fields and values are jobMetadata
     const objMetadata = metadataFields.reduce((acc, field, index) => {
-      if (arrMetadata[index] === null) return acc; //skip null values (which are optional fields
+      if (arrMetadata[index] === null) return acc; //skip null values (which are optional fields)
       acc[field] = arrMetadata[index];
       return acc;
     }, {});
@@ -324,27 +345,28 @@ class IORedisStoreService extends StoreService {
     return metadata.m;
   }
 
-  /**
-   * gets the activity data (`undefined` if nonexistent or `null` if no data)
-   */
-  async getActivityData(jobId: string, activityId: string, appVersion: AppVersion): Promise<any> {
+  async getActivityContext(jobId: string, activityId: string, appVersion: AppVersion): Promise<ActivityDataType> {
     const params: KeyStoreParams = { appId: appVersion.id, jobId, activityId };
     const key = this.mintKey(KeyType.JOB_ACTIVITY_DATA, params);
     const activityData = await this.redisClient.hgetall(key);
-    const data = SerializerService.restoreHierarchy(activityData);
-    return data.d ? data. d : data.m ? null : undefined;
+    if (activityData) {
+      const data = SerializerService.restoreHierarchy(activityData);
+      if (data) {
+        const response: ActivityDataType = { metadata: data.m };
+        if (data.d) response.data = data.d;
+        if (data.h) response.hook = data.h;
+        return response;
+      } else {
+        return null;
+      }
+    }
   }
 
-  /**
-   * convenience method to get the activity data
-   */
-  async getActivity(jobId: string, activityId: string, appVersion: AppVersion): Promise<any> {
-    return await this.getActivityData(jobId, activityId, appVersion);
+  async getActivity(jobId: string, activityId: string, appVersion: AppVersion): Promise<Record<string, unknown> | null | undefined> {
+    const context = await this.getActivityContext(jobId, activityId, appVersion);
+    return context?.data ? context.data : context?.metadata ? null : undefined;
   }
 
-  /**
-   * Checks the cache for the schema and if not found, fetches it from the store
-   */
   async getSchema(activityId: string, appVersion: AppVersion): Promise<any> {
     const schema = this.cache.getSchema(appVersion.id, appVersion.version, activityId);
     if (schema) {
@@ -355,9 +377,6 @@ class IORedisStoreService extends StoreService {
     }
   }
 
-  /**
-   * Always fetches the schemas from the store and caches them in memory
-   */
   async getSchemas(appVersion: AppVersion): Promise<any> {
     let schemas = this.cache.getSchemas(appVersion.id, appVersion.version);
     if (schemas && Object.keys(schemas).length > 0) {
@@ -374,9 +393,6 @@ class IORedisStoreService extends StoreService {
     }
   }
 
-  /**
-   * Sets the schemas for all topics in the store and in memory
-   */
   async setSchemas(schemas: Record<string, any>, appVersion: AppVersion): Promise<any> {
     const params: KeyStoreParams = { appId: appVersion.id, appVersion: appVersion.version };
     const key = this.mintKey(KeyType.SCHEMAS, params);
@@ -389,9 +405,6 @@ class IORedisStoreService extends StoreService {
     return response;
   }
 
-  /**
-   * Registers handlers for public subscriptions for the given topic in the store
-   */
   async setSubscriptions(subscriptions: Record<string, any>, appVersion: AppVersion): Promise<void> {
     const params: KeyStoreParams = { appId: appVersion.id, appVersion: appVersion.version };
     const key = this.mintKey(KeyType.SUBSCRIPTIONS, params);
@@ -452,43 +465,46 @@ class IORedisStoreService extends StoreService {
     }
   }
 
-  async setHookPatterns(hookPatterns: { [key: string]: string }, appVersion: AppVersion): Promise<any> {
+  async setHookRules(hookRules: Record<string, HookRule[]>, appVersion: AppVersion): Promise<any> {
     const key = this.mintKey(KeyType.HOOKS, { appId: appVersion.id });
-    const _hooks = {...hookPatterns};
-    Object.entries(_hooks).forEach(([key, value]) => {
-      _hooks[key] = JSON.stringify(value);
+    const _hooks = { };
+    Object.entries(hookRules).forEach(([key, value]) => {
+      _hooks[key.toString()] = JSON.stringify(value);
     });
     const response = await this.redisClient.hmset(key, _hooks);
-    this.cache.setHookPatterns(appVersion.id, hookPatterns);
+    this.cache.setHookRules(appVersion.id, hookRules);
     return response;
   }
 
-  async getHookPatterns(appVersion: AppVersion): Promise<Record<string, unknown>> {
-    let patterns = this.cache.getHookPatterns(appVersion.id);
+  async getHookRules(appVersion: AppVersion): Promise<Record<string, HookRule[]>> {
+    let patterns = this.cache.getHookRules(appVersion.id);
     if (patterns && Object.keys(patterns).length > 0) {
       return patterns;
     } else {
       const key = this.mintKey(KeyType.HOOKS, { appId: appVersion.id });
-      patterns = await this.redisClient.hgetall(key);
-      Object.entries(patterns).forEach(([key, value]) => {
+      const _hooks = await this.redisClient.hgetall(key);
+      patterns = {};
+      Object.entries(_hooks).forEach(([key, value]) => {
         patterns[key] = JSON.parse(value as string);
       });
-      this.cache.setHookPatterns(appVersion.id, patterns);
+      this.cache.setHookRules(appVersion.id, patterns);
       return patterns;
     }
   }
 
-  async setSignal(signal: Signal, appVersion: AppVersion, multi? : any): Promise<any> {
+  async setHookSignal(hook: HookSignal, appVersion: AppVersion, multi? : any): Promise<any> {
     const key = this.mintKey(KeyType.SIGNALS, { appId: appVersion.id });
-    const { topic, resolved, jobId} = signal;
+    const { topic, resolved, jobId} = hook;
     return await (multi || this.redisClient).hset(key, `${topic}:${resolved}`, jobId);
   }
 
-  async getSignal(topic: string, resolved: string, appVersion: AppVersion): Promise<Signal | undefined> {
+  async getHookSignal(topic: string, resolved: string, appVersion: AppVersion): Promise<string | undefined> {
     const key = this.mintKey(KeyType.SIGNALS, { appId: appVersion.id });
-    //todo: MULTI: HGET/HDEL to ensure a signal is only used once
-    const signal = await this.redisClient.hget(key, `${topic}:${resolved}`);
-    return signal ? { topic, resolved, jobId: signal } : undefined;
+    const multi = this.getMulti();
+    multi.hget(key, `${topic}:${resolved}`);
+    multi.hdel(key, `${topic}:${resolved}`);
+    const results = await multi.exec();
+    return results[0][1] as unknown as string;
   }
 
   async subscribe(keyType: KeyType.CONDUCTOR, subscriptionHandler: SubscriptionCallback, appVersion: AppVersion): Promise<void> {
@@ -506,7 +522,6 @@ class IORedisStoreService extends StoreService {
             const payload = JSON.parse(message);
             subscriptionHandler(topic, payload);
           } catch (e) {
-            console.log('Error parsing message:', message);
             self.logger.error(`Error parsing message: ${message}`, e);
           }
         }
@@ -521,6 +536,43 @@ class IORedisStoreService extends StoreService {
   async publish(keyType: KeyType.CONDUCTOR, message: Record<string, any>, appVersion: AppVersion): Promise<void> {
     const topic = this.mintKey(keyType, { appId: appVersion.id });
     await this.redisClient.publish(topic, JSON.stringify(message));
+  }
+
+  async addTaskQueues(keys: string[], appVersion: AppVersion): Promise<void> {
+    const multi = this.redisClient.multi();
+    const zsetKey = this.mintKey(KeyType.WORK_ITEMS, { appId: appVersion.id });
+    for (const key of keys) {
+      multi.zadd(zsetKey, 'NX', Date.now(), key);
+    }
+    await multi.exec();
+  }
+
+  async getActiveTaskQueue(appVersion: AppVersion): Promise<string | null> {
+    const { id: appId } = appVersion;
+    let workItemKey = this.cache.getActiveTaskQueue(appId) || null;
+    if (!workItemKey) {
+      const zsetKey = this.mintKey(KeyType.WORK_ITEMS, { appId });
+      const result = await this.redisClient.zrange(zsetKey, 0, 0);
+      workItemKey = result.length > 0 ? result[0] : null;
+      if (workItemKey) {
+        this.cache.setWorkItem(appId, workItemKey);
+      }
+    }
+    return workItemKey;
+  }
+
+  async deleteProcessedTaskQueue(key: string, processedKey: string, appVersion: AppVersion): Promise<void> {
+    const multi = this.redisClient.multi();
+    const zsetKey = this.mintKey(KeyType.WORK_ITEMS, { appId: appVersion.id });
+    multi.del(key);
+    multi.del(processedKey);
+    multi.zrem(zsetKey, key);
+    await multi.exec();
+    this.cache.removeWorkItem(appVersion.id);
+  }
+
+  async processTaskQueue(sourceKey: string, destinationKey: string): Promise<void> {
+    await this.redisClient.lmove(sourceKey, destinationKey, 'LEFT', 'RIGHT');
   }
 }
 

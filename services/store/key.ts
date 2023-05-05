@@ -11,8 +11,8 @@
  * psdb:<appid>:v:<version>:activities ->             {hash}    schemas [cache]
  * psdb:<appid>:v:<version>:transitions ->            {hash}    transitions [cache]
  * psdb:<appid>:v:<version>:subscriptions ->          {hash}    subscriptions [cache]
- * psdb:<appid>:hooks ->                              {hash}    hooks (rules); set at compile time
- * psdb:<appid>:signals ->                            {hash}    dynamic signal list to hget/hdel to resolve (always self-clean); added/removed at runtime
+ * psdb:<appid>:hooks ->                              {hash}    hook patterns/rules; set at compile time
+ * psdb:<appid>:signals ->                            {hash}    dynamic hook signals (hget/hdel) when resolving (always self-clean); added/removed at runtime
  */
 
 
@@ -34,11 +34,12 @@ enum KeyType {
   HOOKS,
   SIGNALS,
   CONDUCTOR,
+  WORK_ITEMS,
 }
 
 //when minting a key, the following parameters are used to create a unique key per entity
 type KeyStoreParams = {
-  appId?: string;       //app id is a uuid for a given pubsubdb app
+  appId?: string;       //app id is a uuid for a pubsubdb app
   appVersion?: string;  //(e.g. "1.0.0", "1", "1.0")
   jobId?: string;       //a customer-defined id for job; must be unique for the entire app
   activityId?: string;  //activity id is a uuid for a given pubsubdb app
@@ -66,6 +67,8 @@ class KeyService {
         return namespace;
       case KeyType.CONDUCTOR:
         return `${namespace}:${params.appId}::conductor`;
+      case KeyType.WORK_ITEMS:
+          return `${namespace}:${params.appId}::workitems`;
       case KeyType.APP:
         return `${namespace}:a:${params.appId || ''}`;
       case KeyType.JOB_DATA:

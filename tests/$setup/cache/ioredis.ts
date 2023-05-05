@@ -39,7 +39,7 @@ class RedisConnection {
 
   public static async getConnection(id: string, options?: Partial<RedisClientOptions>): Promise<RedisConnection> {
     if (this.instances.has(id)) {
-      return this.instances.get(id);
+      return this.instances.get(id) as RedisConnection;
     }
     const instance = new RedisConnection();
     const mergedOptions = { ...this.clientOptions, ...options };

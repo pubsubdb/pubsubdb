@@ -1,4 +1,8 @@
 import { PubSubDBService } from '..';
+import { Pipe } from "../../pipe";
+import { KeyType } from '../../store/key';
+import { SerializerService } from '../../store/serializer';
+import { Activity } from "./activity";
 import {
   RestoreJobContextError, 
   MapInputDataError, 
@@ -10,16 +14,11 @@ import {
   ActivityData,
   ActivityMetadata,
   ActivityType,
-  TriggerActivity } from "../../../typedefs/activity";
+  TriggerActivity,
+  FlattenedDataObject, 
+  HookData} from "../../../typedefs/activity";
 import { JobContext } from '../../../typedefs/job';
 import { StatsType, Stat } from '../../../typedefs/stats';
-import { MapperService } from '../../mapper';
-import { Pipe } from "../../pipe";
-import { KeyType } from '../../store/key';
-import { SerializerService } from '../../store/serializer';
-import { Activity } from "./activity";
-
-type FlattenedDataObject = { [key: string]: string };
 
 class Trigger extends Activity {
   config: TriggerActivity;
@@ -28,9 +27,10 @@ class Trigger extends Activity {
     config: ActivityType,
     data: ActivityData,
     metadata: ActivityMetadata,
+    hook: HookData | null,
     pubsubdb: PubSubDBService,
     context?: JobContext) {
-      super(config, data, metadata, pubsubdb, context);
+      super(config, data, metadata, hook, pubsubdb, context);
   }
 
   async process(): Promise<string> {
@@ -64,16 +64,28 @@ class Trigger extends Activity {
     }
   }
 
+  createInputContext(): Partial<JobContext> {
+    return { 
+      [this.metadata.aid]: { input: { data: this.data } }
+    } as Partial<JobContext>;
+  }
+
   async createContext(): Promise<void> {
+    const inputContext = this.createInputContext();
+    const jobId = this.resolveJobId(inputContext);
+    const jobKey = this.resolveJobKey(inputContext);
+
+    //create job context
     const utc = new Date().toISOString();
     const { id, version } = await this.pubsubdb.getAppConfig();
+    const activityMetadata = { ...this.metadata, jid: jobId, key: jobKey };
     this.context = {
       metadata: {
         ...this.metadata,
         app: id,
         vrs: version,
-        jid: null,
-        key: null,
+        jid: jobId,
+        key: jobKey,
         jc: utc,
         ju: utc,
         ts: this.getTimeSeriesStamp(),
@@ -81,53 +93,49 @@ class Trigger extends Activity {
       },
       data: {},
       [this.metadata.aid]: { 
-        input: { data: this.data },
-        output: { data: {} },
+        input: { 
+          data: this.data,
+          metadata: activityMetadata
+        },
+        output: { 
+          data: this.data,
+          metadata: activityMetadata
+        },
         settings: { data: {} },
         errors: { data: {} },
        },
     };
-    this.context.metadata.jid = this.resolveJobId();
-    this.context.metadata.key = this.resolveJobKey();
+    this.context['$self'] = this.context[this.metadata.aid];
   }
 
   getJobStatus(): number {
     return this.config.collationKey - this.config.collationInt * 3;
   }
 
-  resolveJobId(): string {
+  resolveJobId(context: Partial<JobContext>): string {
     const stats = this.config.stats;
     const jobId = stats?.id;
     if (jobId) {
-      const pipe = new Pipe([[jobId]], this.context);
+      const pipe = new Pipe([[jobId]], context);
       return pipe.process();
     } else {
       return `${Date.now().toString()}.${parseInt((Math.random() * 1000).toString(), 10)}`;
     }
   }
 
-  resolveJobKey(): string {
+  resolveJobKey(context: Partial<JobContext>): string {
     const stats = this.config.stats;
     const jobKey = stats?.key;
     if (jobKey) {
       let pipe: Pipe;
       if (Pipe.isPipeObject(jobKey)) {
-        //pipe syntax
-        pipe = new Pipe(jobKey['@pipe'], this.context);
+        pipe = new Pipe(jobKey['@pipe'], context);
       } else {
-        //concise syntax
-        pipe = new Pipe([[jobKey]], this.context);
+        pipe = new Pipe([[jobKey]], context);
       }
       return pipe.process();
     } else {
       return '';
-    }
-  }
-
-  async mapJobData(): Promise<void> {
-    if(this.config.job?.maps) {
-      const mapper = new MapperService(this.config.job.maps, this.context);
-      this.context.data = await mapper.mapRules();
     }
   }
 
@@ -148,15 +156,8 @@ class Trigger extends Activity {
     }
   }
 
-  async saveJob(multi?: any): Promise<void> {
-    const jobId = this.context.metadata.jid;
-    await this.pubsubdb.store.setJob(
-      jobId,
-      this.context.data,
-      this.context.metadata,
-      await this.pubsubdb.getAppConfig(),
-      multi
-    );
+  saveJobMetadata(): boolean {
+    return true;
   }
 
   async saveActivityNX(multi?: any): Promise<void> {
@@ -175,19 +176,6 @@ class Trigger extends Activity {
       );
       throw new Error(`Duplicate. Job ${jobId} already exists`);
     }
-  }
-
-  async saveActivity(multi?: any): Promise<void> {
-    const jobId = this.context.metadata.jid;
-    const activityId = this.metadata.aid;
-    await this.pubsubdb.store.setActivity(
-      jobId,
-      activityId,
-      this.context[activityId].output.data,
-      { ...this.metadata, jid: jobId, key: this.context.metadata.key },
-      await this.pubsubdb.getAppConfig(),
-      multi
-    );
   }
 
   resolveStats(): StatsType {
@@ -282,16 +270,6 @@ class Trigger extends Activity {
         await this.pubsubdb.getAppConfig(),
         multi
       );
-    }
-  }
-
-  async pub(): Promise<void> {
-    const transitions = await this.pubsubdb.store.getTransitions(await this.pubsubdb.getAppConfig());
-    const transition = transitions[`.${this.metadata.aid}`];
-    if (transition) {
-      for (const p in transition) {
-        await this.pubsubdb.pub(`.${p}`, this.context[this.metadata.aid].output.data, this.context);
-      }
     }
   }
 }

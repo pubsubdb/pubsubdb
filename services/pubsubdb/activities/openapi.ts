@@ -1,23 +1,21 @@
 import { PubSubDBService } from "..";
-import { ActivityData, ActivityMetadata, OpenAPIActivity } from "../../../typedefs/activity";
+import { ActivityData, ActivityMetadata, HookData, OpenAPIActivity } from "../../../typedefs/activity";
 import { Activity, ActivityType } from "./activity";
 
 /**
- * the openapi activity type is a placeholder for actions that are external to pubsubdb.
- * Use this activity to call external APIs, or to call other pubsubdb instances/apps.
- * 
- * Once the call is made to the external entity, the activity will register with the
- * global hooks table for the specific payload/event that can awaken it. This works,
- * because there is a hooks pattern that is used to register and awaken activities.
- * it generates a skeleton key like hash query and if any of the keys fit, it deletes the
- * key and resumes the job in context.
+ * the openapi activity type orchestrates external endpoints as documented by openapi.
  */
-
 class OpenApi extends Activity {
   config: OpenAPIActivity;
 
-  constructor(config: ActivityType, data: ActivityData, metadata: ActivityMetadata, pubsubdb: PubSubDBService) {
-    super(config, data, metadata, pubsubdb);
+  constructor(
+    config: ActivityType,
+    data: ActivityData,
+    metadata: ActivityMetadata,
+    hook: HookData | null,
+    pubsubdb: PubSubDBService
+    ) {
+      super(config, data, metadata, hook, pubsubdb);
   }
   
   async restoreJobContext(): Promise<void> {

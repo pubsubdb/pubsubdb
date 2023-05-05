@@ -14,7 +14,7 @@ The Collation Service aims to solve the problem of efficiently tracking the stat
 
 ## Collation Key and Activity Statuses
 
-Each digit in the collation key represents the status of an activity:
+Each digit in the collation key represents the status of an activity.
 
 - 9: Pending
 - 8: Started
@@ -23,8 +23,14 @@ Each digit in the collation key represents the status of an activity:
 - 5: Paused
 - 4: Released
 - 3: Skipped
-- 2: Unreachable
-- 1: ???? Place Holder ????
+- 2: `Await` Right Parentheses
+- 1: `Await` Left Parentheses
+
+### Compositional Status
+The 2 and 1 digits serve to bookend subordinated workflows and can be used to communicate compositional job state. For example, a compositional state of `99996146636629` reveals that **two** separate workflows were successfully completed. The first flow (Flow A) called the second flow (Flow B). Specifically, activity 5 in Flow A invoked Flow B. Activity A was suspended until Activity B successfully returned its response. The final state for both flows is:
+
+* Flow A: `999969000000000`
+* Flow B: `466366000000000`
 
 ## Examples
  Consider a flow with this activity sequence:
@@ -50,7 +56,7 @@ The `quick` and `brown` activities have *completed* and `fox` is currently *star
 | slept    | Pending   | 9           |
 | ate      | Pending   | 9           |
 
-### Example 2: 266863000000000
+### Example 2: 366863000000000
 The `quick`, `brown`, and `fox` activities have *completed* and `jumped` is currently *started*. The `slept` activity was *skipped* and its child activity, `ate` is *unreachable*.
 
 | Activity | State   | Numeric Value |
@@ -60,33 +66,33 @@ The `quick`, `brown`, and `fox` activities have *completed* and `jumped` is curr
 | fox      | Completed | 6           |
 | jumped   | Started   | 8           |
 | slept    | Skipped   | 3           |
-| ate      | Unreachable | 2         |
+| ate      | Skipped   | 3           |
 
-### Example 3: 266663000000000
+### Example 3: 366663000000000
 The `quick`, `brown`, `fox`, and `jumped` activities have *completed*. The `slept` activity was *skipped* and its child activity, `ate` is *unreachable*.
 
->NOTE: This flow is considered 'complete' as no activities are active (6, 2, 3). At execution time, one can assume that the `jumped` activity likely decremented its value by '2' units upon completion of the activity, resulting in a final integer of `266663000000000`. The engine would know based upon this value that no other activity is possibly active or otherwise pending and would complete the job.
+>NOTE: This flow is considered 'complete' as no activities are active (6, 3). At execution time, one can assume that the `jumped` activity likely decremented its value by '2' units upon completion of the activity, resulting in a final integer of `366663000000000`. The engine would know based upon this value that no other activity is possibly active or otherwise pending and would complete the job.
 
 | Activity | State   | Numeric Value |
 | -------- | ------- | ------------- |
-| quick    | Completed     | 6           |
-| brown    | Completed     | 6           |
-| fox      | Completed     | 6           |
-| jumped   | Completed       | 6           |
-| slept    | Skipped       | 3           |
-| ate      | Unreachable   | 2           |
+| quick    | Completed     | 6       |
+| brown    | Completed     | 6       |
+| fox      | Completed     | 6       |
+| jumped   | Completed     | 6       |
+| slept    | Skipped       | 3       |
+| ate      | Skipped       | 3       |
 
 ### Example 5: 566366000000000
 The `quick`, `brown`, `fox`, and `slept` activities have *completed*. The `jumped` activity was *skipped*. The `ate` activity has already completed and is now in a *paused* state, awaiting release.
 
 | Activity | State     | Numeric Value |
 | -------- | --------- | ------------- |
-| quick    | Completed | 6           |
-| brown    | Completed | 6           |
-| fox      | Completed | 6           |
-| jumped   | Skipped   | 3           |
-| slept    | Completed | 6           |
-| ate      | Paused    | 5           |
+| quick    | Completed | 6             |
+| brown    | Completed | 6             |
+| fox      | Completed | 6             |
+| jumped   | Skipped   | 3             |
+| slept    | Completed | 6             |
+| ate      | Paused    | 5             |
 
 ### Example 6: 466366000000000
 The `quick`, `brown`, `fox`, and `slept` activities have *completed*. The `jumped` activity was *skipped*. The `ate` activity was paused and has now been *released* (4).
@@ -95,12 +101,12 @@ The `quick`, `brown`, `fox`, and `slept` activities have *completed*. The `jumpe
 
 | Activity | State     | Numeric Value |
 | -------- | --------- | ------------- |
-| quick    | Completed | 6           |
-| brown    | Completed | 6           |
-| fox      | Completed | 6           |
-| jumped   | Skipped   | 3           |
-| slept    | Completed | 6           |
-| ate      | Released  | 4           |
+| quick    | Completed | 6             |
+| brown    | Completed | 6             |
+| fox      | Completed | 6             |
+| jumped   | Skipped   | 3             |
+| slept    | Completed | 6             |
+| ate      | Released  | 4             |
 
 ### ERROR Example: 766366000000000
 The `ate` activity returned an *error* and the `jumped` activity was *skipped*. All other activities *completed* normally.
@@ -109,9 +115,9 @@ The `ate` activity returned an *error* and the `jumped` activity was *skipped*. 
 
 | Activity | State     | Numeric Value |
 | -------- | --------- | ------------- |
-| quick    | Completed | 6           |
-| brown    | Completed | 6           |
-| fox      | Completed | 6           |
-| jumped   | Skipped   | 3           |
-| slept    | Completed | 6           |
-| *ate*      | *Errored*   | *7*           |
+| quick    | Completed | 6             |
+| brown    | Completed | 6             |
+| fox      | Completed | 6             |
+| jumped   | Skipped   | 3             |
+| slept    | Completed | 6             |
+| *ate*    | *Errored* | *7*           |

@@ -40,7 +40,7 @@ activities:
         $ref: '../maps/order.scheduled.yaml#/route/job'
   fulfill:
     title: Fulfill Order
-    type: job
+    type: activity
     job:
       maps:
         $ref: '../maps/order.scheduled.yaml#/fulfill/job'
@@ -52,7 +52,7 @@ transitions:
     - to: fulfill
 
 hooks:
-  lob.1.order.routed:
+  order.routed:
     - to: route
       conditions:
         match:

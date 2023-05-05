@@ -1,3 +1,3 @@
-type Signal = { topic: string, resolved: string, jobId: string};
+type HookSignal = { topic: string, resolved: string, jobId: string};
 
-export { Signal };
+export { HookSignal };

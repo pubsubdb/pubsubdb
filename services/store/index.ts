@@ -1,5 +1,4 @@
 import { AppVersion } from '../../typedefs/app';
-import { Signal } from '../../typedefs/signal';
 import { IdsData, JobStatsRange, StatsType } from '../../typedefs/stats';
 import { ILogger } from '../logger';
 import { Cache } from './cache';
@@ -11,6 +10,9 @@ import {
   RedisClientType as IORedisClientType
 } from '../../typedefs/ioredis';
 import { SubscriptionCallback } from '../../typedefs/conductor';
+import { HookRule, HookSignal } from '../../typedefs/hook';
+import { JobContext } from '../../typedefs/job';
+import { ActivityDataType } from '../../typedefs/activity';
 
 abstract class StoreService {
   redisClient: RedisClientType | IORedisClientType | any;
@@ -32,15 +34,16 @@ abstract class StoreService {
   abstract getJobStats(jobKeys: string[], config: AppVersion): Promise<JobStatsRange>;
   abstract getJobIds(indexKeys: string[], config: AppVersion): Promise<IdsData>;
   abstract updateJobStatus(jobId: string, collationKeyStatus: number, appVersion: AppVersion, multi? : any): Promise<any>
-  abstract getJobMetadata(jobId: string, config: AppVersion): Promise<any>;
-  abstract getJobData(jobId: string, config: AppVersion): Promise<any>;
-  abstract getJob(jobId: string, config: AppVersion): Promise<any>;
-  abstract get(jobId: string, config: AppVersion): Promise<any>;
-  abstract setActivity(jobId: string, activityId: any, data: Record<string, unknown>, metadata: Record<string, unknown>, config: AppVersion, multi? : any): Promise<any|string>
+  abstract getJobMetadata(jobId: string, appVersion: AppVersion): Promise<object | undefined>;
+  abstract getJobContext(jobId: string, appVersion: AppVersion): Promise<JobContext | undefined>;
+  abstract getJobData(jobId: string, appVersion: AppVersion): Promise<object | undefined>;
+  abstract getJob(jobId: string, appVersion: AppVersion): Promise<object | undefined>;
+  abstract setActivity(jobId: string, activityId: any, data: Record<string, unknown>, metadata: Record<string, unknown>, hook: null | Record<string, unknown>, config: AppVersion, multi? : any): Promise<any|string>
   abstract setActivityNX(jobId: string, activityId: any, config: AppVersion): Promise<number>
+  abstract restoreContext(jobId: string, dependsOn: Record<string, string[]>, config: AppVersion): Promise<Partial<JobContext>>;
   abstract getActivityMetadata(jobId: string, activityId: string, config: AppVersion): Promise<any>;
-  abstract getActivityData(jobId: string, activityId: string, config: AppVersion): Promise<any>;
-  abstract getActivity(jobId: string, activityId: string, config: AppVersion): Promise<any>;
+  abstract getActivityContext(jobId: string, activityId: string, config: AppVersion): Promise<ActivityDataType | null | undefined>;
+  abstract getActivity(jobId: string, activityId: string, config: AppVersion): Promise<Record<string, unknown> | null | undefined>;
   abstract getSchema(activityId: string, config: AppVersion): Promise<any>;
   abstract getSchemas(config: AppVersion): Promise<any>;
   abstract setSchemas(schemas: Record<string, any>, config: AppVersion): Promise<any>;
@@ -48,12 +51,16 @@ abstract class StoreService {
   abstract getSubscription(topic: string, config: AppVersion): Promise<string | undefined>;
   abstract setTransitions(subscriptionsPatterns: Record<string, any>, config: AppVersion): Promise<any>;
   abstract getTransitions(config: AppVersion): Promise<any>;
-  abstract setHookPatterns(hookPatterns: { [key: string]: string }, config: AppVersion): Promise<any>;
-  abstract getHookPatterns(config: AppVersion): Promise<Record<string, unknown>>;
-  abstract setSignal(signal: Signal, appVersion: AppVersion, multi? : any): Promise<any>;
-  abstract getSignal(topic: string, resolved: string, appVersion: AppVersion): Promise<Signal | undefined>;
+  abstract setHookRules(hookRules: Record<string, HookRule[]>, config: AppVersion): Promise<any>;
+  abstract getHookRules(config: AppVersion): Promise<Record<string, HookRule[]>>;
+  abstract setHookSignal(hook: HookSignal, appVersion: AppVersion, multi? : any): Promise<any>;
+  abstract getHookSignal(topic: string, resolved: string, appVersion: AppVersion): Promise<string | undefined>;
   abstract subscribe(keyType: KeyType.CONDUCTOR, subscriptionHandler: SubscriptionCallback, appVersion: AppVersion): Promise<void>;
   abstract publish(keyType: KeyType.CONDUCTOR, message: Record<string, any>, appVersion: AppVersion): Promise<void>;
+  abstract addTaskQueues(keys: string[], appVersion: AppVersion): Promise<void>;
+  abstract getActiveTaskQueue(appVersion: AppVersion): Promise<string | null>;
+  abstract processTaskQueue(id: string, newListKey: string): Promise<void>;
+  abstract deleteProcessedTaskQueue(key: string, processedKey: string, appVersion: AppVersion): Promise<void>;
 }
 
 export { StoreService };
