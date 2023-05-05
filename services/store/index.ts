@@ -32,7 +32,7 @@ abstract class StoreService {
   abstract setJob(jobId: any, data: Record<string, unknown>, metadata: Record<string, unknown>, config: AppVersion, multi? : any): Promise<any|string>;
   abstract setJobStats(jobKey: string, jobId: string, dateTime: string, stats: StatsType, appVersion: AppVersion, multi? : any): Promise<any|string>;
   abstract getJobStats(jobKeys: string[], config: AppVersion): Promise<JobStatsRange>;
-  abstract getJobIds(indexKeys: string[], config: AppVersion): Promise<IdsData>;
+  abstract getJobIds(indexKeys: string[], idRange: [number, number]): Promise<IdsData>;
   abstract updateJobStatus(jobId: string, collationKeyStatus: number, appVersion: AppVersion, multi? : any): Promise<any>
   abstract getJobMetadata(jobId: string, appVersion: AppVersion): Promise<object | undefined>;
   abstract getJobContext(jobId: string, appVersion: AppVersion): Promise<JobContext | undefined>;
@@ -48,6 +48,7 @@ abstract class StoreService {
   abstract getSchemas(config: AppVersion): Promise<any>;
   abstract setSchemas(schemas: Record<string, any>, config: AppVersion): Promise<any>;
   abstract setSubscriptions(subscriptions: Record<string, any>, config: AppVersion): Promise<any>;
+  abstract getSubscriptions(appVersion: AppVersion): Promise<Record<string, string>>;
   abstract getSubscription(topic: string, config: AppVersion): Promise<string | undefined>;
   abstract setTransitions(subscriptionsPatterns: Record<string, any>, config: AppVersion): Promise<any>;
   abstract getTransitions(config: AppVersion): Promise<any>;
@@ -59,8 +60,8 @@ abstract class StoreService {
   abstract publish(keyType: KeyType.CONDUCTOR, message: Record<string, any>, appVersion: AppVersion): Promise<void>;
   abstract addTaskQueues(keys: string[], appVersion: AppVersion): Promise<void>;
   abstract getActiveTaskQueue(appVersion: AppVersion): Promise<string | null>;
-  abstract processTaskQueue(id: string, newListKey: string): Promise<void>;
-  abstract deleteProcessedTaskQueue(key: string, processedKey: string, appVersion: AppVersion): Promise<void>;
+  abstract processTaskQueue(id: string, newListKey: string): Promise<any>;
+  abstract deleteProcessedTaskQueue(workItemKey: string, key: string, processedKey: string, appVersion: AppVersion): Promise<void>;
 }
 
 export { StoreService };

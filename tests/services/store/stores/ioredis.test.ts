@@ -342,11 +342,12 @@ describe('IORedisStoreService', () => {
 
     it('should remove the work item and processed item from Redis', async () => {
       const workItemKey = 'work-item-1';
+      const key = 'item-1';
       const processedKey = 'processed-item-1';
       const zsetKey = redisStoreService.mintKey(KeyType.WORK_ITEMS, { appId: appConfig.id });
       await redisStoreService.redisClient.zadd(zsetKey, 'NX', 1000, workItemKey);
       await redisStoreService.redisClient.set(processedKey, 'processed data');
-      await redisStoreService.deleteProcessedTaskQueue(workItemKey, processedKey, appConfig);
+      await redisStoreService.deleteProcessedTaskQueue(workItemKey, key, processedKey, appConfig);
       const workItemExists = await redisStoreService.redisClient.exists(workItemKey);
       const processedItemExists = await redisStoreService.redisClient.exists(processedKey);
       const workItemInZSet = await redisStoreService.redisClient.zrank(zsetKey, workItemKey);
@@ -357,8 +358,10 @@ describe('IORedisStoreService', () => {
 
     it('should remove the work item from the cache', async () => {
       const workItemKey = 'work-item-cached';
+      const key = 'item-cached';
+      const processedKey = 'processed-item-cached';
       redisStoreService.cache.setWorkItem(appConfig.id, workItemKey);
-      await redisStoreService.deleteProcessedTaskQueue(workItemKey, 'processed-item-cached', appConfig);
+      await redisStoreService.deleteProcessedTaskQueue(workItemKey, key, processedKey, appConfig);
       const cachedWorkItem = redisStoreService.cache.getActiveTaskQueue(appConfig.id);
       expect(cachedWorkItem).toBeUndefined();
     });
@@ -377,11 +380,20 @@ describe('IORedisStoreService', () => {
 
     it('should move an item from the source list to the destination list', async () => {
       await redisStoreService.redisClient.lpush(sourceKey, item1, item2);
-      await redisStoreService.processTaskQueue(sourceKey, destinationKey);
-      const sourceList = await redisStoreService.redisClient.lrange(sourceKey, 0, -1);
-      const destinationList = await redisStoreService.redisClient.lrange(destinationKey, 0, -1);
+      const val2 = await redisStoreService.processTaskQueue(sourceKey, destinationKey);
+      let sourceList = await redisStoreService.redisClient.lrange(sourceKey, 0, -1);
+      let destinationList = await redisStoreService.redisClient.lrange(destinationKey, 0, -1);
+      expect(val2).toEqual(item2);
       expect(sourceList).toEqual([item1]);
       expect(destinationList).toEqual([item2]);
+      const val1 = await redisStoreService.processTaskQueue(sourceKey, destinationKey);
+      expect(val1).toEqual(item1);
+      sourceList = await redisStoreService.redisClient.lrange(sourceKey, 0, -1);
+      destinationList = await redisStoreService.redisClient.lrange(destinationKey, 0, -1);
+      const val3 = await redisStoreService.processTaskQueue(sourceKey, destinationKey);
+      expect(val3).toEqual(null);
+      expect(sourceList).toEqual([]);
+      expect(destinationList).toEqual([item2, item1]);
     });
 
     it('should not move any item when the source list is empty', async () => {
