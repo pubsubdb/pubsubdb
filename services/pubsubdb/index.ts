@@ -13,6 +13,8 @@ import { PubSubDBApps, PubSubDBConfig, PubSubDBManifest, PubSubDBSettings } from
 import { JobStatsInput, GetStatsOptions, IdsResponse, StatsResponse } from '../../typedefs/stats';
 import { SignalerService } from '../signaler';
 import { AppVersion } from '../../typedefs/app';
+import { WorkerService } from '../worker';
+import { getSubscriptionTopic } from '../../modules/utils';
 
 //todo: can be multiple instances; track as a Map
 let instance: PubSubDBService;
@@ -85,6 +87,7 @@ class PubSubDBService {
       instance.logger,
       instance
     );
+    instance.processWorkItems();
     return instance;
   }
 
@@ -124,8 +127,16 @@ class PubSubDBService {
         if (self.guid === message.originator) {
           self.quorum = self.quorum + 1;
         }
+      } else if (message.type === 'work') {
+        self.processWorkItems()
       }
     };
+  }
+
+  async processWorkItems() {
+    const { id, version } = await this.getAppConfig();
+    const worker = new WorkerService({ id, version }, this, this.store, this.logger);
+    worker.processWorkItems();
   }
 
   async requestQuorum(): Promise<number> {
@@ -229,26 +240,26 @@ class PubSubDBService {
 
 
   // ************* REPORTER METHODS *************
-  async getStats(topic: string, inputs: JobStatsInput): Promise<StatsResponse> {
+  async getStats(topic: string, query: JobStatsInput): Promise<StatsResponse> {
     const { id, version } = await this.getAppConfig();
-    const reporter = new Reporter(id, version, this.store, this.logger);
-    const options = await this.createOptions(topic, inputs);
-    return await reporter.getStats(options);
+    const reporter = new Reporter({ id, version }, this.store, this.logger);
+    const resolvedQuery = await this.resolveQuery(topic, query);
+    return await reporter.getStats(resolvedQuery);
   }
-  async getIds(topic: string, inputs: JobStatsInput, facets = []): Promise<IdsResponse> {
+  async getIds(topic: string, query: JobStatsInput, queryFacets = []): Promise<IdsResponse> {
     const { id, version } = await this.getAppConfig();
-    const reporter = new Reporter(id, version, this.store, this.logger);
-    const options = await this.createOptions(topic, inputs);
-    return await reporter.getIds(options, facets);
+    const reporter = new Reporter({ id, version }, this.store, this.logger);
+    const resolvedQuery = await this.resolveQuery(topic, query);
+    return await reporter.getIds(resolvedQuery, queryFacets);
   }
-  async createOptions(topic: string, inputs: JobStatsInput): Promise<GetStatsOptions> {
+  async resolveQuery(topic: string, query: JobStatsInput): Promise<GetStatsOptions> {
     //convert user-provided data into the job key, etc
-    const trigger = await this.initActivity(topic, inputs.data);
+    const trigger = await this.initActivity(topic, query.data);
     await trigger.createContext();
     return {
-      end: inputs.end,
-      start: inputs.start,
-      range: inputs.range,
+      end: query.end,
+      start: query.start,
+      range: query.range,
       granularity: trigger.resolveGranularity(topic),
       key: trigger.resolveJobKey(trigger.createInputContext())
     } as GetStatsOptions;
@@ -265,13 +276,27 @@ class PubSubDBService {
       throw new Error(`unable to process hook for topic ${topic}`);
     }
   }
-  async hookAll(topic: string, data: JobData, where: JobStatsInput) {
-    const hookRule = await this.signalerService.getHookRule(topic);
+  async hookAll(hookTopic: string, data: JobData, query: JobStatsInput, queryFacets: string[] = []): Promise<string[]> {
+    const { id, version } = await this.getAppConfig();
+    const hookRule = await this.signalerService.getHookRule(hookTopic);
     if (hookRule) {
-      const activityHandler = await this.initActivity(topic, data);
-      return await activityHandler.processHookSignal();
+      const subscriptionTopic = await getSubscriptionTopic(hookRule.to, this.store, { id, version })
+      const resolvedQuery = await this.resolveQuery(subscriptionTopic, query);
+      const reporter = new Reporter({ id, version }, this.store, this.logger);
+      const workItems = await reporter.getWorkItems(resolvedQuery, queryFacets);
+      const wokerService = new WorkerService({ id, version}, this, this.store, this.logger);
+      await wokerService.enqueueWorkItems(
+        workItems.map(
+          workItem => `${hookTopic}::${workItem}::${JSON.stringify(data)}`
+      ));
+      this.store.publish(
+        KeyType.CONDUCTOR,
+        { type: 'work', originator: this.guid },
+        { id, version }
+      );
+      return workItems;
     } else {
-      throw new Error(`unable to process hook for topic ${topic}`);
+      throw new Error(`unable to find hook for topic ${hookTopic}`);
     }
   }
 

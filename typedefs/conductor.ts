@@ -4,10 +4,15 @@
  * These messages serve to coordinate the cache invalidation and switch-over
  * to the new version without any downtime and a coordinating parent server.
  */
-export type ConductorMessage = PingMessage | PongMessage | ActivateMessage;
+export type ConductorMessage = PingMessage | PongMessage | ActivateMessage | WorkMessage;
 
 export interface PingMessage {
   type: 'ping';
+  originator: string; //guid
+}
+
+export interface WorkMessage {
+  type: 'work';
   originator: string; //guid
 }
 

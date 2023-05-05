@@ -36,7 +36,7 @@ class Deployer {
   }
 
   resolveMappingDependencies() {
-    let dynamicMappingRules: string[] = [];
+    const dynamicMappingRules: string[] = [];
     //recursive function to descend into the object and find all dynamic mapping rules
     function traverse(obj: JsonObject, depends: string[]): void {
       for (const key in obj) {

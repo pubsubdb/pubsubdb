@@ -10,24 +10,23 @@ import {
   MeasureIds, 
   TimeSegment,
   CountByFacet} from '../../typedefs/stats';
+import {AppVersion} from '../../typedefs/app';
 import { ILogger } from '../logger';
 import { StoreService as Store } from '../store';
 
 class ReporterService {
-  private appId: string;
-  private appVersion: string;
+  private appConfig: AppVersion;
   private logger: ILogger;
   private store: Store;
 
-  constructor(appId: string, appVersion: string, store: Store, logger: ILogger) {
-    this.appId = appId;
-    this.appVersion = appVersion;
+  constructor(appConfig: AppVersion, store: Store, logger: ILogger) {
+    this.appConfig = appConfig;
     this.logger = logger;
     this.store = store;
   }
 
   getAppConfig() {
-    return { id: this.appId, version: this.appVersion };
+    return this.appConfig;
   }
 
   async getStats(options: GetStatsOptions): Promise<StatsResponse> {
@@ -119,7 +118,7 @@ class ReporterService {
   }  
 
   private buildRedisKey(key: string, dateTime: string, subTarget = ''): string {
-    return `psdb:${this.appId}:s:${key}:${dateTime}${subTarget?':'+subTarget:''}`;
+    return `psdb:${this.appConfig.id}:s:${key}:${dateTime}${subTarget?':'+subTarget:''}`;
   }
 
   private aggregateData(rawData: JobStatsRange): [number, AggregatedData] {
@@ -192,7 +191,7 @@ class ReporterService {
     return `${year}-${month}-${day}T${hour}:${minute}Z`;
   }
 
-  async getIds({...options}: GetStatsOptions, facets: string[]): Promise<IdsResponse> {
+  async getIds(options: GetStatsOptions, facets: string[], idRange: [number, number] = [0, -1]): Promise<IdsResponse> {
     if (!facets.length) {
       const stats = await this.getStats(options);
       facets = this.getUniqueFacets(stats);
@@ -204,7 +203,7 @@ class ReporterService {
       const dateTimeSets = this.generateDateTimeSets(granularity, range, end, start);
       redisKeys = redisKeys.concat(dateTimeSets.map((dateTime) => this.buildRedisKey(key, dateTime, `index:${facet}`)));
     });
-    const idsData = await this.store.getJobIds(redisKeys, this.getAppConfig());
+    const idsData = await this.store.getJobIds(redisKeys, idRange);
     const idsResponse = this.buildIdsResponse(idsData, options, facets);
     return idsResponse;
   }
@@ -274,6 +273,33 @@ class ReporterService {
 
   getTargetForTime(key: string): string {
     return key.split(':index:')[0];
+  }
+
+  async getWorkItems(options: GetStatsOptions, facets: string[]): Promise<string[]> {
+    if (!facets.length) {
+      const stats = await this.getStats(options);
+      facets = this.getUniqueFacets(stats);
+    }
+    const { key, granularity, range, end, start } = options;
+    this.validateOptions(options);
+    let redisKeys: string[] = [];
+    facets.forEach((facet) => {
+      const dateTimeSets = this.generateDateTimeSets(granularity, range, end, start);
+      redisKeys = redisKeys.concat(dateTimeSets.map((dateTime) => this.buildRedisKey(key, dateTime, `index:${facet}`)));
+    });
+    const idsData = await this.store.getJobIds(redisKeys, [0, 1]);
+    const workerLists = this.buildWorkerLists(idsData);
+    return workerLists;
+  }
+
+  private buildWorkerLists(idsData: IdsData): string[] {
+    const workerLists: string[] = [];
+    for (const key in idsData) {
+      if (idsData[key].length) {
+        workerLists.push(key);
+      }
+    }
+    return workerLists;
   }
 }
 

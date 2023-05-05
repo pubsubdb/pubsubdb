@@ -176,13 +176,34 @@ describe('pubsubdb', () => {
   });
 
   describe('hook()', () => {
-    it('should resolve the hook for', async () => {
+    it('should signal and awaken a sleeping job', async () => {
       const payload = {
-        id: 'ord_1055',
-        facility:'acme',
+        id: 'ord_1054',
+        facility:'spacely',
         actual_release_series: '202304110015',
       };
       const response = await pubSubDB.hook('order.routed', payload);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      expect(response).not.toBeNull();
+    });
+  });
+
+  describe('hookAll()', () => {
+    it('should signal and awaken all jobs of a certain type', async () => {
+      const payload = {
+        facility:'acme',
+        actual_release_series: '202304110015',
+      };
+      const query: JobStatsInput = {
+        data: {
+          color: 'red',
+          primacy: 'primary',
+          size: 'lg',
+        },
+        range: '1h',
+        end: 'NOW',
+      };
+      const response = await pubSubDB.hookAll('order.routed', payload, query, ['color:red']);
       await new Promise(resolve => setTimeout(resolve, 1000));
       expect(response).not.toBeNull();
     });

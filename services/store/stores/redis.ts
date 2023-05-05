@@ -188,10 +188,10 @@ class RedisStoreService extends StoreService {
     return output;
   }
 
-  async getJobIds(indexKeys: string[], _: AppVersion): Promise<IdsData> {
+  async getJobIds(indexKeys: string[], idRange: [number, number]): Promise<IdsData> {
     const multi = this.getMulti();
     for (const idsKey of indexKeys) {
-      multi.LRANGE(idsKey, 0, -1);
+      multi.LRANGE(idsKey, idRange[0], idRange[1]); //0,-1 returns all ids
     }
     const results = await multi.exec();
     const output: IdsData = {};
@@ -405,7 +405,7 @@ class RedisStoreService extends StoreService {
     this.cache.setSubscriptions(appVersion.id, appVersion.version, subscriptions);
   }
 
-  async getSubscriptions(appVersion: { id: string; version: string }): Promise<Record<string, string>> {
+  async getSubscriptions(appVersion: AppVersion): Promise<Record<string, string>> {
     let subscriptions = this.cache.getSubscriptions(appVersion.id, appVersion.version);
     if (subscriptions && Object.keys(subscriptions).length > 0) {
       return subscriptions;
@@ -421,7 +421,7 @@ class RedisStoreService extends StoreService {
     }
   }
 
-  async getSubscription(topic: string, appVersion: { id: string; version: string }): Promise<string | undefined> {
+  async getSubscription(topic: string, appVersion: AppVersion): Promise<string | undefined> {
     const subscriptions = await this.getSubscriptions(appVersion);
     return subscriptions[topic];
   }
@@ -438,7 +438,7 @@ class RedisStoreService extends StoreService {
     return response;
   }
 
-  async getTransitions(appVersion: { id: string; version: string }): Promise<any> {
+  async getTransitions(appVersion: AppVersion): Promise<any> {
     let patterns = this.cache.getTransitions(appVersion.id, appVersion.version);
     if (patterns && Object.keys(patterns).length > 0) {
       return patterns;
@@ -521,8 +521,8 @@ class RedisStoreService extends StoreService {
   }
 
   async addTaskQueues(keys: string[], appVersion: AppVersion): Promise<void> {
-    const zsetKey = this.mintKey(KeyType.WORK_ITEMS, { appId: appVersion.id });
     const multi = this.redisClient.multi();
+    const zsetKey = this.mintKey(KeyType.WORK_ITEMS, { appId: appVersion.id });
     for (const key of keys) {
       multi.ZADD(zsetKey, { score: Date.now().toString(), value: key } as any, { NX: true });
     }
@@ -543,16 +543,17 @@ class RedisStoreService extends StoreService {
     return workItemKey;
   }
 
-  async deleteProcessedTaskQueue(key: string, processedKey: string, appVersion: AppVersion): Promise<void> {
+  async deleteProcessedTaskQueue(workItemKey: string, key: string, processedKey: string, appVersion: AppVersion): Promise<void> {
     const zsetKey = this.mintKey(KeyType.WORK_ITEMS, { appId: appVersion.id });
-    await this.redisClient.DEL(key);
-    await this.redisClient.DEL(processedKey);
-    await this.redisClient.ZREM(zsetKey, key);
+    const didRemove = await this.redisClient.ZREM(zsetKey, workItemKey);
+    if (didRemove) {
+      await this.redisClient.RENAME(processedKey, key);
+    }
     this.cache.removeWorkItem(appVersion.id);
   }
 
-  async processTaskQueue(sourceKey: string, destinationKey: string): Promise<void> {
-    await this.redisClient.LMOVE(sourceKey, destinationKey, 'LEFT', 'RIGHT');
+  async processTaskQueue(sourceKey: string, destinationKey: string): Promise<any> {
+    return await this.redisClient.LMOVE(sourceKey, destinationKey, 'LEFT', 'RIGHT');
   }
 }
 

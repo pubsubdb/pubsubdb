@@ -57,7 +57,7 @@ describe('ReporterService', () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
-    reporter = new ReporterService(appId, appVersion, redisStore, logger);
+    reporter = new ReporterService({ id: appId, version: appVersion }, redisStore, logger);
   });
 
   afterAll(async () => {
@@ -135,4 +135,28 @@ describe('ReporterService', () => {
       expect(result).toHaveProperty('segments');
     });
   });
+
+  describe('getWorkItems', () => {
+    it('should return Redis keys based on given options and facets', async () => {
+      const getStatsOptions = {
+        key: 'testKey',
+        granularity: '5m',
+        range: '1h',
+        end: 'NOW',
+      };
+      const facets = ['facet1', 'facet2'];
+      const mockedIdsData = {
+        'some:key:index:facet1': ['id1', 'id2'],
+        'some:key:index:facet2': ['id3', 'id4'],
+      };
+      const expectedWorkerLists = [
+        'some:key:index:facet1',
+        'some:key:index:facet2',
+      ];
+      (redisStore.getJobIds as jest.Mock).mockResolvedValue(mockedIdsData);
+      const result = await reporter.getWorkItems(getStatsOptions, facets);
+      expect(redisStore.getJobIds).toHaveBeenCalledWith(expect.any(Array), expect.any(Array));
+      expect(result).toEqual(expectedWorkerLists);
+    });
+  });  
 });
