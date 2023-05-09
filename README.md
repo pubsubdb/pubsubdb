@@ -78,7 +78,7 @@ app:
                 - md
                 - lg
           maps:
-            id: "{$self.input.data.email}"
+            email: "{$self.input.data.email}"
             size: "{$self.input.data.size}"
         stats:
           granularity: 5m
@@ -107,7 +107,7 @@ const order = await pubSubDB.get('jdoe@email.com');
 
 *Answer*
 ```ts
-{ "id": "jdoe@email.com", "size": "lg" }
+{ "email": "jdoe@email.com", "size": "lg" }
 ```
 
 ### Question 2
@@ -166,7 +166,7 @@ const pubSubDB = PubSubDB.init({ ... });
 const status = await pubSubDB.deploy('./pubsubdb.yaml');
 ```
 
-## Architectural First Principles
+## First Principles
 Refer to the [Architecture Overview](./docs/architecture.md) for an overview of why PubSubDB outperforms existing operational data platforms.
 
 ## Developer Guide
