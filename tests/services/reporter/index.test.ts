@@ -108,6 +108,52 @@ describe('ReporterService', () => {
       expect(stats.range).toBe(options.range);
       expect(stats.end).toBe(options.end);
     });
+
+    it('should return sparse stats with only top-level aggregations', async () => {
+      const options = {
+        key: 'widgetB',
+        granularity: '5m',
+        range: '1h',
+        end: 'NOW',
+        sparse: true,
+      };
+      const sampleRedisData: JobStatsRange = {
+        [`${PSNS}:${appId}:s:${options.key}:${getTimeSeriesStamp(options.granularity, 10)}`]: {
+          'count': 25,
+          'count:color:12315': 5,
+          'count:size:12145': 5,
+          'count:color:12335': 5,
+          'count:size:12345': 5,
+          'count:color:12355': 5,
+          'count:size:12545': 5,
+          'count:color:12375': 5,
+          'count:size:12745': 5,
+          'count:color:12395': 5,
+          'count:size:12945': 5,
+        },
+        [`${PSNS}:${appId}:s:${options.key}:${getTimeSeriesStamp(options.granularity)}`]: {
+          'count': 15,
+          'count:color:12315': 5,
+          'count:size:12145': 4,
+          'count:color:12335': 3,
+          'count:size:12345': 2,
+          'count:color:12355': 1,
+          'count:size:12545': 5,
+          'count:color:12375': 4,
+          'count:size:12745': 3,
+          'count:color:12395': 2,
+          'count:size:12945': 1,
+        },
+      };
+
+      (redisStore.getJobStats as jest.Mock).mockResolvedValue(sampleRedisData);
+      const stats = await reporter.getStats(options);
+      expect(stats.key).toBe(options.key);
+      expect(stats.granularity).toBe(options.granularity);
+      expect(stats.range).toBe(options.range);
+      expect(stats.end).toBe(options.end);
+      expect(stats.segments).toBeUndefined();
+    });
   });
 
   describe('getJobIds', () => {

@@ -38,6 +38,7 @@ interface JobStatsInput {
   range?: string;
   start?: string;
   end?: string;
+  sparse?: boolean;
 }
 
 interface GetStatsOptions {
@@ -46,6 +47,7 @@ interface GetStatsOptions {
   range?: string;
   start?: string;
   end?: string;
+  sparse?: boolean;
 }
 
 interface StatsResponse {
@@ -55,7 +57,7 @@ interface StatsResponse {
   end: string | Date;
   count: number;
   measures: Measure[];
-  segments: Segment[];
+  segments?: Segment[]; //`sparse` output does not subdived by datetime segments
 }
 
 interface AggregatedData {

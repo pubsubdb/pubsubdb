@@ -143,7 +143,10 @@ class ReporterService {
   private buildStatsResponse(rawData: JobStatsRange, redisKeys: string[], aggregatedData: AggregatedData, count: number, options: GetStatsOptions): StatsResponse {
     const measures: Measure[] = [];
     const measureKeys = Object.keys(aggregatedData).filter((key) => key !== "count");
-    const segments = this.handleSegments(rawData, redisKeys);  
+    let segments = undefined;
+    if (options.sparse !== true) {
+      segments = this.handleSegments(rawData, redisKeys);
+    }
     measureKeys.forEach((key) => {
       const measure: Measure = {
         target: key,
@@ -159,8 +162,10 @@ class ReporterService {
       end: options.end,
       count,
       measures: measures,
-      segments,
     };
+    if (segments) {
+      response.segments = segments;
+    }
     return response;
   }
 
