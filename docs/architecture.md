@@ -18,15 +18,13 @@
 ## Introduction
 The [Ajax/Single Page Application architecture](https://patents.google.com/patent/US8136109) efficiently solves distributed state at web scale by cleanly separating data and processing instructions into two distinct channels. A home server provides the instructions to each connected client but does not execute the processing instructions itself. The clients then cache and execute the instructions and exchange pure data (the results of the execution) with the home server.
 
-<img src="https://patentimages.storage.googleapis.com/7e/cb/e1/4d40791b381af8/US08136109-20120313-D00000.png" alt="Patent illustration" style="max-width: 300px;max-height:300px;">
+<img src="https://patentimages.storage.googleapis.com/7e/cb/e1/4d40791b381af8/US08136109-20120313-D00000.png" alt="Patent illustration" style="max-width: 300px;max-height:300px;width:280px;">
 
 ## Distributed Event Bus
 PubSubDB builds upon the *Distributed Engine* Pattern, delivering a specific type of engine referred to as an *Event Bus* or *Integration Server*. Each time a *Distributed Bus* receives an event, it processes and routes it according to its cached execution rules. The solution is a fully functional *Enterprise Application Integration* (EAI) deployment with all expected execution patterns supported.
 
 ## First Principles
-There are a set of architectural first-principles that undergird how state and process must be separated to realize the full performance benefit. They can seem inconsequential individually, but when applied as a set, they offer significant scalability and performance advantages, making it possible to buy execution cycles with memory. The end result is unchanged performance at scale as there is no computational difference between processing 1 request versus 10k. The microsecond speed at which Redis exchanges messages is the speed limit for your application.
-
-Separation is achieved through the following principles.
+There are a set of architectural first-principles that undergird how state and process must be separated to realize the full performance benefit. They can seem inconsequential individually, but when applied as a set, they offer significant scalability and performance advantages, making it possible to buy execution cycles with memory. The end result is unchanged performance at scale as there is no computational difference between processing 1 request versus 10k. The microsecond speed at which Redis exchanges messages is the speed limit for your application. Separation is achieved through the following principles.
 
 ### Sequence Activities with a DAG
 The Distributed Event Bus uses a Directed Acyclic Graph (DAG) variant known as rooted tree to model the activity flow. This was chosen due to its strict enforcement of a single entry point while still allowing for parallel activities. Sequence and parallelization are both critical to building an efficient memoization engine, and the DAG is the most efficient representation that achieves this.

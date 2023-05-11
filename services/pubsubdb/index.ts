@@ -261,7 +261,8 @@ class PubSubDBService {
       start: query.start,
       range: query.range,
       granularity: trigger.resolveGranularity(topic),
-      key: trigger.resolveJobKey(trigger.createInputContext())
+      key: trigger.resolveJobKey(trigger.createInputContext()),
+      sparse: query.sparse,
     } as GetStatsOptions;
   }
 
