@@ -167,7 +167,7 @@ const status = await pubSubDB.deploy('./pubsubdb.yaml');
 ```
 
 ## First Principles
-Refer to the [Architecture Overview](./docs/architecture.md) for an overview of why PubSubDB outperforms existing operational data platforms.
+Refer to the [Architecture First Principles](./docs/architecture.md) for an overview of why PubSubDB outperforms existing process orchestration platforms.
 
 ## Developer Guide
 Refer to the [Developer Guide](./docs/developer_guide.md) for more information on the full end-to-end development process, including details about schemas and APIs.

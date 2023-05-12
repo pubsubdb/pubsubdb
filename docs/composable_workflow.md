@@ -1,5 +1,5 @@
 # Composable Workflow
-PubSubDB workflows are defined as *rooted out-trees* which means we use graphs with a single root (trigger), from which the `activities` branch out in a tree-like structure, *with no cycles*. This structure allows for efficient scheduling and execution of tasks and is used in parallel and distributed computing systems.
+PubSubDB workflows are modeled as *rooted trees* using graphs with a single root (trigger), from which the `activities` branch out in a tree-like structure, *with no cycles*. This structure allows for efficient scheduling and execution of tasks and is used in parallel and distributed computing systems.
 
 When the graph is deployed, the PubSubDB compiler will subscribe activities to topics, ensuring workflow activities execute in sequence, while still adhering to the principles of a loosely-coupled, event-driven architecture.
 
@@ -41,8 +41,9 @@ The `hook` pattern is used when coordinating **external**, long-running tasks. T
 The `await` pattern is **internally** focused and is used when an activity in one flow invokes another flow. The engine will pause the caller activity until a response is received.
 
 ![Composition Image](./img/composition.png)
+<small>*A Multi-Flow Process Showcasing Both `Hook` and `Await`*</small>
 
-### Example | Asana WebHook
+### Example 1 | Asana WebHook
 Flow B includes a *compositional* activity, namely, **Exec Asana Task** (`a2`). This activity makes a call to Asana to create a task and then sleeps. 
 
 ![Hook-Based Composition](./img/hook.png)
@@ -146,7 +147,7 @@ components:
     publishes: order.approved
 ```
 
-### Example | Await
+### Example 2 | Await
 Flow A also includes a *compositional* activity, namely, **Get Approval** (`a6`). This activity calls another flow and awaits the response. This is similar to `hook` type activities except that it is internal (flow-to-flow), so the mechanics are simpler, requiring no special configuration.
 
 ![Await-Based Composition](./img/await.png)
