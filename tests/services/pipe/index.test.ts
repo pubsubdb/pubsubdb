@@ -2,7 +2,7 @@ import { Pipe } from '../../../services/pipe';
 import { Pipe as PipeType } from '../../../typedefs/pipe';
 
 describe('Pipe', () => {
-  let pipe: Pipe;
+  let pipe: Pipe|null;
   let rules: PipeType;
   let jobData: { [key: string]: any };
 

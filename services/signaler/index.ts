@@ -23,7 +23,7 @@ class SignalerService {
     return rules?.[topic]?.[0] as HookRule;
   }
 
-  async register(topic: string, context: JobContext, multi?): Promise<string> {
+  async registerHook(topic: string, context: JobContext, multi?): Promise<string> {
     const hookRule = await this.getHookRule(topic);
     if (hookRule) {
       const jobId = context.metadata.jid;
@@ -35,7 +35,7 @@ class SignalerService {
       await this.store.setHookSignal(hook, this.appVersion, multi);
       return jobId;
     } else {
-      throw new Error('signaler.register:error: hook rule not found');
+      throw new Error('signaler.registerHook:error: hook rule not found');
     }
   }
 

@@ -259,6 +259,19 @@
                   }
                 }
               }
+            },
+            "stats": {
+              "id": {
+                "@pipe": [
+                  [
+                    "{a1.input.data.id}",
+                    "_caller"
+                  ],
+                  [
+                    "{@string.concat}"
+                  ]
+                ]
+              }
             }
           },
           "a2": {

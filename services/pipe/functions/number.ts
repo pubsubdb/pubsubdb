@@ -70,6 +70,63 @@ class NumberHandler {
   round(input: number): number {
     return Math.round(input);
   }
+
+  add(...operands: (number | number[])[]): number {
+    // @ts-ignore
+    return operands.reduce((a: number, b: number | number[]) => {
+      if (Array.isArray(b)) {
+        return a + this.add(...b);
+      } else {
+        return a + b;
+      }
+    }, 0);
+  }
+
+  subtract(...operands: (number | number[])[]): number {
+    if (operands.length === 0) {
+      throw new Error('At least one operand is required.');
+    }
+  
+    // @ts-ignore
+    return operands.reduce((a: number, b: number | number[], i) => {
+      if (Array.isArray(b)) {
+        return i === 0 ? this.subtract(...b) : a - this.subtract(...b);
+      } else {
+        return i === 0 ? b : a - b;
+      }
+    });
+  }
+  
+  multiply(...operands: (number | number[])[]): number {
+    if (operands.length === 0) {
+      throw new Error('At least one operand is required.');
+    }
+  
+    // @ts-ignore
+    return operands.reduce((a: number, b: number | number[]) => {
+      if (Array.isArray(b)) {
+        return a * this.multiply(...b);
+      } else {
+        return a * b;
+      }
+    }, 1);
+  }
+  
+  divide(...operands: (number | number[])[]): number {
+    if (operands.length === 0) {
+      throw new Error('At least one operand is required.');
+    }
+  
+    // @ts-ignore
+    return operands.reduce((a: number, b: number | number[], i) => {
+      if (Array.isArray(b)) {
+        return i === 0 ? this.divide(...b) : a / this.divide(...b);
+      } else {
+        return i === 0 ? b : a / b;
+      }
+    });
+  }
+  
 }
 
 export { NumberHandler };

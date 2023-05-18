@@ -1,6 +1,6 @@
 import FUNCTIONS from './functions'
+import { JobContext, JobData, JobsData } from '../../typedefs/job';
 import { PipeItem, PipeItems, Pipe as PipeType } from '../../typedefs/pipe';
-import { JobData, JobsData } from '../../typedefs/job';
 
 class Pipe {
   rules: PipeType;
@@ -15,8 +15,18 @@ class Pipe {
     return !Array.isArray(currentRow) && '@pipe' in currentRow;
   }
 
-  static isPipeObject(obj: { [key: string]: any }|string): boolean {
+  static isPipeObject(obj: { [key: string]: unknown }|PipeItem): boolean {
     return typeof obj === 'object' && obj !== null && !Array.isArray(obj) && '@pipe' in obj;
+  }
+
+  static resolve(unresolved: { [key: string]: unknown }|PipeItem, context: Partial<JobContext>): any {
+    let pipe: Pipe;
+    if (Pipe.isPipeObject(unresolved)) {
+      pipe = new Pipe(unresolved['@pipe'], context);
+    } else {
+      pipe = new Pipe([[unresolved as unknown as PipeItem]], context);
+    }
+    return pipe.process();
   }
 
   /**

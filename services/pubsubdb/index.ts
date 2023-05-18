@@ -5,7 +5,7 @@ import { ReporterService as Reporter } from '../reporter';
 import { KeyType, PSNS } from '../store/key';
 import { StoreService } from '../store';
 import Activities from './activities';
-import { ActivityType } from './activities/activity';
+import { Activity, ActivityType } from './activities/activity';
 import { ActivityMetadata } from '../../typedefs/activity';
 import { ConductorMessage, SubscriptionCallback } from '../../typedefs/conductor';
 import { JobContext, JobData } from '../../typedefs/job';
@@ -15,6 +15,9 @@ import { SignalerService } from '../signaler';
 import { AppVersion } from '../../typedefs/app';
 import { WorkerService } from '../worker';
 import { getSubscriptionTopic } from '../../modules/utils';
+import { Trigger } from './activities/trigger';
+import { Await } from './activities/await';
+import { CollatorService } from '../collator';
 
 //todo: can be multiple instances; track as a Map
 let instance: PubSubDBService;
@@ -149,7 +152,7 @@ class PubSubDBService {
 
 
   // ************* METADATA/MODEL METHODS *************
-  async initActivity(topic: string, data: JobData, context?: JobContext): Promise<any> {
+  async initActivity(topic: string, data: JobData, context?: JobContext): Promise<Activity> {
     if (!data) {
       throw new Error(`payload data is required and must be an object`);
     }
@@ -253,21 +256,56 @@ class PubSubDBService {
     return await reporter.getIds(resolvedQuery, queryFacets);
   }
   async resolveQuery(topic: string, query: JobStatsInput): Promise<GetStatsOptions> {
-    //convert user-provided data into the job key, etc
-    const trigger = await this.initActivity(topic, query.data);
+    const trigger = await this.initActivity(topic, query.data) as Trigger;
     await trigger.createContext();
     return {
       end: query.end,
       start: query.start,
       range: query.range,
-      granularity: trigger.resolveGranularity(topic),
+      granularity: trigger.resolveGranularity(),
       key: trigger.resolveJobKey(trigger.createInputContext()),
       sparse: query.sparse,
     } as GetStatsOptions;
   }
 
 
-  // ********************** HOOK METHODS ***********************
+  // ********************** ASYNC/RESOLVE METHODS ***********************
+  hasParentJob(context: JobContext): boolean {
+    return Boolean(context.metadata.pj && context.metadata.pa);
+  }
+  async transitionJob(context: JobContext, toDecrement: number): Promise<void> {
+    if (toDecrement) {
+      const activityStatus = await this.store.updateJobStatus(
+        context.metadata.jid,
+        toDecrement,
+        await this.getAppConfig()
+      );
+      if (CollatorService.isJobComplete(activityStatus) && this.hasParentJob(context)) {
+        await this.resolveAwait(context); //todo: add job to a 'completed' worker list
+      }
+    }
+  }
+  async resolveAwait(context: JobContext) {
+    if (this.hasParentJob(context)) {
+      const completedJobId = context.metadata.jid;
+      const config = await this.getAppConfig();
+      const parentContext: Partial<JobContext> = {
+        data: await this.store.getJob(completedJobId, config),
+        metadata: { 
+          ...context.metadata,
+          jid: context.metadata.pj,
+          aid: context.metadata.pa,
+          pj: undefined,
+          pa: undefined,
+        }
+      };
+      const activityHandler = await this.initActivity(`.${parentContext.metadata.aid}`, parentContext.data, parentContext as JobContext) as Await;
+      return await activityHandler.resolveAwait();
+    }
+  }
+
+
+  // ********************** SIGNAL/HOOK METHODS ***********************
   async hook(topic: string, data: JobData) {
     const hookRule = await this.signalerService.getHookRule(topic);
     if (hookRule) {
@@ -285,8 +323,8 @@ class PubSubDBService {
       const resolvedQuery = await this.resolveQuery(subscriptionTopic, query);
       const reporter = new Reporter({ id, version }, this.store, this.logger);
       const workItems = await reporter.getWorkItems(resolvedQuery, queryFacets);
-      const wokerService = new WorkerService({ id, version}, this, this.store, this.logger);
-      await wokerService.enqueueWorkItems(
+      const workerService = new WorkerService({ id, version}, this, this.store, this.logger);
+      await workerService.enqueueWorkItems(
         workItems.map(
           workItem => `${hookTopic}::${workItem}::${JSON.stringify(data)}`
       ));
@@ -312,7 +350,6 @@ class PubSubDBService {
     }
   }
   sub(topic: string, callback: (data: Record<string, any>) => void) {
-    //local, ephemeral subscription
   }
 
 
@@ -320,15 +357,6 @@ class PubSubDBService {
   async get(key: string) {
     //get job by id
     return this.store.getJob(key, await this.getAppConfig());
-  }
-
-
-  // ********************** LIFECYCLE METHODS ****************************
-  static stop(config: Record<string, string|number|boolean>) {
-    //disable db access (read? readwrite? write?)
-  }
-  async start(config: Record<string, string|number|boolean>) {
-    //enable db access (read? readwrite? write?)
   }
 }
 

@@ -1,4 +1,4 @@
-type PipeItem = string | boolean | number;
+type PipeItem = string | boolean | number | null;
 
 type PipeItems = PipeItem[];
 

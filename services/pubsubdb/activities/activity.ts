@@ -5,8 +5,11 @@
 //          ExecActivityError, 
 //          DuplicateActivityError} from '../../../modules/errors';
 import { PubSubDBService } from "..";
+import { CollatorService } from "../../collator";
 import { ILogger } from "../../logger";
+import { MapperService } from '../../mapper';
 import { SignalerService } from "../../signaler";
+import { SerializerService } from '../../store/serializer';
 import { 
   ActivityType,
   ActivityData,
@@ -14,8 +17,7 @@ import {
   FlattenedDataObject, 
   HookData} from "../../../typedefs/activity";
 import { JobContext } from "../../../typedefs/job";
-import { SerializerService } from '../../store/serializer';
-import { MapperService } from '../../mapper';
+import { TransitionRule, Transitions } from "../../../typedefs/transition";
 
 /**
  * The base class for all activities
@@ -49,23 +51,24 @@ class Activity {
   async process(): Promise<string> {
     //try {
       await this.restoreJobContext(this.context.metadata.jid);
-      await this.mapJobData();
+      this.mapJobData();
 
       /////// MULTI: START ///////
       const multi = this.pubsubdb.store.getMulti();
-      //await this.mapInputData();     //subclasses implement this
-      //await this.registerResponse(); //subclasses implement this
-      //await this.registerTimeout();  //subclasses implement this
+      //await this.mapInputData();      //subclasses (openapi) implement this
+      //await this.registerResponse();  //subclasses implement this
+      //await this.registerTimeout();   //subclasses implement this
+      await this.saveJobData(multi);
       await this.saveActivity(multi);
       const shouldSleep = await this.registerExpectedHook(multi);
       const decrementBy = shouldSleep ? 4 : 3;
       await this.saveActivityStatus(decrementBy, multi);
-      //await this.saveJob(multi);
-      await multi.exec();
+      const multiResponse = await multi.exec();
       /////// MULTI: END ///////
 
-      //await this.execActivity();      //subclasses implement this
-      !shouldSleep && this.pub();       //spawn downstream activities
+      const activityStatus = multiResponse[multiResponse.length - 1];
+      const isComplete = CollatorService.isJobComplete(activityStatus);
+      !shouldSleep && this.transition(isComplete);
       return this.context.metadata.aid;
     //} catch (error) {
       //this.logger.error('activity.process:error', error);
@@ -101,7 +104,7 @@ class Activity {
         this.pubsubdb.logger,
         this.pubsubdb
       );
-      return await signalerService.register(this.config.hook.topic, this.context, multi);
+      return await signalerService.registerHook(this.config.hook.topic, this.context, multi);
     }
   }
   async processHookSignal(): Promise<void> {
@@ -123,12 +126,13 @@ class Activity {
       /////// MULTI: START ///////
       const multi = this.pubsubdb.store.getMulti();
       await this.saveActivity(multi);
-      await this.saveJob(multi);
+      await this.saveJobData(multi);
       await this.saveActivityStatus(1, multi);
-      await multi.exec();
+      const multiResponse = await multi.exec();
+      const activityStatus = multiResponse[multiResponse.length - 1];
+      const isComplete = CollatorService.isJobComplete(activityStatus);
+      this.transition(isComplete);
       /////// MULTI: END ///////
-
-      this.pub();
     }
   }
 
@@ -140,7 +144,7 @@ class Activity {
       config
     ) as JobContext;
     if (!this.context[this.metadata.aid]) {
-      this.context[this.metadata.aid] = { data: {}, metadata: {}, hook: {} };
+      this.context[this.metadata.aid] = { input: {}, output: {}, hook: {} };
     }
     //alias '$self' to the activity id
     this.context['$self'] = this.context[this.metadata.aid];
@@ -163,15 +167,18 @@ class Activity {
     }
   }
 
-  async mapJobData(): Promise<void> {
+  mapJobData(): void {
     if(this.config.job?.maps) {
       const mapper = new MapperService(this.config.job.maps, this.context);
-      this.context.data = await mapper.mapRules();
+      this.context.data = mapper.mapRules();
     }
   }
 
-  async mapInputData(): Promise<void> {
-    //todo: implement, since common to all subclasses
+  mapInputData(): void {
+    if(this.config.input?.maps) {
+      const mapper = new MapperService(this.config.input.maps, this.context);
+      this.context.data = mapper.mapRules();
+    }
   }
 
   async subscribeToResponse(): Promise<void> {
@@ -193,11 +200,10 @@ class Activity {
     return false;
   }
 
-  async saveJob(multi?: any): Promise<void> {
-    const jobId = this.context.metadata.jid;
+  async saveJobData(multi?: any): Promise<void> {
     await this.pubsubdb.store.setJob(
-      jobId,
-      this.context.data,
+      this.context.metadata.jid,
+      this.context.data || {},
       this.saveJobMetadata() ? this.context.metadata : {},
       await this.pubsubdb.getAppConfig(),
       multi
@@ -218,7 +224,7 @@ class Activity {
     );
   }
 
-  async saveActivityStatus(multiplier = 1, multi?): Promise<void> {
+  async saveActivityStatus(multiplier = 1, multi?: unknown): Promise<void> {
     await this.pubsubdb.store.updateJobStatus(
       this.context.metadata.jid,
       -this.config.collationInt * multiplier,
@@ -227,18 +233,56 @@ class Activity {
     );
   }
 
-  async pub(): Promise<void> {
-    const transitions = await this.pubsubdb.store.getTransitions(await this.pubsubdb.getAppConfig());
-    const transition = transitions[`.${this.metadata.aid}`];
+  async skipDescendants(activityId: string, transitions: Transitions, toDecrement: number): Promise<number> {
+    const config = await this.pubsubdb.getAppConfig();
+    const schema = await this.pubsubdb.store.getSchema(activityId, config);
+    toDecrement = toDecrement - schema.collationInt * 6; // 3 = 'skipped'
+    const transition = transitions[`.${activityId}`];
     if (transition) {
-      for (const p in transition) {
-        await this.pubsubdb.pub(
-          `.${p}`,
-          {},
-          this.context
-        );
+      for (const toActivityId in transition) {
+        toDecrement = await this.skipDescendants(toActivityId, transitions, toDecrement);
       }
     }
+    return toDecrement;
+  }
+
+  async transition(isComplete: boolean): Promise<void> {
+    //if any descendant activity is skipped, toDecrement will
+    //be a negative number that can be used to update job status
+    const toDecrement = await this.transitionActivity(isComplete);
+    this.pubsubdb.transitionJob(this.context, toDecrement);
+  }
+
+  hasParentJob(): boolean {
+    return Boolean(this.context.metadata.pj && this.context.metadata.pa);
+  }
+
+  async transitionActivity(isComplete: boolean): Promise<number> {
+    let toDecrement = 0;
+    if (isComplete) {
+      if (this.hasParentJob()) {
+        await this.pubsubdb.resolveAwait(this.context);
+      }
+      return toDecrement;
+    } else {
+      const transitions = await this.pubsubdb.store.getTransitions(await this.pubsubdb.getAppConfig());
+      const transition = transitions[`.${this.metadata.aid}`];
+      if (transition) {
+        for (const toActivityId in transition) {
+          const transitionRule: boolean|TransitionRule = transition[toActivityId];
+          if (MapperService.evaluate(transitionRule, this.context)) {
+            await this.pubsubdb.pub(
+              `.${toActivityId}`,
+              {},
+              this.context
+            );
+          } else {
+            toDecrement = await this.skipDescendants(toActivityId, transitions, toDecrement);
+          }
+        }
+      }
+    }
+    return toDecrement;
   }
 }
 

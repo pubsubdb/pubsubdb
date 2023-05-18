@@ -1,6 +1,6 @@
 import { ReverseAbbreviationMap } from "./abbreviation";
 
-type JobData = Record<string, unknown>;
+type JobData = Record<string, unknown|Record<string, unknown>>;
 type JobsData = Record<string, unknown>;
 
 type ActivityData = {
@@ -9,10 +9,12 @@ type ActivityData = {
 };
 
 type JobMetadata = {
+  pj?: string;  //parent_job_id
+  pa?: string;  //parent_activity_id
+  key?: string; //job_key
   app: string;  //app_id
   vrs: string;  //app version
   jid: string;  //job_id
-  key?: string; //job_key
   ts: string    //201203120005 (slice of time) //time series
   jc: string;   //GMT created //job_created
   ju: string;   //GMT updated //job_updated

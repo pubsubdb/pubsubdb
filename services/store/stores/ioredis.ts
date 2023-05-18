@@ -10,9 +10,10 @@ import { AppVersion } from '../../../typedefs/app';
 import { SubscriptionCallback } from '../../../typedefs/conductor';
 import { HookRule, HookSignal } from '../../../typedefs/hook';
 import { RedisClientType } from '../../../typedefs/ioredis';
-import { JobContext } from '../../../typedefs/job';
+import { JobContext, JobData } from '../../../typedefs/job';
 import { PubSubDBApp, PubSubDBSettings } from '../../../typedefs/pubsubdb';
 import { IdsData, JobStats, JobStatsRange, StatsType } from '../../../typedefs/stats';
+import { Transitions } from '../../../typedefs/transition';
 
 class IORedisStoreService extends StoreService {
   redisClient: RedisClientType;
@@ -205,7 +206,7 @@ class IORedisStoreService extends StoreService {
 
   async updateJobStatus(jobId: string, collationKeyStatus: number, appVersion: AppVersion, multi? : any): Promise<any> {
     const jobKey = this.mintKey(KeyType.JOB_DATA, { appId: appVersion.id, jobId });
-    await (multi || this.redisClient).hincrbyfloat(jobKey, 'm/js', collationKeyStatus);
+    return await (multi || this.redisClient).hincrbyfloat(jobKey, 'm/js', collationKeyStatus);
   }
 
   async setJob(jobId: string, data: Record<string, unknown>, metadata: Record<string, unknown>, appVersion: AppVersion, multi? : any): Promise<any|string> {
@@ -219,13 +220,15 @@ class IORedisStoreService extends StoreService {
     }
     if (Object.keys(jobData).length !== 0) {
       const hashData = SerializerService.flattenHierarchy({ m: metadata, d: data});
-      await (multi || this.redisClient).hmset(hashKey, hashData);
-      return multi || jobId;
+      if (Object.keys(hashData).length !== 0) {
+        await (multi || this.redisClient).hmset(hashKey, hashData);
+        return multi || jobId;
+      }
     }
   }
 
   async getJobMetadata(jobId: string, appVersion: AppVersion): Promise<object | undefined> {
-    const metadataFields = ['m/aid', 'm/atp', 'm/stp', 'm/jc', 'm/ju', 'm/jid', 'm/key', 'm/ts', 'm/js'];
+    const metadataFields = ['m/pj', 'm/pa', 'm/aid', 'm/atp', 'm/stp', 'm/jc', 'm/ju', 'm/jid', 'm/key', 'm/ts', 'm/js'];
     const params: KeyStoreParams = { appId: appVersion.id, jobId };
     const key = this.mintKey(KeyType.JOB_DATA, params);
     // @ts-ignore
@@ -248,12 +251,12 @@ class IORedisStoreService extends StoreService {
     return data?.m ? { data: data.d, metadata: data.m} : undefined;
   }
 
-  async getJobData(jobId: string, appVersion: AppVersion): Promise<object | undefined> {
+  async getJobData(jobId: string, appVersion: AppVersion): Promise<JobData | undefined> {
     const context = await this.getJobContext(jobId, appVersion);
     return context?.data || undefined;
   }
 
-  async getJob(jobId: string, appVersion: AppVersion): Promise<object | undefined> {
+  async getJob(jobId: string, appVersion: AppVersion): Promise<JobData | undefined> {
     return await this.getJobData(jobId, appVersion);
   }
 
@@ -267,7 +270,7 @@ class IORedisStoreService extends StoreService {
 
     // 1) get the job metadata
     const jobKey = this.mintKey(KeyType.JOB_DATA, { appId: config.id, jobId });
-    const jobMetdataIds = ['m/jid', 'm/key', 'm/ts', 'm/js', 'm/jc', 'm/ju'];
+    const jobMetdataIds = ['m/pj', 'm/pa', 'm/jid', 'm/key', 'm/ts', 'm/js', 'm/jc', 'm/ju'];
     // @ts-ignore
     multi.hmget(jobKey, jobMetdataIds);
     keysAndFields.push({ activityId: '$JOB', key: jobKey, fields: jobMetdataIds });
@@ -449,19 +452,20 @@ class IORedisStoreService extends StoreService {
     return response;
   }
 
-  async getTransitions(appVersion: AppVersion): Promise<any> {
-    let patterns = this.cache.getTransitions(appVersion.id, appVersion.version);
-    if (patterns && Object.keys(patterns).length > 0) {
-      return patterns;
+  async getTransitions(appVersion: AppVersion): Promise<Transitions> {
+    let transitions = this.cache.getTransitions(appVersion.id, appVersion.version);
+    if (transitions && Object.keys(transitions).length > 0) {
+      return transitions;
     } else {
       const params: KeyStoreParams = { appId: appVersion.id, appVersion: appVersion.version };
       const key = this.mintKey(KeyType.SUBSCRIPTION_PATTERNS, params);
-      patterns = await this.redisClient.hgetall(key);
-      Object.entries(patterns).forEach(([key, value]) => {
-        patterns[key] = JSON.parse(value as string);
+      transitions = {};
+      const hash = await this.redisClient.hgetall(key);
+      Object.entries(hash).forEach(([key, value]) => {
+        transitions[key] = JSON.parse(value as string);
       });
-      this.cache.setTransitions(appVersion.id, appVersion.version, patterns);
-      return patterns;
+      this.cache.setTransitions(appVersion.id, appVersion.version, transitions);
+      return transitions;
     }
   }
 

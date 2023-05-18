@@ -16,9 +16,12 @@ The PubSubDB model is a modern, JSON-based alternative to WSDL/SOAP, offering a 
   - [3.2. Subscription and Publishing Mechanism](#32-subscription-and-publishing-mechanism)
 - [4. Activities](#4-activities)
   - [4.1. Types of Activities](#41-types-of-activities)
-    - [4.1.1. Trigger](#411-trigger)
-    - [4.1.2. Await](#412-await)
-    - [4.1.3. Job](#413-job)
+    - [4.1.1. Activity](#411-activity)
+    - [4.1.2. Trigger](#412-trigger)
+    - [4.1.3. Await](#413-await)
+    - [4.1.4. Iterate](#414-iterate)
+    - [4.1.5. OpenAPI](#415-openapi)
+    - [4.1.6. Request](#416-request)
   - [4.2. Input and Output Schemas](#42-input-and-output-schemas)
   - [4.3. Activity Mapping](#43-activity-mapping)
 - [5. Transitions](#5-transitions)
@@ -268,8 +271,28 @@ The subscription and publishing mechanism allows developers to create loosely-co
 ### 4.1. Types of Activities
 Activities are the core building blocks of a graph, representing individual tasks or operations that need to be performed as part of the workflow. There are several types of activities, each with its own purpose and functionality.
 
-#### 4.1.1. Trigger
-A trigger activity is the starting point of a graph. It is executed when the graph is triggered by an event that it subscribes to. A trigger activity is typically used to receive and process data from the triggering event, and its output can be used as input for subsequent activities.
+#### 4.1.1. Activity
+
+An `activity` represents an abstract task or operation that is executed by the engine but does not invoke outside services. It can use the output of upstream activities as input, map job data and even be configured to support the `hook/signal` pattern. It can be used to "test the pipes" of a flow, mapping incoming information and verifying activity flow. And it can be used to resolve complex mapping values that would be too expensive to resolve more than once.
+
+Example of a job activity in YAML:
+
+```yaml
+a3:
+  title: "Return True"
+  type: "job"
+  job:
+    maps:
+      id: "{a1.output.data.id}"
+      price: "{a1.output.data.price}"
+      approvals/price: "{a2.output.data.approved}"
+      approved: true
+```
+
+These types of activities, when combined, allow for the creation of versatile and dynamic workflows within the graph model.
+
+#### 4.1.2. Trigger
+A `trigger` activity is the starting point of a graph. It is executed when the graph is triggered by an event that it subscribes to. A trigger activity is typically used to receive and process data from the triggering event, and its output can be used as input for subsequent activities.
 
 Example of a trigger activity in YAML:
 
@@ -287,9 +310,9 @@ a1:
         # ...
 ```
 
-#### 4.1.2. Await
+#### 4.1.3. Await
 
-An await activity is used to wait for an external event or a specific condition to be met before proceeding with the execution of the graph. This can be useful when the workflow depends on data or events from other components in the application.
+An `await` activity is used to wait for an external event or a specific condition to be met before proceeding with the execution of the graph. This can be useful when the workflow depends on data or events from other components in the application.
 
 Example of an await activity in YAML:
 
@@ -316,25 +339,14 @@ a2:
         # ...
 ```
 
-#### 4.1.3. Job
+#### 4.1.4. Iterate
+TODO
 
-A job activity represents a task or operation that needs to be performed within the workflow. It can use the output of previous activities as input, process the data, and generate output that can be used by subsequent activities.
+#### 4.1.5. OpenAPI
+TODO
 
-Example of a job activity in YAML:
-
-```yaml
-a3:
-  title: "Return True"
-  type: "job"
-  job:
-    maps:
-      id: "{a1.output.data.id}"
-      price: "{a1.output.data.price}"
-      approvals/price: "{a2.output.data.approved}"
-      approved: true
-```
-
-These types of activities, when combined, allow for the creation of versatile and dynamic workflows within the graph model.
+#### 4.1.6. Request
+TODO
 
 ### 4.2. Input and Output Schemas
 Input and output schemas are used in activities to define the structure and data types of the data that is being passed between activities. They ensure that the data is validated and transformed correctly, improving the reliability and maintainability of the workflow.
@@ -540,13 +552,16 @@ The use of '@pipes' in conditions enables developers to create more advanced and
 The '@pipes' functional mapper provides a range of built-in functions for common operations, such as mathematical calculations, string manipulation, and logical comparisons. The functions are organized based on their data type categories, such as array, object, number, string, etc., which should be familiar to JavaScript developers. However, it's essential to understand that the approach in PubSubDB is functional. Each transformation is a function that expects one or more input parameters from the prior row in the mapping rules.
 
  - [Array Functions](./functions/array.md)
- - [Object Functions](./functions/object.md)
- - [Number Functions](./functions/number.md)
- - [String Functions](./functions/string.md)
- - [Boolean Functions](./functions/boolean.md)
- - [Date and Time Functions](./functions/date_time.md)
+ - [Bitwise Functions](./functions/bitwise.md)
  - [Conditional Functions](./functions/conditional.md)
+ - [Date/Time Functions](./functions/date.md)
+ - [JSON Functions](./functions/json.md)
+ - [Math Functions](./functions/math.md)
+ - [Number Functions](./functions/number.md)
+ - [Object Functions](./functions/object.md)
+ - [String Functions](./functions/string.md)
  - [Symbol Functions](./functions/symbol.md)
+ - [Unary Functions](./functions/unary.md)
 
 ## 7. Stats
 Stats are used to collect and aggregate data generated during the execution of activities in the graph model. They allow for the calculation of metrics such as averages, counts, sums, and other aggregations based on the activity output data.

@@ -1,6 +1,7 @@
 import { Pipe } from "../pipe";
 import { JobContext } from "../../typedefs/job";
 import { Pipe as PipeType } from "../../typedefs/pipe";
+import { Match, TransitionRule } from "../../typedefs/transition";
 
 type RuleType = null | undefined | boolean | string | number | Date | Record<string, any>;
 
@@ -51,6 +52,26 @@ class MapperService {
   private resolve(value: any): any {
     const pipe = new Pipe([[value]], this.data);
     return pipe.process();
+  }
+
+  static evaluate(transitionRule: TransitionRule|boolean, context: JobContext): boolean {
+    if (typeof transitionRule === 'boolean') {
+      return transitionRule;
+    }
+    const orGate = transitionRule.gate === 'or';
+    let allAreTrue = true;
+    let someAreTrue = false;
+    transitionRule.match.forEach(({ expected, actual }: Match) => {
+      if (orGate && !someAreTrue || !orGate && allAreTrue) {
+        const result = Pipe.resolve(actual, context) === expected;
+        if (orGate && result) {
+          someAreTrue = true;
+        } else if(!orGate && !result) {
+          allAreTrue = false;
+        }
+      }
+    });
+    return orGate ? someAreTrue : allAreTrue;
   }
 }
 

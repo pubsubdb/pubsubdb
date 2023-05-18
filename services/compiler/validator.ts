@@ -88,7 +88,7 @@ class Validator {
           const statementParts = statement.slice(1, -1).split('.');
           const referencedActivityId = statementParts[0];
   
-          if (!(referencedActivityId == '$app' || activityIds.includes(referencedActivityId) || this.isFunction(statement))) {
+          if (!(referencedActivityId == '$app' || referencedActivityId == '$self' || activityIds.includes(referencedActivityId) || this.isFunction(statement))) {
             throw new Error(`Mapping statement references non-existent activity: ${statement}`);
           }
         }
