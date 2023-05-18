@@ -19,6 +19,7 @@ import {
   HookData} from "../../../typedefs/activity";
 import { JobContext } from '../../../typedefs/job';
 import { StatsType, Stat } from '../../../typedefs/stats';
+import { CollatorService } from '../../collator';
 
 class Trigger extends Activity {
   config: TriggerActivity;
@@ -39,16 +40,18 @@ class Trigger extends Activity {
       await this.mapJobData();
       await this.mapOutputData();
       await this.saveActivityNX();
-      
-      /////// MULTI ///////
+
+      /////// MULTI:START ///////
       const multi = this.pubsubdb.store.getMulti();
       await this.saveActivity(multi);
-      await this.saveJob(multi);
-      await this.saveStats(multi);
+      await this.saveJobData(multi);
+      await this.saveJobStats(multi);
       await multi.exec();
-      /////// MULTI ///////
+      /////// MULTI:END ///////
 
-      this.pub();
+      const activityStatus = this.context.metadata.js;
+      const isComplete = CollatorService.isJobComplete(activityStatus);
+      this.transition(isComplete);
       return this.context.metadata.jid;
     } catch (error) {
       this.logger.error('trigger.process:error', error);
@@ -82,6 +85,8 @@ class Trigger extends Activity {
     this.context = {
       metadata: {
         ...this.metadata,
+        pj: this.context.metadata.pj,
+        pa: this.context.metadata.pa,
         app: id,
         vrs: version,
         jid: jobId,
@@ -116,10 +121,9 @@ class Trigger extends Activity {
     const stats = this.config.stats;
     const jobId = stats?.id;
     if (jobId) {
-      const pipe = new Pipe([[jobId]], context);
-      return pipe.process();
+      return Pipe.resolve(jobId, context);
     } else {
-      return `${Date.now().toString()}.${parseInt((Math.random() * 1000).toString(), 10)}`;
+      return `${Date.now().toString()}.${parseInt((Math.random() * 1000).toString(), 10)}`; //todo: uuid, etc (configurable)
     }
   }
 
@@ -127,13 +131,7 @@ class Trigger extends Activity {
     const stats = this.config.stats;
     const jobKey = stats?.key;
     if (jobKey) {
-      let pipe: Pipe;
-      if (Pipe.isPipeObject(jobKey)) {
-        pipe = new Pipe(jobKey['@pipe'], context);
-      } else {
-        pipe = new Pipe([[jobKey]], context);
-      }
-      return pipe.process();
+      return Pipe.resolve(jobKey, context);
     } else {
       return '';
     }
@@ -260,7 +258,7 @@ class Trigger extends Activity {
     return this.config.stats?.granularity || '1h';
   }
 
-  async saveStats(multi?: any): Promise<void> {
+  async saveJobStats(multi?: any): Promise<void> {
     if (this.context.metadata.key) {
       await this.pubsubdb.store.setJobStats(
         this.context.metadata.key,

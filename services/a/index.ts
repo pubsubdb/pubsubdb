@@ -6,6 +6,8 @@ class AbbreviatorService {
 
   constructor() {
     this.abbreviations = {
+      parent_job_id: "pj",
+      parent_activity_id: "pa",
       activity_id: "aid",
       activity_type: "atp",
       activity_subtype: "stp",

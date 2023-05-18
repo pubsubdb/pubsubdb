@@ -10,6 +10,7 @@
 
 import { HookRule } from "../../typedefs/hook";
 import { PubSubDBApp, PubSubDBSettings } from "../../typedefs/pubsubdb";
+import { Transitions } from "../../typedefs/transition";
 
 class Cache {
   settings: PubSubDBSettings;
@@ -104,11 +105,11 @@ class Cache {
     this.subscriptions[`${appId}/${version}`] = subscriptions;
   }
 
-  getTransitions(appId: string, version: string): Record<string, unknown> {
-    return this.transitions[`${appId}/${version}`];
+  getTransitions(appId: string, version: string): Transitions {
+    return this.transitions[`${appId}/${version}`] as Transitions;
   }
 
-  setTransitions(appId: string, version: string, transitions: Record<string, unknown>): void {
+  setTransitions(appId: string, version: string, transitions: Transitions): void {
     this.transitions[`${appId}/${version}`] = transitions;
   }
 

@@ -11,6 +11,11 @@ activities:
     job:
       schema:
         $ref: '../schemas/order.approval.requested.yaml#/a1/job'
+    stats:
+      id:
+        "@pipe":
+          - ['{a1.input.data.id}', '_caller']
+          - ['{@string.concat}']
   a2:
     title: Get Price Approval
     type: await

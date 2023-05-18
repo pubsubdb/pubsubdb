@@ -1,4 +1,5 @@
 import { PubSubDBGraph } from "../../typedefs/pubsubdb";
+import { CollationKey } from "../../typedefs/collator";
 
 class CollatorService {
 
@@ -83,6 +84,22 @@ class CollatorService {
     }
     const targetLength = 15;
     return Math.pow(10, targetLength - position - 1) * multiplier;
+  }
+
+  static isJobComplete(collationKey: number): boolean {
+    return CollatorService.isThereAnError(collationKey) ||
+      !CollatorService.isThereAnIncompleteActivity(collationKey);
+  }
+
+  static isThereAnError(collationKey: number): boolean {
+    return collationKey.toString().includes(CollationKey.Errored.toString());
+  }
+
+  static isThereAnIncompleteActivity(collationKey: number): boolean {
+    const str = collationKey.toString();
+    return str.includes(CollationKey.Pending.toString()) ||
+      str.includes(CollationKey.Started.toString()) || 
+      str.includes(CollationKey.Paused.toString());
   }
 }
 

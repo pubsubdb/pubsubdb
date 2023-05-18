@@ -57,7 +57,41 @@ describe('pubsubdb', () => {
   });
 
   describe('run()', () => {
-    it('should should publish a message to Flow A', async () => {
+    it('executes an `await` activity that resolves to true', async () => {
+      const payload = { 
+        id: `wdg_${parseInt((Math.random()*10000000).toString()).toString()}`, 
+        price: 49.99, 
+        object_type: 'widgetA'
+      }
+      const jobId = await pubSubDB.pub('order.approval.requested', payload);
+      expect(jobId).not.toBeNull();
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const job = await pubSubDB.get(jobId) as { price: number, approvals: { price: boolean}};
+      expect(job?.price).toBe(payload.price);
+      //values under 49.99 are approved
+      expect(job?.approvals?.price).toBe(true);
+      const spawnedJob = await pubSubDB.get(payload.id);
+      expect(spawnedJob?.id).toBe(payload.id);
+    }, 10000);
+
+    it('executes an `await` activity that resolves to false', async () => {
+      const payload = { 
+        id: `wdg_${parseInt((Math.random()*10000000).toString()).toString()}`, 
+        price: 149.99, 
+        object_type: 'widgetA'
+      }
+      const jobId = await pubSubDB.pub('order.approval.requested', payload);
+      expect(jobId).not.toBeNull();
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const job = await pubSubDB.get(jobId) as { price: number, approvals: { price: boolean}};
+      expect(job?.price).toBe(payload.price);
+      //values over 100 are rejected
+      expect(job?.approvals?.price).toBe(false);
+      const spawnedJob = await pubSubDB.get(payload.id);
+      expect(spawnedJob?.id).toBe(payload.id);
+    }, 10000);
+
+    it('should publish a message to Flow B', async () => {
       let payload: any;
       for (let i = 0; i < 1; i++) {
         payload = { 
@@ -66,10 +100,14 @@ describe('pubsubdb', () => {
           object_type: i % 2 ? 'widget' : 'order'
         }
         await pubSubDB.pub('order.approval.price.requested', payload);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const job = await pubSubDB.get(payload.id) as { id: string, approved: boolean };
+        expect(job?.id).toBe(payload.id);
+        expect(job?.approved).toBe(true);
       }
     });
 
-    it('should should publish a message to Flow B', async () => {
+    it('should publish a message to Flow C', async () => {
       const payload = {
         id: `ord_10000002`,
         size: 'lg',
@@ -83,7 +121,7 @@ describe('pubsubdb', () => {
       expect(pubResponse).not.toBeNull();
     }, 100000);
 
-    it('should should signal a hook to resume Flow B', async () => {
+    it('should should signal a hook to resume Flow C', async () => {
       const payload = {
         id: `ord_10000002`,
         facility: 'acme',
@@ -155,7 +193,7 @@ describe('pubsubdb', () => {
         end: 'NOW',
       };
       const stats = await pubSubDB.getStats('order.scheduled', options);
-      expect(stats.segments.length).toEqual(13); //13 5m segments in 1h (range is inclusive (00 to 00))
+      expect(stats.segments?.length).toEqual(13); //13 5m segments in 1h (range is inclusive (00 to 00))
     });
   });
 

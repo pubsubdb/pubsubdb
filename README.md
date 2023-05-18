@@ -1,4 +1,6 @@
 # PubSubDB
+![alpha release](https://img.shields.io/badge/release-alpha-yellow)
+
 ## Overview
 PubSubDB is a unified *integration*, *orchestration*, and *operational data* platform. Design your key business workflows using standard graph notation, while PubSubDB handles the implementation. PubSubDB is designed to work with any backend data store, with a reference implementation using *Redis*. Refer to this guide for more information on how to get started with PubSubDB.
 
@@ -49,122 +51,74 @@ pubSubDB = await PubSubDB.init({ appId: 'myapp', store});
 ```
 
 ## Design
-PubSub DB application graphs are modeled using YAML. These can be considered the execution instructions for the app, describing its activity and data flow. For introductory purposes, let's consider the simplest flow possible: *a one-step process*. 
+PubSub DB apps are modeled using YAML. These can be considered the execution instructions for the app, describing its activity and data flow. For introductory purposes, let's consider the simplest flow possible: *a one-step process*. 
 
-A process with only one step can seem relatively unremarkable, but it serves to reveal the type of information that is tracked by the system and how to take advantage of it. Once deployed, this flow will listen to the `item.ordered` event and track key statistics about the order size.
+A process with only one step can seem relatively unremarkable. Without additional activities, it is (more-or-less) a traditional data store,  but it serves to reveal the type of information that is tracked by the system and how to take advantage of it. Consider the following relational database table design: a two-column table, indexed on the email, which serves as the primary key.
+
+```sql
+CREATE TABLE Order (
+    email VARCHAR(255) PRIMARY KEY,
+    size ENUM('sm', 'md', 'lg') NOT NULL
+);
+```
+
+The equivalent declaration in PubSubDB targets an `activity` (not a `table`) but includes similar affordances for setting up indexes and declaring data types. 
 
 ```yaml
-app:
-  id: my-app
-  version: 1
-  graphs:
-  - subscribes: item.ordered
-    publishes: item.shipped
-    activities:
-      order:
-        title: Item Ordered
-        type: trigger
-        job:
-          schema:
-            type: object
-            properties:
-              email:
-                type: string
-              size:
-                type: string
-                description: The item size
-                enum:
-                - sm
-                - md
-                - lg
-          maps:
-            email: "{$self.input.data.email}"
-            size: "{$self.input.data.size}"
-        stats:
-          granularity: 5m
-          id: "{$self.input.data.email}"
-          key: orders
-          measures:
-          - measure: count
-            target: "{$self.input.data.size}"
-          - measure: index
-            target: "{$self.input.data.size}"
+  order:
+    type: trigger
+    job:
+      schema:
+        type: object
+        properties:
+          email:
+            type: string
+          size:
+            type: string
+            enum:
+            - sm
+            - md
+            - lg
+      maps:
+        email: '{$self.input.data.email}'
+        size: '{$self.input.data.size}'
+    stats:
+      id: '{$self.input.data.email}'
 ```
 
-Once deployed, this process will listen to the `item.ordered` event and will persist information as described by the YAML. Let's start by inserting some data which is handled through simple pub/sub semantics.
+Let's start by inserting some data. With a traditional RDS solution, we might use an ORM or update using SQL.
+
+```sql
+INSERT INTO Orders (email, size) 
+  VALUES ('jdoe@email.com', 'lg');
+```
+
+PubSubDB's interface expects a `topic` for identifiying the target (i.e., `item.ordered`), but the mechanics of the interaction are essentially the same.
 
 ```ts
-const order = pubSubDB.pub('item.ordered', { "email": "jdoe@email.com", "size": "lg" });
+const order = pubSubDB.pub('item.ordered', { 'email': 'jdoe@email.com', 'size': 'lg' });
 ```
 
-Now let's ask some questions about the `item.ordered` workflow.
+Of course, the true benefit of a *process database* like PubSubDB is that it orchestrates and tracks the flow of information over time. Traditional RDS solutions are great at reading and writing snapshots of data, but they're not so great at modeling data in motion--and using that information to trigger and orchestrate a business process. The difference is more apparent as you expand your models and declare additional activities and the transitions between them.
 
-### Question 1
-*What is the order for the user, `jdoe@email.com`?*
-```ts
-const order = await pubSubDB.get('jdoe@email.com');
+```yaml
+transitions:
+  a1:
+    - to: a2
+  a2:
+    - to: a3
+      conditions:
+        match:
+          - expected: true
+            actual: '{a2.output.data.approved}'
+    - to: a4
+      conditions:
+        match:
+          - expected: false
+            actual: '{a2.output.data.approved}'
 ```
 
-*Answer*
-```ts
-{ "email": "jdoe@email.com", "size": "lg" }
-```
-
-### Question 2
-*How many large (`lg`) items were ordered in the past hour?*
-```ts
-const payload = { data: { size: 'lg' }, range: '1h', end: 'NOW' };
-const stats = pubSubDB.getStats('item.ordered', payload);
-```
-
-*Answer*
-```json
-{
-  "key": "orders",
-  "granularity": "5m",
-  "range": "1h",
-  "end": "NOW",
-  "measures": [
-    {
-      "target": "size:lg",
-      "type": "count",
-      "value": 70
-    },
-    {
-      "target": "size:md",
-      "type": "count",
-      "value": 102
-    },
-    {
-      "target": "size:lg",
-      "type": "count",
-      "value": 40
-    }
-  ],
-  "segments": [
-    {
-      "time": "2023-04-04T00:00:00Z",
-      "measures": [
-        {
-          "target": "size:lg",
-          "type": "count",
-          "value": 31
-        }
-        ...
-      ]
-    }
-    ...
-  ]
-}
-```
-
-## Deploy
-Once you're satisfied with your application model, call `deploy` to compile and deploy your flows. The compiler will save a static copy of the deployment manifest to your local file system and then transfer the execution instructions to your backend datastore, distributing the version simultaneously to all connected clients.
-
-```typescript
-const pubSubDB = PubSubDB.init({ ... });
-const status = await pubSubDB.deploy('./pubsubdb.yaml');
-```
+Understanding these key concepts is essential for working with the model, as they form the foundation of the application's logic and data flow. Refer to the following documents to better understand the approach and get details on getting started.
 
 ## First Principles
 Refer to the [Architecture First Principles](./docs/architecture.md) for an overview of why PubSubDB outperforms existing process orchestration platforms.
@@ -172,11 +126,11 @@ Refer to the [Architecture First Principles](./docs/architecture.md) for an over
 ## Developer Guide
 Refer to the [Developer Guide](./docs/developer_guide.md) for more information on the full end-to-end development process, including details about schemas and APIs.
 
-## Intro to Model Driven Development
+## Model Driven Development
 [Model Driven Development](./docs/model_driven_development.md) is a proven approach to managing process-oriented tasks. Refer this guide for an overview of key features.
 
 ## Data Mapping
-Sharing data between activities is central to PubSubDB. Refer to the [Data Mapping Overview](./docs/data_mapping.md) for more information.
+Sharing data between activities is central to PubSubDB. Refer to the [Data Mapping Overview](./docs/data_mapping.md) for more information about supported functions and syntax.
 
 ## Composition
 The simplest graphs are linear, defining a predictable sequence of non cyclical activities. But graphs can be composed to model complex business scenarios and can even be designed to support long-running workflows lasting weeks or months. Refer to the [Composable Workflow Guide](./docs/composable_workflow.md) for more information.

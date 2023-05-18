@@ -11,8 +11,9 @@ import {
 } from '../../typedefs/ioredis';
 import { SubscriptionCallback } from '../../typedefs/conductor';
 import { HookRule, HookSignal } from '../../typedefs/hook';
-import { JobContext } from '../../typedefs/job';
+import { JobContext, JobData } from '../../typedefs/job';
 import { ActivityDataType } from '../../typedefs/activity';
+import { Transitions } from '../../typedefs/transition';
 
 abstract class StoreService {
   redisClient: RedisClientType | IORedisClientType | any;
@@ -37,7 +38,7 @@ abstract class StoreService {
   abstract getJobMetadata(jobId: string, appVersion: AppVersion): Promise<object | undefined>;
   abstract getJobContext(jobId: string, appVersion: AppVersion): Promise<JobContext | undefined>;
   abstract getJobData(jobId: string, appVersion: AppVersion): Promise<object | undefined>;
-  abstract getJob(jobId: string, appVersion: AppVersion): Promise<object | undefined>;
+  abstract getJob(jobId: string, appVersion: AppVersion): Promise<JobData | undefined>;
   abstract setActivity(jobId: string, activityId: any, data: Record<string, unknown>, metadata: Record<string, unknown>, hook: null | Record<string, unknown>, config: AppVersion, multi? : any): Promise<any|string>
   abstract setActivityNX(jobId: string, activityId: any, config: AppVersion): Promise<number>
   abstract restoreContext(jobId: string, dependsOn: Record<string, string[]>, config: AppVersion): Promise<Partial<JobContext>>;
@@ -51,7 +52,7 @@ abstract class StoreService {
   abstract getSubscriptions(appVersion: AppVersion): Promise<Record<string, string>>;
   abstract getSubscription(topic: string, config: AppVersion): Promise<string | undefined>;
   abstract setTransitions(subscriptionsPatterns: Record<string, any>, config: AppVersion): Promise<any>;
-  abstract getTransitions(config: AppVersion): Promise<any>;
+  abstract getTransitions(config: AppVersion): Promise<Transitions>;
   abstract setHookRules(hookRules: Record<string, HookRule[]>, config: AppVersion): Promise<any>;
   abstract getHookRules(config: AppVersion): Promise<Record<string, HookRule[]>>;
   abstract setHookSignal(hook: HookSignal, appVersion: AppVersion, multi? : any): Promise<any>;
