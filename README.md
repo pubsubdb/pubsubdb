@@ -37,14 +37,15 @@ npm install @pubsubdb/pubsubdb
 Pass your Redis client library (`redis` and `ioredis` are supported) to serve as the backend Data Store used by PubSubDB:
 
 ```ts
-import { PubSubDB, IORedisStore, RedisStore } from '@pubsubdb/pubsubdb';
+import { PubSubDB, RedisStore } from '@pubsubdb/pubsubdb';
 
-//initialize two standard Redis client instances using `ioredis` or `redis`
-const redisClient = await getMyRedisClient(...)
-const redisSubscriberClient = await getMyReadOnlyRedisClient(...)
+//initialize 3 standard Redis clients using `ioredis` or `redis`
+const pubClient = await getRedisClient(...)
+const subClient = await getReadOnlyRedisClient(...)
+const xstreamClient = await getRedisClient(...)
 
-//wrap your redisClient instances (this example uses `ioredis`)
-const store = new IORedisStore(redisClient, redisSubscriberClient)
+//note: use `RedisStore` if using the `redis` npm package
+const store = new IORedisStore(pubClient, subClient, xstreamClient);
 
 //initialize PubSubDB
 pubSubDB = await PubSubDB.init({ appId: 'myapp', store});

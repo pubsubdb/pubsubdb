@@ -1,23 +1,33 @@
-import { AdapterService } from '../adapter';
+import { getSubscriptionTopic, getGuid } from '../../modules/utils';
+import { CollatorService } from '../collator';
 import { CompilerService } from '../compiler';
 import { LoggerService, ILogger } from '../logger';
 import { ReporterService as Reporter } from '../reporter';
-import { KeyType, PSNS } from '../store/key';
+import { SignalerService } from '../signaler';
 import { StoreService } from '../store';
+import { KeyType, PSNS } from '../store/key';
+import { WorkerService } from '../worker';
 import Activities from './activities';
 import { Activity, ActivityType } from './activities/activity';
+import { Await } from './activities/await';
+import { Exec } from './activities/exec';
+import { Trigger } from './activities/trigger';
 import { ActivityMetadata } from '../../typedefs/activity';
 import { ConductorMessage, SubscriptionCallback } from '../../typedefs/conductor';
-import { JobContext, JobData } from '../../typedefs/job';
-import { PubSubDBApps, PubSubDBConfig, PubSubDBManifest, PubSubDBSettings } from '../../typedefs/pubsubdb';
-import { JobStatsInput, GetStatsOptions, IdsResponse, StatsResponse } from '../../typedefs/stats';
-import { SignalerService } from '../signaler';
+import { JobContext, JobData, MinimumInitialJobContext } from '../../typedefs/job';
+import {
+  PubSubDBApps,
+  PubSubDBConfig,
+  PubSubDBManifest,
+  PubSubDBSettings } from '../../typedefs/pubsubdb';
+import {
+  JobStatsInput,
+  GetStatsOptions,
+  IdsResponse,
+  StatsResponse } from '../../typedefs/stats';
 import { AppVersion } from '../../typedefs/app';
-import { WorkerService } from '../worker';
-import { getSubscriptionTopic } from '../../modules/utils';
-import { Trigger } from './activities/trigger';
-import { Await } from './activities/await';
-import { CollatorService } from '../collator';
+import { RedisClient, RedisMulti } from '../../typedefs/store';
+import { StreamDataResponse } from '../../typedefs/stream';
 
 //todo: can be multiple instances; track as a Map
 let instance: PubSubDBService;
@@ -28,10 +38,9 @@ const QUORUM_DELAY = 250;
 class PubSubDBService {
   namespace: string;
   appId: string;
-  store: StoreService | null;
+  store: StoreService<RedisClient, RedisMulti> | null;
   apps: PubSubDBApps | null;
-  adapterService: AdapterService | null;
-  signalerService: SignalerService | null;
+  signaler: SignalerService | null;
   logger: ILogger;
   guid: string;
   cacheMode: 'nocache' | 'cache' = 'cache';
@@ -58,7 +67,7 @@ class PubSubDBService {
     }
   }
 
-  async verifyStore(store: StoreService): Promise<AppVersion> {
+  async verifyStore(store: StoreService<RedisClient, RedisMulti>): Promise<AppVersion> {
     if (!(store instanceof StoreService)) {
       throw new Error(`store ${store} is invalid`);
     } else {
@@ -66,6 +75,20 @@ class PubSubDBService {
       this.apps = await this.store.init(this.namespace, this.appId, this.logger);
       return { id: this.appId, version: this.apps[this.appId].version};
     }
+  }
+
+  registerAdapters({ adapters }: PubSubDBConfig) {
+    adapters?.forEach((adapter) => {
+      if (adapter.topic && adapter.callback) {
+        const key = this.store?.mintKey(KeyType.STREAMS, { appId: this.appId, topic: adapter.topic });
+        this.signaler.consumeMessages(key, 'ADAPTER', this.guid, adapter.callback);
+      }
+    });
+  }
+
+  registerEngine() {
+    const key = this.store?.mintKey(KeyType.STREAMS, { appId: this.appId });
+    this.signaler.consumeMessages(key, 'ENGINE', this.guid, this.routeAdapterResponse.bind(this));
   }
 
   /**
@@ -82,14 +105,15 @@ class PubSubDBService {
       instance.subscriptionHandler(),
       appConfig
     );
-    instance.guid = Math.floor(Math.random() * 100000000).toString();
-    instance.adapterService = new AdapterService();
-    instance.signalerService = new SignalerService(
+    instance.guid = getGuid();
+    instance.signaler = new SignalerService(
       appConfig,
       instance.store,
       instance.logger,
       instance
     );
+    instance.registerEngine();
+    instance.registerAdapters(config);
     instance.processWorkItems();
     return instance;
   }
@@ -269,6 +293,21 @@ class PubSubDBService {
   }
 
 
+  // ********************** XSTREAM/RESOLVE METHOD ***********************
+  async routeAdapterResponse(streamData: StreamDataResponse): Promise<void> {
+    const context: MinimumInitialJobContext = {
+      metadata: {
+        jid: streamData.metadata.jid,
+        aid: streamData.metadata.aid,
+      },
+      data: streamData.data,
+    };
+    const activityHandler = await this.initActivity(`.${streamData.metadata.aid}`, context.data, context as JobContext) as Exec;
+    //return void; it is a signal to the
+    await activityHandler.processAdapterResponse(streamData.status);
+  }
+
+
   // ********************** ASYNC/RESOLVE METHODS ***********************
   hasParentJob(context: JobContext): boolean {
     return Boolean(context.metadata.pj && context.metadata.pa);
@@ -307,7 +346,7 @@ class PubSubDBService {
 
   // ********************** SIGNAL/HOOK METHODS ***********************
   async hook(topic: string, data: JobData) {
-    const hookRule = await this.signalerService.getHookRule(topic);
+    const hookRule = await this.signaler.getHookRule(topic);
     if (hookRule) {
       const activityHandler = await this.initActivity(`.${hookRule.to}`, data);
       return await activityHandler.processHookSignal();
@@ -317,7 +356,7 @@ class PubSubDBService {
   }
   async hookAll(hookTopic: string, data: JobData, query: JobStatsInput, queryFacets: string[] = []): Promise<string[]> {
     const { id, version } = await this.getAppConfig();
-    const hookRule = await this.signalerService.getHookRule(hookTopic);
+    const hookRule = await this.signaler.getHookRule(hookTopic);
     if (hookRule) {
       const subscriptionTopic = await getSubscriptionTopic(hookRule.to, this.store, { id, version })
       const resolvedQuery = await this.resolveQuery(subscriptionTopic, query);

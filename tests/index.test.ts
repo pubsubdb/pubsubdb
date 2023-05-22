@@ -2,25 +2,31 @@ import { PubSubDB, PubSubDBConfig, IORedisStore } from '../index';
 import { RedisConnection, RedisClientType } from './$setup/cache/ioredis';
 import { PSNS } from '../services/store/key';
 import { JobStatsInput } from '../typedefs/stats';
+import { StreamData, StreamDataResponse, StreamStatus } from '../typedefs/stream';
 
 describe('pubsubdb', () => {
   const appConfig = { id: 'test-app', version: '1' };
   const CONNECTION_KEY = 'manual-test-connection';
   const SUBSCRIPTION_KEY = 'manual-test-subscription';
+  const STREAM_CONNECTION_KEY = 'manual-test-stream-connection';
   let pubSubDB: PubSubDB;
   let redisConnection: RedisConnection;
   let subscriberConnection: RedisConnection;
+  let streamerConnection: RedisConnection;
   let redisClient: RedisClientType;
   let redisSubscriber: RedisClientType;
+  let redisStreamer: RedisClientType;
   let redisStore: IORedisStore;
 
   beforeAll(async () => {
     redisConnection = await RedisConnection.getConnection(CONNECTION_KEY);
     subscriberConnection = await RedisConnection.getConnection(SUBSCRIPTION_KEY);
+    streamerConnection = await RedisConnection.getConnection(STREAM_CONNECTION_KEY);
     redisClient = await redisConnection.getClient();
     redisSubscriber = await subscriberConnection.getClient();
+    redisStreamer = await streamerConnection.getClient();
     redisClient.flushdb();
-    redisStore = new IORedisStore(redisClient, redisSubscriber);
+    redisStore = new IORedisStore(redisClient, redisSubscriber, redisStreamer);
   });
 
   afterAll(async () => {
@@ -32,7 +38,22 @@ describe('pubsubdb', () => {
       const config: PubSubDBConfig = {
         appId: appConfig.id,
         namespace: PSNS,
-        store: redisStore
+        store: redisStore,
+        //adapters are optional and will perform units of work as directed by the stream
+        adapters: [
+          {
+            //any 'exec' activity with this topic as 'subtype' will be streamed the data
+            topic: 'order.bundle',
+            callback: async (streamData: StreamData) => {
+              const streamDataResponse: StreamDataResponse = {
+                status: StreamStatus.SUCCESS,
+                metadata: { ...streamData.metadata },
+                data: { some: 'string', is: true, number: 1 },
+              }
+              return streamDataResponse;
+            }
+          }
+        ]
       };
       pubSubDB = await PubSubDB.init(config);
     });
@@ -178,6 +199,25 @@ describe('pubsubdb', () => {
       } catch (err) {
         expect(true).toBe(true);
       }
+    });
+  });
+
+  describe('Execute unit of work', () => {
+    it('should invoke a flow with an exec activity', async () => {
+      const payload = {
+        id: `ord_unitofwork123`,
+        size: 'lg',
+        primacy: 'primary',
+        color: 'red',
+        send_date: new Date().toISOString(),
+        must_release_series: '202304120000',
+        actual_release_series: '202304110000',
+        facility: 'acme',
+      };
+      const pubResponse = await pubSubDB.pub('order.finalize', payload);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      expect(pubResponse).not.toBeNull();
+      const jobResponse = await pubSubDB.get(payload.id);
     });
   });
 

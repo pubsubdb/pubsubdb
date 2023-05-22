@@ -1,17 +1,18 @@
-import { StoreService } from '../store';
-import { AppVersion } from '../../typedefs/app';
 import { ILogger } from '../logger';
 import { PubSubDBService } from '../pubsubdb';
+import { StoreService } from '../store';
+import { AppVersion } from '../../typedefs/app';
+import { RedisClient, RedisMulti } from '../../typedefs/store';
 
 class WorkerService {
   appVersion: AppVersion;
   pubsSubDB: PubSubDBService;
-  store: StoreService;
+  store: StoreService<RedisClient, RedisMulti>;
   logger: ILogger;
 
   constructor(appVersion: AppVersion,
     pubSubDB: PubSubDBService,
-    store: StoreService,
+    store: StoreService<RedisClient, RedisMulti>,
     logger: ILogger) {
       this.appVersion = appVersion;
       this.pubsSubDB = pubSubDB;

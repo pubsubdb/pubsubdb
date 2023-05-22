@@ -1,4 +1,4 @@
-type FlatObject = { [key: string]: string | number | boolean | null | any[] };
+import { FlatObject } from '../../typedefs/serializer';
 
 /**
  * SerializerService: A service to serialize and deserialize objects. It is used to store
@@ -20,8 +20,7 @@ class SerializerService {
         } else if (value === null) {
           result[newKey] = '{@null}';
         } else if (value === undefined) {
-          //never save undefined (assume it truly is undefined)
-          //result[newKey] = value.toString();
+          //never save 
         } else if (typeof value === 'string') {
           if (value === '{@null}') {
             result[newKey] = '\\{@null\\}';
@@ -81,24 +80,28 @@ class SerializerService {
   }
 
   static convertTypes(obj: string|number): any {
-    if (typeof obj === 'string' && obj === '\\{@null\\}') {
-      return '{@null}';
-    } else if (typeof obj === 'string' && obj === '{@null}') {
-      return null;
-    } else if (typeof obj === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/.test(obj)) {
-      return new Date(obj);
-    } else if (!isNaN(obj as number)) {
-      //todo: use schema to cast type
-      return Number(obj);
-    } else if (obj === 'true' || obj === 'false') {
-      //todo: use schema to cast type
-      return obj === 'true';
-    } else { 
+    if (typeof obj === 'string') {
+      if (obj === '\\{@null\\}') {
+        return '{@null}';
+      } else if (obj === '{@null}') {
+        return null;
+      } else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/.test(obj)) {
+        return new Date(obj);
+      } else if (obj === 'true' || obj === 'false') {
+        return obj === 'true';
+      } else if (!isNaN(Number(obj)) && Number(obj).toString() === obj) {
+        // Only convert to Number if conversion is not lossy
+        return Number(obj);
+      } else {
+        // If none of the above conditions are met, return the original string
+        return obj;
+      }
+    } else {
       return obj;
     }
   }
 
-  static restoreHierarchy(obj: FlatObject): any|any[] {
+  static restoreHierarchy(obj: FlatObject): any {
     const result: any = {};
     for (const key in obj) {
       const keys = key.split('/');

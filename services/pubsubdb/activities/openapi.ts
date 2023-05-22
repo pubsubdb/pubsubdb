@@ -1,6 +1,6 @@
-import { PubSubDBService } from "..";
-import { ActivityData, ActivityMetadata, HookData, OpenAPIActivity } from "../../../typedefs/activity";
-import { Activity, ActivityType } from "./activity";
+import { PubSubDBService } from '..';
+import { ActivityData, ActivityMetadata, HookData, OpenAPIActivity } from '../../../typedefs/activity';
+import { Activity, ActivityType } from './activity';
 
 /**
  * the openapi activity type orchestrates external endpoints as documented by openapi.
@@ -19,19 +19,19 @@ class OpenApi extends Activity {
   }
   
   async restoreJobContext(): Promise<void> {
-    console.log("OpenApi restoreJobContext - Do nothing; No context");
+    this.pubsubdb.logger.info('OpenApi restoreJobContext - Do nothing; No context');
   }
 
   async mapInputData(): Promise<void> {
-    console.log("OpenApi mapInputData - Do nothing; No input data");
+    this.pubsubdb.logger.info('OpenApi mapInputData - Do nothing; No input data');
   }
 
   async subscribeToResponse(): Promise<void> {
-    console.log("OpenApi subscribeToResponse - Do nothing; No response");
+    this.pubsubdb.logger.info('OpenApi subscribeToResponse - Do nothing; No response');
   }
 
   async execActivity(): Promise<void> {
-    console.log("OpenApi execActivity - Do nothing; No execution");
+    this.pubsubdb.logger.info('OpenApi execActivity - Do nothing; No execution');
   }
 }
 

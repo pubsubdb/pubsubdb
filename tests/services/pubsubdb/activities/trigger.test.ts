@@ -7,13 +7,16 @@ describe("Trigger class", () => {
   let pubSubDB: PubSubDB;
   let redisConnection: RedisConnection;
   let subscriberConnection: RedisConnection;
+  let streamerConnection: RedisConnection;
 
   beforeAll(async () => {
     redisConnection = await RedisConnection.getConnection('test-connection');
     subscriberConnection = await RedisConnection.getConnection('test-subscriber');
+    streamerConnection = await RedisConnection.getConnection('test-streamer');
     const redisClient = await redisConnection.getClient();
     const redisSubscriber = await subscriberConnection.getClient();
-    const redisStore = new IORedisStore(redisClient, redisSubscriber);
+    const redisStreamer = await streamerConnection.getClient();
+    const redisStore = new IORedisStore(redisClient, redisSubscriber, redisStreamer);
     pubSubDB = await PubSubDB.init({ store: redisStore, appId: 'test-app' });
   });
 

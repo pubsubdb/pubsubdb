@@ -3,6 +3,7 @@ import { LoggerService } from '../../../../services/logger';
 import { KeyType, PSNS } from '../../../../services/store/key';
 import { SerializerService } from '../../../../services/store/serializer';
 import { RedisStoreService } from '../../../../services/store/stores/redis';
+import { ActivityType } from '../../../../typedefs/activity';
 import { SubscriptionCallback } from '../../../../typedefs/conductor';
 import { HookSignal } from '../../../../typedefs/hook';
 import { StatsType } from '../../../../typedefs/stats';
@@ -12,13 +13,15 @@ describe('RedisStoreService', () => {
   const cacheConfig = { appId: 'test-app', appVersion: '1' };
   let redisConnection: RedisConnection;
   let subscriberConnection: RedisConnection;
+  let streamerConnection: RedisConnection;
   let redisClient: RedisClientType;
   let redisSubscriber: RedisClientType;
+  let redisStreamer: RedisClientType;
   let redisStoreService: RedisStoreService;
 
   beforeEach(async () => {
     await redisClient.flushDb();
-    redisStoreService = new RedisStoreService(redisClient, redisSubscriber);
+    redisStoreService = new RedisStoreService(redisClient, redisSubscriber, redisStreamer);
     const appConfig = { id: 'APP_ID', version: 'APP_VERSION' };
     await redisStoreService.init(PSNS, appConfig.id, new LoggerService());
   });
@@ -26,8 +29,10 @@ describe('RedisStoreService', () => {
   beforeAll(async () => {
     redisConnection = await RedisConnection.getConnection('test-connection-1');
     subscriberConnection = await RedisConnection.getConnection('test-subscriber-1');
+    streamerConnection = await RedisConnection.getConnection('test-streamer-1');
     redisClient = await redisConnection.getClient();
     redisSubscriber = await subscriberConnection.getClient();
+    redisStreamer = await streamerConnection.getClient();
   });
 
   afterAll(async () => {
@@ -222,12 +227,12 @@ describe('RedisStoreService', () => {
   describe('getSchema', () => {
     it('should retrieve the schema for the given topic from the store', async () => {
       const topic = 'topic1';
-      const schemas = {
+      const schemas: Record<string, ActivityType> = {
         topic1: {
-          someKey: 'someValue',
+          type: 'activity',
         },
         topic2: {
-          someKey: 'someValue',
+          type: 'trigger',
         },
       };
       await redisStoreService.setSchemas(schemas, appConfig);
@@ -238,12 +243,12 @@ describe('RedisStoreService', () => {
 
   describe('getSchemas', () => {
     it('should retrieve all schemas from the store', async () => {
-      const schemas = {
+      const schemas: Record<string, ActivityType> = {
         topic1: {
-          someKey: 'someValue',
+          type: 'activity',
         },
         topic2: {
-          someKey: 'someValue',
+          type: 'trigger',
         },
       };
       await redisStoreService.setSchemas(schemas, appConfig);
@@ -254,12 +259,12 @@ describe('RedisStoreService', () => {
 
   describe('setSchemas', () => {
     it('should store all schemas in the store', async () => {
-      const schemas = {
+      const schemas: Record<string, ActivityType> = {
         topic1: {
-          someKey: 'someValue',
+          type: 'activity',
         },
         topic2: {
-          someKey: 'someValue',
+          type: 'trigger',
         },
       };
       const result = await redisStoreService.setSchemas(schemas, appConfig);
@@ -465,5 +470,137 @@ describe('RedisStoreService', () => {
       // @ts-ignore
       expect(restoredData[activity2Id].output.data.nested.field3).toEqual(initialData[activity2Id].d.nested.field3);
     });
-  });  
+  });
+
+  describe('xgroup', () => {
+    it('should create a consumer group', async () => {
+      const key = 'testKey';
+      const groupName = 'testGroup';
+      const groupId = '0';
+      await redisStoreService.xgroup('CREATE', key, groupName, groupId, 'MKSTREAM');
+      const groupInfo = await redisClient.sendCommand(['XINFO', 'GROUPS', key]);
+      expect(Array.isArray(groupInfo)).toBe(true);
+      const createdGroup = (groupInfo as [string, string][]).find(([, name]) => name === groupName);
+      expect(createdGroup).toBeDefined();
+    });
+  });
+
+  describe('xadd', () => {
+    it('should add data to stream', async () => {
+      const key = 'testKey';
+      const msgId = '*';
+      const field = 'testField';
+      const value = 'testValue';
+      await redisStoreService.xadd(key, msgId, field, value);
+      const messages = await redisClient.sendCommand(['XRANGE', key, '-', '+']) as [string, string[]][];
+      const addedMessage = messages.find(([messageId, fields]) => fields.includes(field) && fields.includes(value));
+      expect(addedMessage).toBeDefined();
+    });
+  });
+  
+  describe('xreadgroup', () => {
+    it('should read data from group in a stream', async () => {
+      const key = 'testKey';
+      const groupName = 'testGroup';
+      const consumerName = 'testConsumer';
+      const groupId = '0';
+      const msgId = '*';
+      const field = 'testField';
+      const value = 'testValue';
+      await redisStoreService.xgroup('CREATE', key, groupName, groupId, 'MKSTREAM');
+      const messageId = await redisStoreService.xadd(key, msgId, field, value);
+      const messages = await redisStoreService.xreadgroup(
+        'GROUP',
+        groupName,
+        consumerName,
+        'BLOCK',
+        1000,
+        'STREAMS',
+        key,
+        '>'
+      );
+      const readMessage = (messages as string[][][])[0][1].find(([readMessageId, fields]) => readMessageId === messageId);
+      expect(readMessage).toBeDefined();
+    });
+  });
+  
+  describe('xack', () => {
+    it('should acknowledge message in a group', async () => {
+      const key = 'testKey';
+      const groupName = 'testGroup';
+      const groupId = '0';
+      const msgId = '*';
+      const field = 'testField';
+      const value = 'testValue';
+      await redisStoreService.xgroup('CREATE', key, groupName, groupId, 'MKSTREAM');
+      const messageId = await redisStoreService.xadd(key, msgId, field, value);
+      await redisStoreService.xreadgroup('GROUP', groupName, 'testConsumer', 'BLOCK', 1000, 'STREAMS', key, '>');
+      const ackCount = await redisStoreService.xack(key, groupName, messageId);
+      expect(ackCount).toBe(1);
+    });
+  });
+
+  describe('xpending', () => {
+    it('should retrieve pending messages for a group', async () => {
+      const key = 'testKey';
+      const consumerName = 'testConsumer';
+      const groupName = 'testGroup';
+      const groupId = '0';
+      const msgId = '*';
+      const field = 'testField';
+      const value = 'testValue';
+      await redisStoreService.xgroup('CREATE', key, groupName, groupId, 'MKSTREAM');
+      const messageId = await redisStoreService.xadd(key, msgId, field, value);
+      await redisStoreService.xreadgroup('GROUP', groupName, consumerName, 'BLOCK', 1000, 'STREAMS', key, '>');
+      const pendingMessages = (await redisStoreService.xpending(key, groupName, '-', '+', 1, consumerName)) as unknown as [string][];
+      const isPending = pendingMessages.some(([id, , ,]) => id === messageId);
+      expect(isPending).toBe(true);
+    });
+  });
+
+  describe('xclaim', () => {
+    it('should claim a pending message in a group', async () => {
+      const key = 'testKey';
+      const initialConsumer = 'testConsumer1';
+      const claimantConsumer = 'testConsumer2';
+      const groupName = 'testGroup';
+      const groupId = '0';
+      const msgId = '*';
+      const field = 'testField';
+      const value = 'testValue';
+      // First, create a group and add a message to the stream
+      await redisStoreService.xgroup('CREATE', key, groupName, groupId, 'MKSTREAM');
+      const messageId = await redisStoreService.xadd(key, msgId, field, value);
+      // Then, read the message from the group
+      await redisStoreService.xreadgroup('GROUP', groupName, initialConsumer, 'BLOCK', 1000, 'STREAMS', key, '>');
+      // Retrieve pending messages for the initial consumer
+      let pendingMessages = await redisStoreService.xpending(key, groupName, '-', '+', 1, initialConsumer) as [string, string, number, any][];
+      let claimedMessage = pendingMessages.find(([id, consumer, ,]) => id === messageId && consumer === initialConsumer);
+      expect(claimedMessage).toBeDefined();
+      // Claim the message by another consumer using sendCommand
+      await redisStoreService.xclaim(key, groupName, claimantConsumer, 0, messageId);
+      // Retrieve pending messages for the claimant consumer
+      pendingMessages = await redisStoreService.xpending(key, groupName, '-', '+', 1, claimantConsumer) as [string, string, number, any][];
+      claimedMessage = pendingMessages.find(([id, consumer, ,]) => id === messageId && consumer === claimantConsumer);
+      expect(claimedMessage).toBeDefined();
+    });
+  });
+
+  describe('xdel', () => {
+    it('should delete a message from a stream', async () => {
+      const key = 'testKey';
+      const groupName = 'testGroup';
+      const groupId = '0';
+      const msgId = '*';
+      const field = 'testField';
+      const value = 'testValue';
+      await redisStoreService.xgroup('CREATE', key, groupName, groupId, 'MKSTREAM');
+      const messageId = await redisStoreService.xadd(key, msgId, field, value);
+      const delCount = await redisStoreService.xdel(key, messageId);
+      expect(delCount).toBe(1);
+      const messages = await redisStoreService.xreadgroup('GROUP', groupName, 'testConsumer', 'BLOCK', '1000', 'STREAMS', key, messageId);
+      const deletedMessage = (messages as string[][][])[0][1].find(([readMessageId, fields]) => readMessageId === messageId);
+      expect(deletedMessage).toBeUndefined();
+    });
+  });
 });

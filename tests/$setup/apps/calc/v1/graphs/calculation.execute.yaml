@@ -1,0 +1,31 @@
+subscribes: calculation.execute
+publishes: calculation.executed
+
+activities:
+
+  receiver:
+    title: Receive Values
+    type: trigger
+    output:
+      schema:
+        $ref: '../schemas/calculate.yaml#/output'
+    job:
+      schema:
+        $ref: '../schemas/calculate.yaml#/job'
+
+  executor:
+    title: Execute Calculation
+    type: exec
+    subtype: calculation.execute
+    input:
+      schema:
+        $ref: '../schemas/calculate.yaml#/output'
+      maps:
+        $ref: '../maps/calculation.execute.yaml#/executor/input'
+    job:
+      maps:
+        $ref: '../maps/calculation.execute.yaml#/executor/job'
+
+transitions:
+  receiver:
+    - to: executor

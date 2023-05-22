@@ -86,16 +86,23 @@ class NumberHandler {
     if (operands.length === 0) {
       throw new Error('At least one operand is required.');
     }
-  
-    // @ts-ignore
-    return operands.reduce((a: number, b: number | number[], i) => {
-      if (Array.isArray(b)) {
-        return i === 0 ? this.subtract(...b) : a - this.subtract(...b);
+    let flatOperands: number[] = [];
+    operands.forEach((op: number | number[]) => {
+      if (Array.isArray(op)) {
+        flatOperands = [...flatOperands, ...op];
       } else {
-        return i === 0 ? b : a - b;
+        flatOperands.push(op);
       }
     });
+    if (flatOperands.length === 0) {
+      throw new Error('At least one operand is required after flattening.');
+    }
+    const result = flatOperands.reduce((a: number, b: number, i: number) => {
+      return i === 0 ? a : a - b;
+    });
+    return result;
   }
+  
   
   multiply(...operands: (number | number[])[]): number {
     if (operands.length === 0) {
@@ -116,17 +123,28 @@ class NumberHandler {
     if (operands.length === 0) {
       throw new Error('At least one operand is required.');
     }
-  
-    // @ts-ignore
-    return operands.reduce((a: number, b: number | number[], i) => {
-      if (Array.isArray(b)) {
-        return i === 0 ? this.divide(...b) : a / this.divide(...b);
+    let flatOperands: number[] = [];
+    operands.forEach((op: number | number[]) => {
+      if (Array.isArray(op)) {
+        flatOperands = [...flatOperands, ...op];
       } else {
-        return i === 0 ? b : a / b;
+        flatOperands.push(op);
       }
     });
-  }
-  
+    if (flatOperands.length === 0) {
+      throw new Error('At least one operand is required after flattening.');
+    }
+    const result = flatOperands.reduce((a: number, b: number, i: number) => {
+      if (b === 0) {
+        return NaN;
+      }
+      return i === 0 ? a : a / b;
+    });
+    if (isNaN(result)) {
+      return NaN;
+    }
+    return result;
+  }  
 }
 
 export { NumberHandler };

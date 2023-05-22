@@ -1,19 +1,21 @@
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { PubSubDBManifest, StoreService } from '../../typedefs/pubsubdb';
-import { Validator } from './validator';
-import { Deployer } from './deployer';
+
 import { ILogger } from '../logger';
+import { Deployer } from './deployer';
+import { Validator } from './validator';
+import { PubSubDBManifest, StoreService } from '../../typedefs/pubsubdb';
+import { RedisClient, RedisMulti } from '../../typedefs/store';
 
 /**
  * The compiler service converts a graph into a executable program.
  */
 class CompilerService {
-  store: StoreService | null;
+  store: StoreService<RedisClient, RedisMulti> | null;
   logger: ILogger;
 
-  constructor(store: StoreService, logger: ILogger) {
+  constructor(store: StoreService<RedisClient, RedisMulti>, logger: ILogger) {
     this.store = store;
     this.logger = logger;
   }

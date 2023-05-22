@@ -35,6 +35,7 @@ enum KeyType {
   SIGNALS,
   CONDUCTOR,
   WORK_ITEMS,
+  STREAMS,
 }
 
 //when minting a key, the following parameters are used to create a unique key per entity
@@ -46,6 +47,7 @@ type KeyStoreParams = {
   jobKey?: string;      //a customer-defined label for a job that serves to categorize events 
   dateTime?: string;    //UTC date time: YYYY-MM-DDTHH:MM (20203-04-12T00:00); serves as a time-series bucket for the job_key
   facet?: string;       //data path starting at root with values separated by colons (e.g. "object/type:bar")
+  topic?: string;       //topic name (e.g., "foo" or "" for top-level)
 };
 
 class KeyService {
@@ -93,6 +95,8 @@ class KeyService {
       case KeyType.SIGNALS:
         //`signals` provide the registry of resolved values that link back to paused jobs
         return `${namespace}:${params.appId}:signals`;
+      case KeyType.STREAMS:
+        return `${namespace}:${params.appId || ''}:x:${params.topic || ''}`;
       default:
         throw new Error("Invalid key type.");
     }

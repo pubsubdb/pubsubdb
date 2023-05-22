@@ -1,6 +1,6 @@
-import { PubSubDBService } from "..";
-import { ActivityData, ActivityMetadata, HookData, RequestActivity } from "../../../typedefs/activity";
-import { Activity, ActivityType } from "./activity";
+import { PubSubDBService } from '..';
+import { ActivityData, ActivityMetadata, HookData, RequestActivity } from '../../../typedefs/activity';
+import { Activity, ActivityType } from './activity';
 
 class Request extends Activity {
   config: RequestActivity;
@@ -15,19 +15,19 @@ class Request extends Activity {
   }
 
   async restoreJobContext(): Promise<void> {
-    console.log("Request restoreJobContext - Do nothing; No context");
+    this.pubsubdb.logger.info('Request restoreJobContext - Do nothing; No context');
   }
 
   async mapInputData(): Promise<void> {
-    console.log("Request mapInputData - Do nothing; No input data");
+    this.pubsubdb.logger.info('Request mapInputData - Do nothing; No input data');
   }
 
   async subscribeToResponse(): Promise<void> {
-    console.log("Request subscribeToResponse - Do nothing; No response");
+    this.pubsubdb.logger.info('Request subscribeToResponse - Do nothing; No response');
   }
 
   async execActivity(): Promise<void> {
-    console.log("Request execActivity - Do nothing; No execution");
+    this.pubsubdb.logger.info('Request execActivity - Do nothing; No execution');
   }
 }
 

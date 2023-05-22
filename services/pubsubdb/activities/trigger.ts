@@ -20,6 +20,7 @@ import {
 import { JobContext } from '../../../typedefs/job';
 import { StatsType, Stat } from '../../../typedefs/stats';
 import { CollatorService } from '../../collator';
+import { RedisMulti } from '../../../typedefs/store';
 
 class Trigger extends Activity {
   config: TriggerActivity;
@@ -68,9 +69,16 @@ class Trigger extends Activity {
   }
 
   createInputContext(): Partial<JobContext> {
-    return { 
-      [this.metadata.aid]: { input: { data: this.data } }
+    const input = { 
+      [this.metadata.aid]: {
+        input: { data: this.data }
+      },
+      '$self': {
+        input: { data: this.data },
+        output: { data: this.data }
+      },
     } as Partial<JobContext>;
+    return input
   }
 
   async createContext(): Promise<void> {
@@ -129,7 +137,7 @@ class Trigger extends Activity {
 
   resolveJobKey(context: Partial<JobContext>): string {
     const stats = this.config.stats;
-    const jobKey = stats?.key;
+    const jobKey = stats?.measures?.length && stats?.key;
     if (jobKey) {
       return Pipe.resolve(jobKey, context);
     } else {
@@ -138,6 +146,8 @@ class Trigger extends Activity {
   }
 
   async mapOutputData(): Promise<void> {
+    //this.config.dependents = [ "d/operation", "d/values" ];
+    //this.config.depends = { "calculate": ["d/operation", "d/values"], "operate": ["d/result"]}
     const aid = this.metadata.aid;
     const filteredData: FlattenedDataObject = {};
     const toFlatten = { [aid]: { output: { data: this.data } } };
@@ -158,7 +168,7 @@ class Trigger extends Activity {
     return true;
   }
 
-  async saveActivityNX(multi?: any): Promise<void> {
+  async saveActivityNX(): Promise<void> {
     //NX ensures no job id dupes
     const jobId = this.context.metadata.jid;
     const activityId = this.metadata.aid;
@@ -258,7 +268,7 @@ class Trigger extends Activity {
     return this.config.stats?.granularity || '1h';
   }
 
-  async saveJobStats(multi?: any): Promise<void> {
+  async saveJobStats(multi?: RedisMulti): Promise<void> {
     if (this.context.metadata.key) {
       await this.pubsubdb.store.setJobStats(
         this.context.metadata.key,

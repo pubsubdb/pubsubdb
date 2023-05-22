@@ -86,16 +86,16 @@ class CollatorService {
     return Math.pow(10, targetLength - position - 1) * multiplier;
   }
 
-  static isJobComplete(collationKey: number): boolean {
+  static isJobComplete(collationKey: number|string): boolean {
     return CollatorService.isThereAnError(collationKey) ||
       !CollatorService.isThereAnIncompleteActivity(collationKey);
   }
 
-  static isThereAnError(collationKey: number): boolean {
+  static isThereAnError(collationKey: number|string): boolean {
     return collationKey.toString().includes(CollationKey.Errored.toString());
   }
 
-  static isThereAnIncompleteActivity(collationKey: number): boolean {
+  static isThereAnIncompleteActivity(collationKey: number|string): boolean {
     const str = collationKey.toString();
     return str.includes(CollationKey.Pending.toString()) ||
       str.includes(CollationKey.Started.toString()) || 

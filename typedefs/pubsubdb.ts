@@ -3,15 +3,20 @@ import { PubSubDBService } from "../services/pubsubdb";
 import { RedisStoreService } from "../services/store/stores/redis";
 import { StoreService } from "../services/store";
 import { Hooks } from "./hook";
+import { RedisClient, RedisMulti } from "./store";
+import { StreamData, StreamDataResponse } from "./stream";
 
 type PubSubDB = typeof PubSubDBService;
 
 type PubSubDBConfig = {
   appId: string;       // customer app id
   namespace?: string;  // default: `psdb`
-  store: StoreService; //interface definition for common store methods
-  logger?: ILogger;
-  cluster?: boolean;   //default: `false`
+  store: StoreService<RedisClient, RedisMulti>; //interface definition for common store methods
+  logger?: ILogger;    //customer, provided
+  adapters?: {         //adapters register for topics they service (much like activities in the engine subscribe to topics)
+    topic: string;
+    callback: (payload: StreamData) => Promise<StreamDataResponse|void>;
+  }[];
 }
 
 type PubSubDBGraph = {

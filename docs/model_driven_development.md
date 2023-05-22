@@ -19,8 +19,8 @@ The PubSubDB model is a modern, JSON-based alternative to WSDL/SOAP, offering a 
     - [4.1.1. Activity](#411-activity)
     - [4.1.2. Trigger](#412-trigger)
     - [4.1.3. Await](#413-await)
-    - [4.1.4. Iterate](#414-iterate)
-    - [4.1.5. OpenAPI](#415-openapi)
+    - [4.1.4. Exec](#414-exec)
+    - [4.1.5. Iterate](#415-iterate)
     - [4.1.6. Request](#416-request)
   - [4.2. Input and Output Schemas](#42-input-and-output-schemas)
   - [4.3. Activity Mapping](#43-activity-mapping)
@@ -339,10 +339,36 @@ a2:
         # ...
 ```
 
-#### 4.1.4. Iterate
-TODO
+#### 4.1.4. Exec
 
-#### 4.1.5. OpenAPI
+An `exec` activity is used to execute a method in the system. The typicaly workflow would be to instantiate an instance of PubSubDB and provide/register callback methods to handle the desired topics. As the engine orchestrates worflows, it will invoke the callback handler, providing a payload with the request. Registered callbacks are expected to return a data payload in the exact shape as what was returned 
+
+Example of an await activity in YAML:
+
+```yaml
+a2:
+  title: "Get Price Approval"
+  type: "await"
+  subtype: "order.approval.price.requested"
+  input:
+    schema:
+      type: "object"
+      properties:
+        id:
+          type: "string"
+          description: "The unique identifier for the object."
+        # ...
+  output:
+    schema:
+      type: "object"
+      properties:
+        id:
+          type: "string"
+          description: "The unique identifier for the object."
+        # ...
+```
+
+#### 4.1.5. Iterate
 TODO
 
 #### 4.1.6. Request
