@@ -1,32 +1,32 @@
-import { ChainableCommander } from 'ioredis';
-
 import { Cache } from '../cache';
 import { StoreService } from '../index';
 import { KeyService, KeyStoreParams, KeyType, PSNS } from '../key';
 import { SerializerService } from '../serializer';
 import { ILogger } from '../../logger';
-import { ActivityDataType } from '../../../typedefs/activity';
+import { ActivityDataType, ActivityType } from '../../../typedefs/activity';
 import { AppVersion } from '../../../typedefs/app';
 import { SubscriptionCallback } from '../../../typedefs/conductor';
 import { HookRule, HookSignal } from '../../../typedefs/hook';
-import { RedisClientType } from '../../../typedefs/ioredis';
+import { RedisClientType, RedisMultiType } from '../../../typedefs/ioredis';
 import { JobContext, JobData } from '../../../typedefs/job';
 import { PubSubDBApp, PubSubDBSettings } from '../../../typedefs/pubsubdb';
 import { IdsData, JobStats, JobStatsRange, StatsType } from '../../../typedefs/stats';
 import { Transitions } from '../../../typedefs/transition';
 
-class IORedisStoreService extends StoreService {
+class IORedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
   redisClient: RedisClientType;
   redisSubscriber: RedisClientType;
+  redisStreamer: RedisClientType;
   subscriptionHandler: SubscriptionCallback;
   cache: Cache;
   namespace: string;
   logger: ILogger;
 
-  constructor(redisClient: RedisClientType, redisSubscriber?: RedisClientType) {
-    super();
+  constructor(redisClient: RedisClientType, redisSubscriber?: RedisClientType, redisStreamer?: RedisClientType) {
+    super(redisClient, redisSubscriber, redisStreamer);
     this.redisClient = redisClient;
     this.redisSubscriber = redisSubscriber;
+    this.redisStreamer = redisStreamer;
   }
 
   async init(namespace = PSNS, appId: string, logger: ILogger): Promise<{[appId: string]: PubSubDBApp}> {
@@ -38,7 +38,7 @@ class IORedisStoreService extends StoreService {
     return this.cache.getApps();
   }
 
-  getMulti(): ChainableCommander {
+  getMulti(): RedisMultiType {
     return this.redisClient.multi();
   }
 
@@ -320,7 +320,7 @@ class IORedisStoreService extends StoreService {
     return restoredData;
   }
   
-  async setActivity(jobId: string, activityId: string, data: Record<string, unknown>, metadata: Record<string, unknown>, hook: Record<string, unknown> | null, appVersion: AppVersion, multi? : RedisClientType): Promise<RedisClientType|string>  {
+  async setActivity(jobId: string, activityId: string, data: Record<string, unknown>, metadata: Record<string, unknown>, hook: Record<string, unknown> | null, appVersion: AppVersion, multi? : RedisMultiType): Promise<RedisMultiType|string>  {
     const hashKey = this.mintKey(KeyType.JOB_ACTIVITY_DATA, { appId: appVersion.id, jobId, activityId });
     const hashData = SerializerService.flattenHierarchy({ m: metadata, d: data, h: hook && Object.keys(hook).length ? hook : undefined });
     await (multi || this.redisClient).hmset(hashKey, hashData);
@@ -370,7 +370,7 @@ class IORedisStoreService extends StoreService {
     return context?.data ? context.data : context?.metadata ? null : undefined;
   }
 
-  async getSchema(activityId: string, appVersion: AppVersion): Promise<any> {
+  async getSchema(activityId: string, appVersion: AppVersion): Promise<ActivityType> {
     const schema = this.cache.getSchema(appVersion.id, appVersion.version, activityId);
     if (schema) {
       return schema
@@ -380,15 +380,16 @@ class IORedisStoreService extends StoreService {
     }
   }
 
-  async getSchemas(appVersion: AppVersion): Promise<any> {
+  async getSchemas(appVersion: AppVersion): Promise<Record<string, ActivityType>> {
     let schemas = this.cache.getSchemas(appVersion.id, appVersion.version);
     if (schemas && Object.keys(schemas).length > 0) {
       return schemas;
     } else {
       const params: KeyStoreParams = { appId: appVersion.id, appVersion: appVersion.version };
       const key = this.mintKey(KeyType.SCHEMAS, params);
-      schemas = await this.redisClient.hgetall(key);
-      Object.entries(schemas).forEach(([key, value]) => {
+      schemas = {};
+      const hash = await this.redisClient.hgetall(key);
+      Object.entries(hash).forEach(([key, value]) => {
         schemas[key] = JSON.parse(value as string);
       });
       this.cache.setSchemas(appVersion.id, appVersion.version, schemas);
@@ -396,10 +397,10 @@ class IORedisStoreService extends StoreService {
     }
   }
 
-  async setSchemas(schemas: Record<string, any>, appVersion: AppVersion): Promise<any> {
+  async setSchemas(schemas: Record<string, ActivityType>, appVersion: AppVersion): Promise<any> {
     const params: KeyStoreParams = { appId: appVersion.id, appVersion: appVersion.version };
     const key = this.mintKey(KeyType.SCHEMAS, params);
-    const _schemas = {...schemas};
+    const _schemas = {...schemas} as Record<string, string>;
     Object.entries(_schemas).forEach(([key, value]) => {
       _schemas[key] = JSON.stringify(value);
     });
@@ -447,9 +448,11 @@ class IORedisStoreService extends StoreService {
     Object.entries(_subscriptions).forEach(([key, value]) => {
       _subscriptions[key] = JSON.stringify(value);
     });
-    const response = await this.redisClient.hmset(key, _subscriptions);
-    this.cache.setTransitions(appVersion.id, appVersion.version, transitions);
-    return response;
+    if (Object.keys(_subscriptions).length !== 0) {
+      const response = await this.redisClient.hmset(key, _subscriptions);
+      this.cache.setTransitions(appVersion.id, appVersion.version, transitions);
+      return response;
+    }
   }
 
   async getTransitions(appVersion: AppVersion): Promise<Transitions> {
@@ -475,9 +478,11 @@ class IORedisStoreService extends StoreService {
     Object.entries(hookRules).forEach(([key, value]) => {
       _hooks[key.toString()] = JSON.stringify(value);
     });
-    const response = await this.redisClient.hmset(key, _hooks);
-    this.cache.setHookRules(appVersion.id, hookRules);
-    return response;
+    if (Object.keys(_hooks).length !== 0) {
+      const response = await this.redisClient.hmset(key, _hooks);
+      this.cache.setHookRules(appVersion.id, hookRules);
+      return response;
+    }
   }
 
   async getHookRules(appVersion: AppVersion): Promise<Record<string, HookRule[]>> {
@@ -496,7 +501,7 @@ class IORedisStoreService extends StoreService {
     }
   }
 
-  async setHookSignal(hook: HookSignal, appVersion: AppVersion, multi? : any): Promise<any> {
+  async setHookSignal(hook: HookSignal, appVersion: AppVersion, multi? : RedisMultiType): Promise<any> {
     const key = this.mintKey(KeyType.SIGNALS, { appId: appVersion.id });
     const { topic, resolved, jobId} = hook;
     return await (multi || this.redisClient).hset(key, `${topic}:${resolved}`, jobId);
@@ -576,6 +581,112 @@ class IORedisStoreService extends StoreService {
 
   async processTaskQueue(sourceKey: string, destinationKey: string): Promise<any> {
     return await this.redisClient.lmove(sourceKey, destinationKey, 'LEFT', 'RIGHT');
+  }
+
+  async xgroup(command: 'CREATE', key: string, groupName: string, id: string, mkStream?: 'MKSTREAM'): Promise<boolean> {
+    if (mkStream === 'MKSTREAM') {
+      try {
+        return (await this.redisStreamer.xgroup(command, key, groupName, id, mkStream)) === 'OK';
+      } catch (err) {
+        this.logger.warn(`Consumer group not created with MKSTREAM for key: ${key} and group: ${groupName}`, err);
+        throw err;
+      }
+    } else {
+      try {
+        return (await this.redisStreamer.xgroup(command, key, groupName, id)) === 'OK';
+      } catch (err) {
+        this.logger.warn(`Consumer group not created for key: ${key} and group: ${groupName}`, err);
+        throw err;
+      }
+    }
+  }
+
+  async xadd(key: string, id: string, ...args: string[]): Promise<string> {
+    try {
+      return await this.redisStreamer.xadd(key, id, ...args);
+    } catch (err) {
+      this.logger.error(`Error publishing 'xadd'; key: ${key}`, err);
+      throw err;
+    }
+  }
+
+  async xreadgroup(
+    command: 'GROUP',
+    groupName: string,
+    consumerName: string,
+    blockOption: 'BLOCK'|'COUNT',
+    blockTime: number|string,
+    streamsOption: 'STREAMS',
+    streamName: string,
+    id: string
+  ): Promise<string[][][] | null | unknown[]> {
+    try {
+      //@ts-ignore
+      return await this.redisStreamer.xreadgroup(
+        command,
+        groupName,
+        consumerName,
+        // @ts-ignore
+        blockOption,
+        blockTime,
+        streamsOption,
+        streamName,
+        id
+      );
+    } catch (err) {
+      this.logger.error(`Error reading stream data [Stream ${streamName}] [Group ${groupName}]`, err);
+      throw err;
+    }
+  }
+
+  async xack(key: string, group: string, ...ids: string[]): Promise<number> {
+    try {
+      return await this.redisStreamer.xack(key, group, ...ids);
+    } catch (err) {
+      this.logger.error(`Error in acknowledging messages in group: ${group} for key: ${key}`, err);
+      throw err;
+    }
+  }
+
+  async xpending(
+    key: string,
+    group: string,
+    start?: string,
+    end?: string,
+    count?: number,
+    consumer?: string
+  ): Promise<[string, string, number, [string, number][]][] | [string, string, number, number] | unknown[]> {
+    try {
+      return await this.redisStreamer.xpending(key, group, start, end, count, consumer);
+    } catch (err) {
+      this.logger.error(`Error in retrieving pending messages for [stream ${key}], [group ${group}]`, err);
+      throw err;
+    }
+  }
+
+  async xclaim(
+    key: string,
+    group: string,
+    consumer: string,
+    minIdleTime: number,
+    id: string,
+    ...args: string[]
+  ): Promise<[string, string][] | unknown[]> {
+    try {
+      return await this.redisStreamer.xclaim(key, group, consumer, minIdleTime, id, ...args);
+    } catch (err) {
+      this.logger.error(`Error in claiming message with id: ${id} in group: ${group} for key: ${key}`, err);
+      throw err;
+    }
+  }
+
+  async xdel(key: string, ...ids: string[]): Promise<number> {
+    try {
+      return await this.redisStreamer.xdel(key, ...ids);
+    } catch (err) {
+      this.logger.error(`Error in deleting messages with ids: ${ids} for key: ${key}`, err);
+      throw err;
+    }
   }
 }
 

@@ -1,9 +1,9 @@
-type ActivityExecutionType = 'trigger' | 'await' | 'job' | 'openapi' | 'request' | 'iterate';
+type ActivityExecutionType = 'trigger' | 'await' | 'exec' | 'activity' | 'openapi' | 'request' | 'iterate';
 
 interface ActivityBase {
-  title: string;
-  type: ActivityExecutionType;
-  subtype: string;
+  title?: string;
+  type?: ActivityExecutionType;
+  subtype?: string;
   input?: Record<string, any>;
   output?: Record<string, any>;
   settings?: Record<string, any>;
@@ -26,6 +26,12 @@ interface AwaitActivity extends ActivityBase {
   timeout: number;
 }
 
+interface ExecActivity extends ActivityBase {
+  type: 'exec';
+  subtype: string;
+  timeout: number;
+}
+
 interface OpenAPIActivity extends ActivityBase {
   type: 'openapi';
   timeout: number;
@@ -39,13 +45,7 @@ interface IterateActivity extends ActivityBase {
   type: 'iterate';
 }
 
-interface AwaitActivity extends ActivityBase {
-  type: 'await';
-  eventName: string;
-  timeout: number;
-}
-
-type ActivityType = TriggerActivity | AwaitActivity  | OpenAPIActivity | RequestActivity | IterateActivity;
+type ActivityType = ActivityBase | TriggerActivity | AwaitActivity  | ExecActivity  | OpenAPIActivity | RequestActivity | IterateActivity;
 
 type ActivityData = Record<string, any>;
 type ActivityMetadata = {
@@ -83,8 +83,10 @@ export {
   ActivityData,
   ActivityMetadata,
   HookData,
+  ActivityBase as BaseActivity,
   TriggerActivity,
   AwaitActivity,
+  ExecActivity,
   OpenAPIActivity,
   RequestActivity,
   IterateActivity,

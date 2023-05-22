@@ -1,0 +1,179 @@
+{
+  "app": {
+    "id": "calc",
+    "version": 1,
+    "settings": {
+      "some_boolean": true,
+      "some": {
+        "nested": {
+          "string": "hello",
+          "integer": 55
+        }
+      }
+    },
+    "graphs": [
+      {
+        "subscribes": "calculate",
+        "publishes": "calculated",
+        "activities": {
+          "calculate": {
+            "title": "Calculate",
+            "type": "trigger",
+            "output": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "operation": {
+                    "type": "string",
+                    "enum": [
+                      "add",
+                      "subtract",
+                      "multiply",
+                      "divide"
+                    ]
+                  },
+                  "values": {
+                    "type": "string",
+                    "description": "stringified JSON array of numbers"
+                  }
+                }
+              }
+            },
+            "job": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "result": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          },
+          "operate": {
+            "title": "Operate",
+            "type": "await",
+            "subtype": "calculation.execute",
+            "input": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "operation": {
+                    "type": "string",
+                    "enum": [
+                      "add",
+                      "subtract",
+                      "multiply",
+                      "divide"
+                    ]
+                  },
+                  "values": {
+                    "type": "string",
+                    "description": "stringified JSON array of numbers"
+                  }
+                }
+              },
+              "maps": {
+                "operation": "{calculate.output.data.operation}",
+                "values": "{calculate.output.data.values}"
+              }
+            },
+            "job": {
+              "maps": {
+                "result": "{operate.output.data.result}"
+              }
+            }
+          }
+        },
+        "transitions": {
+          "calculate": [
+            {
+              "to": "operate"
+            }
+          ]
+        }
+      },
+      {
+        "subscribes": "calculation.execute",
+        "publishes": "calculation.executed",
+        "activities": {
+          "receiver": {
+            "title": "Receive Values",
+            "type": "trigger",
+            "output": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "operation": {
+                    "type": "string",
+                    "enum": [
+                      "add",
+                      "subtract",
+                      "multiply",
+                      "divide"
+                    ]
+                  },
+                  "values": {
+                    "type": "string",
+                    "description": "stringified JSON array of numbers"
+                  }
+                }
+              }
+            },
+            "job": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "result": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          },
+          "executor": {
+            "title": "Execute Calculation",
+            "type": "exec",
+            "subtype": "calculation.execute",
+            "input": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "operation": {
+                    "type": "string",
+                    "enum": [
+                      "add",
+                      "subtract",
+                      "multiply",
+                      "divide"
+                    ]
+                  },
+                  "values": {
+                    "type": "string",
+                    "description": "stringified JSON array of numbers"
+                  }
+                }
+              },
+              "maps": {
+                "operation": "{receiver.output.data.operation}",
+                "values": "{receiver.output.data.values}"
+              }
+            },
+            "job": {
+              "maps": {
+                "result": "{executor.output.data.result}"
+              }
+            }
+          }
+        },
+        "transitions": {
+          "receiver": [
+            {
+              "to": "executor"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

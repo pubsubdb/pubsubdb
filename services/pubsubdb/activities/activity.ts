@@ -18,6 +18,7 @@ import {
   HookData} from "../../../typedefs/activity";
 import { JobContext } from "../../../typedefs/job";
 import { TransitionRule, Transitions } from "../../../typedefs/transition";
+import { RedisMulti } from "../../../typedefs/store";
 
 /**
  * The base class for all activities
@@ -67,7 +68,7 @@ class Activity {
       /////// MULTI: END ///////
 
       const activityStatus = multiResponse[multiResponse.length - 1];
-      const isComplete = CollatorService.isJobComplete(activityStatus);
+      const isComplete = CollatorService.isJobComplete(activityStatus as number);
       !shouldSleep && this.transition(isComplete);
       return this.context.metadata.aid;
     //} catch (error) {
@@ -96,25 +97,25 @@ class Activity {
   }
 
   //********  SIGNALER ENTRY POINT (C)  ********//
-  async registerExpectedHook(multi?): Promise<string | void> {
+  async registerExpectedHook(multi?: RedisMulti): Promise<string | void> {
     if (this.config.hook?.topic) {
-      const signalerService = new SignalerService(
+      const signaler = new SignalerService(
         await this.pubsubdb.getAppConfig(),
         this.pubsubdb.store,
         this.pubsubdb.logger,
         this.pubsubdb
       );
-      return await signalerService.registerHook(this.config.hook.topic, this.context, multi);
+      return await signaler.registerHook(this.config.hook.topic, this.context, multi);
     }
   }
   async processHookSignal(): Promise<void> {
-    const signalerService = new SignalerService(
+    const signaler = new SignalerService(
       await this.pubsubdb.getAppConfig(),
       this.pubsubdb.store,
       this.pubsubdb.logger,
       this.pubsubdb
     );
-    const jobId = await signalerService.process(this.config.hook.topic, this.data);
+    const jobId = await signaler.process(this.config.hook.topic, this.data);
     if (jobId) {
       await this.restoreJobContext(jobId);
       //when this activity is initialized via the constructor,
@@ -130,7 +131,7 @@ class Activity {
       await this.saveActivityStatus(1, multi);
       const multiResponse = await multi.exec();
       const activityStatus = multiResponse[multiResponse.length - 1];
-      const isComplete = CollatorService.isJobComplete(activityStatus);
+      const isComplete = CollatorService.isJobComplete(activityStatus as number);
       this.transition(isComplete);
       /////// MULTI: END ///////
     }
@@ -200,7 +201,7 @@ class Activity {
     return false;
   }
 
-  async saveJobData(multi?: any): Promise<void> {
+  async saveJobData(multi?: RedisMulti): Promise<void> {
     await this.pubsubdb.store.setJob(
       this.context.metadata.jid,
       this.context.data || {},
@@ -210,7 +211,7 @@ class Activity {
     );
   }
 
-  async saveActivity(multi?): Promise<void> {
+  async saveActivity(multi?: RedisMulti): Promise<void> {
     const jobId = this.context.metadata.jid;
     const activityId = this.metadata.aid;
     await this.pubsubdb.store.setActivity(
@@ -224,7 +225,7 @@ class Activity {
     );
   }
 
-  async saveActivityStatus(multiplier = 1, multi?: unknown): Promise<void> {
+  async saveActivityStatus(multiplier = 1, multi?: RedisMulti): Promise<void> {
     await this.pubsubdb.store.updateJobStatus(
       this.context.metadata.jid,
       -this.config.collationInt * multiplier,
@@ -258,6 +259,8 @@ class Activity {
   }
 
   async transitionActivity(isComplete: boolean): Promise<number> {
+    //transitions can cascade through the descendant activities
+    //toDecrement (e.g. -600600) is the result of the cascade
     let toDecrement = 0;
     if (isComplete) {
       if (this.hasParentJob()) {

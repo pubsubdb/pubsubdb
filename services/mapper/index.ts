@@ -62,7 +62,7 @@ class MapperService {
     let allAreTrue = true;
     let someAreTrue = false;
     transitionRule.match.forEach(({ expected, actual }: Match) => {
-      if (orGate && !someAreTrue || !orGate && allAreTrue) {
+      if ((orGate && !someAreTrue) || (!orGate && allAreTrue)) {
         const result = Pipe.resolve(actual, context) === expected;
         if (orGate && result) {
           someAreTrue = true;

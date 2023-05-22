@@ -1,20 +1,6 @@
 # Collation Service
 
-The Collation Service tracks the state of all activities in a running graph (i.e., "Job"). By generating a unique 15-digit collation key, the Collation Service can track Job state with a single call to `hincrby` each time an activity's state changes (started, completed, etc).
-
-## Table of Contents
-
-1. [Overview](#overview)
-4. [Collation Key and Activity Statuses](#collation-key-and-activity-statuses)
-5. [Examples](#examples)
-
-## Overview
-
-The Collation Service aims to solve the problem of efficiently tracking the state of connected activities in a graph, especially when determining when a job is 'done' in a stateless environment.
-
-## Collation Key and Activity Statuses
-
-Each digit in the collation key represents the status of an activity.
+The Collation Service tracks the state of all activities in a running graph (i.e., "Job"), using a multi-digit collation key. Each digit in the collation key represents the status of an activity.
 
 - 9: Pending
 - 8: Started
@@ -25,6 +11,7 @@ Each digit in the collation key represents the status of an activity.
 - 3: Skipped
 - 2: `Await` Right Parentheses
 - 1: `Await` Left Parentheses
+- 0: N/A (the flow has fewer activities than the collation key)
 
 ### Compositional Status
 The 2 and 1 digits serve to bookend subordinated workflows and can be used to communicate compositional job state. For example, a compositional state of `99996146636629` reveals that **two** separate workflows were successfully completed. The first flow (Flow A) called the second flow (Flow B). Specifically, activity 5 in Flow A invoked Flow B. Activity A was suspended until Activity B successfully returned its response. The final state for both flows is:
@@ -37,7 +24,7 @@ The 2 and 1 digits serve to bookend subordinated workflows and can be used to co
  
  `quick => brown => fox => (jumped|(slept => ate))`
  
- The sorted ids would be:
+ Because a DAG doesn't guarantee sibling node order, ascending string sorting was chosen. The sorted ids for this sequence of activities would be:
  
  `["ate", "brown", "fox", "jumped", "quick", "slept"]`
  
@@ -82,7 +69,7 @@ The `quick`, `brown`, `fox`, and `jumped` activities have *completed*. The `slep
 | slept    | Skipped       | 3       |
 | ate      | Skipped       | 3       |
 
-### Example 5: 566366000000000
+### Example 4: 566366000000000
 The `quick`, `brown`, `fox`, and `slept` activities have *completed*. The `jumped` activity was *skipped*. The `ate` activity has already completed and is now in a *paused* state, awaiting release.
 
 | Activity | State     | Numeric Value |
@@ -94,7 +81,7 @@ The `quick`, `brown`, `fox`, and `slept` activities have *completed*. The `jumpe
 | slept    | Completed | 6             |
 | ate      | Paused    | 5             |
 
-### Example 6: 466366000000000
+### Example 4: 466366000000000
 The `quick`, `brown`, `fox`, and `slept` activities have *completed*. The `jumped` activity was *skipped*. The `ate` activity was paused and has now been *released* (4).
 
 >NOTE: This flow is considered 'complete' as no activities are active (6, 4, 3). At execution time, one can assume that the `ate` activity would have decremented its value by '1' unit upon resumption of the paused activity state (5 => 4), resulting in a final integer of `466366000000000`. The engine would know based upon this value that no other activity is possibly active and would complete the job.

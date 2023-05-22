@@ -1,3 +1,7 @@
+import { ILogger } from '../logger';
+import { StoreService as Store } from '../store';
+import {AppVersion} from '../../typedefs/app';
+import { RedisClient, RedisMulti } from '../../typedefs/store';
 import {
   GetStatsOptions,
   StatsResponse,
@@ -9,17 +13,14 @@ import {
   IdsResponse,
   MeasureIds, 
   TimeSegment,
-  CountByFacet} from '../../typedefs/stats';
-import {AppVersion} from '../../typedefs/app';
-import { ILogger } from '../logger';
-import { StoreService as Store } from '../store';
+  CountByFacet } from '../../typedefs/stats';
 
 class ReporterService {
   private appConfig: AppVersion;
   private logger: ILogger;
-  private store: Store;
+  private store: Store<RedisClient, RedisMulti>;
 
-  constructor(appConfig: AppVersion, store: Store, logger: ILogger) {
+  constructor(appConfig: AppVersion, store: Store<RedisClient, RedisMulti>, logger: ILogger) {
     this.appConfig = appConfig;
     this.logger = logger;
     this.store = store;

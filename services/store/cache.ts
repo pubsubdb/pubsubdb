@@ -8,6 +8,7 @@
  * 
  */
 
+import { ActivityType } from "../../typedefs/activity";
 import { HookRule } from "../../typedefs/hook";
 import { PubSubDBApp, PubSubDBSettings } from "../../typedefs/pubsubdb";
 import { Transitions } from "../../typedefs/transition";
@@ -16,7 +17,7 @@ class Cache {
   settings: PubSubDBSettings;
   appId: string;
   apps: Record<string, PubSubDBApp>;
-  schemas: Record<string, Record<string, unknown>>;
+  schemas: Record<string, ActivityType>;
   subscriptions: Record<string, Record<string, string>>;
   transitions: Record<string, Record<string, unknown>>;
   hookRules: Record<string, Record<string, HookRule[]>>;
@@ -31,7 +32,7 @@ class Cache {
    * @param transitions 
    * @param hookRules 
    */
-  constructor(appId: string, settings: PubSubDBSettings, apps: Record<string, PubSubDBApp> = {}, schemas: Record<string, Record<string, unknown>> = {}, subscriptions: Record<string, Record<string, string>> = {}, transitions: Record<string, Record<string, unknown>> = {}, hookRules: Record<string, Record<string, HookRule[]>> = {}, workItems: Record<string, string> = {}) {
+  constructor(appId: string, settings: PubSubDBSettings, apps: Record<string, PubSubDBApp> = {}, schemas: Record<string, ActivityType> = {}, subscriptions: Record<string, Record<string, string>> = {}, transitions: Record<string, Record<string, unknown>> = {}, hookRules: Record<string, Record<string, HookRule[]>> = {}, workItems: Record<string, string> = {}) {
     this.appId = appId;
     this.settings = settings;
     this.apps = apps;
@@ -77,19 +78,19 @@ class Cache {
     this.apps[appId] = app;
   }
 
-  getSchemas(appId: string, version: string): Record<string, unknown> {
-    return this.schemas[`${appId}/${version}`];
+  getSchemas(appId: string, version: string): Record<string, ActivityType> {
+    return this.schemas[`${appId}/${version}`] as unknown as Record<string, ActivityType>;
   }
 
-  getSchema(appId: string, version: string, activityId: string): unknown {
-    return this.schemas?.[`${appId}/${version}`]?.[activityId];
+  getSchema(appId: string, version: string, activityId: string): ActivityType {
+    return this.schemas?.[`${appId}/${version}`]?.[activityId] as ActivityType;
   }
 
-  setSchemas(appId: string, version: string, schemas: Record<string, unknown>): void {
-    this.schemas[`${appId}/${version}`] = schemas;
+  setSchemas(appId: string, version: string, schemas: Record<string, ActivityType>): void {
+    this.schemas[`${appId}/${version}`] = schemas as unknown as Record<string, ActivityType>;
   }
 
-  setSchema(appId: string, version: string, topic: string, schema: Record<string, unknown>): void {
+  setSchema(appId: string, version: string, topic: string, schema: ActivityType): void {
     this.schemas[`${appId}/${version}`][topic] = schema;
   }
 

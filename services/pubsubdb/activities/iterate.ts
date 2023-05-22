@@ -1,6 +1,6 @@
-import { PubSubDBService } from "..";
-import { ActivityData, ActivityMetadata, HookData, IterateActivity } from "../../../typedefs/activity";
-import { Activity, ActivityType } from "./activity";
+import { PubSubDBService } from '..';
+import { ActivityData, ActivityMetadata, HookData, IterateActivity } from '../../../typedefs/activity';
+import { Activity, ActivityType } from './activity';
 
 class Iterate extends Activity {
   config: IterateActivity;
@@ -16,19 +16,19 @@ class Iterate extends Activity {
   }
 
   async restoreJobContext(): Promise<void> {
-    console.log("Iterate restoreJobContext - Do nothing; No context");
+    this.pubsubdb.logger.info('Iterate restoreJobContext - Do nothing; No context');
   }
 
   async mapInputData(): Promise<void> {
-    console.log("Iterate mapInputData - Do nothing; No input data");
+    this.pubsubdb.logger.info('Iterate mapInputData - Do nothing; No input data');
   }
 
   async subscribeToResponse(): Promise<void> {
-    console.log("Iterate subscribeToResponse - Do nothing; No response");
+    this.pubsubdb.logger.info('Iterate subscribeToResponse - Do nothing; No response');
   }
 
   async execActivity(): Promise<void> {
-    console.log("Iterate execActivity - Do nothing; No execution");
+    this.pubsubdb.logger.info('Iterate execActivity - Do nothing; No execution');
   }
 }
 

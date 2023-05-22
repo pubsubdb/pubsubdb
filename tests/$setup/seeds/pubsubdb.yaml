@@ -9,5 +9,6 @@ app:
         integer: 2
   graphs:
     - $ref: ./graphs/order.scheduled.yaml
+    - $ref: ./graphs/order.finalize.yaml
     - $ref: ./graphs/order.approval.requested.yaml
     - $ref: ./graphs/order.approval.price.requested.yaml

@@ -1,5 +1,7 @@
+import { ActivityType } from "../../typedefs/activity";
 import { HookRule } from "../../typedefs/hook";
 import { PubSubDBGraph, PubSubDBManifest } from "../../typedefs/pubsubdb";
+import { RedisClient, RedisMulti } from "../../typedefs/store";
 import { CollatorService } from "../collator";
 import { StoreService } from '../store';
 
@@ -7,9 +9,9 @@ type JsonObject = { [key: string]: any };
 
 class Deployer {
   manifest: PubSubDBManifest | null = null;
-  private store: StoreService | null;
+  private store: StoreService<RedisClient, RedisMulti> | null;
 
-  async deploy(manifest: PubSubDBManifest, store: StoreService) {
+  async deploy(manifest: PubSubDBManifest, store: StoreService<RedisClient, RedisMulti>) {
     this.manifest = manifest;
     this.store = store;
 
@@ -116,7 +118,7 @@ class Deployer {
 
   async deployActivitySchemas() {
     const graphs = this.manifest!.app.graphs;
-    const activitySchemas: { [key: string]: string } = {};
+    const activitySchemas: Record<string, ActivityType> = {};
     for (const graph of graphs) {
       const activities = graph.activities;
       for (const activityKey in activities) {

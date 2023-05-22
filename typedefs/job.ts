@@ -40,4 +40,9 @@ type JobContext = {
   };
 };
 
-export { JobContext, JobData, JobsData, JobMetadata, AbbreviatedJobMetadata };
+type MinimumInitialJobContext = {
+  metadata: Partial<JobMetadata> & Pick<JobMetadata, 'aid' | 'jid'>;
+  data: JobData;
+}
+
+export { JobContext, JobData, JobsData, JobMetadata, AbbreviatedJobMetadata, MinimumInitialJobContext };
