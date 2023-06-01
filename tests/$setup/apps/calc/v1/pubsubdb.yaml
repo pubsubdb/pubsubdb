@@ -1,6 +1,6 @@
 app:
   id: calc
-  version: 1
+  version: '1'
   settings:
     some_boolean: true
     some:

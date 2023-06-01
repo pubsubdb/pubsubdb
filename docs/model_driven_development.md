@@ -80,29 +80,30 @@ graphs:
     transitions: {...}
 ```
 
-`Activities`: Activities are the individual tasks or operations performed within a graph. Each activity has a unique key and can be of different types, such as trigger, await, or job. Activities have input and output schemas, which define the data structure they expect and produce. Activities can also use the maps property to map the output of one activity to the input of another. Here's an example of an activity:
+`Activities`: Activities are the individual tasks or operations performed within a graph. Each activity has a unique key and can be of different types, such as trigger, await, or job. Activities have input and output schemas, which define the data structure they expect and produce. Triggers are the one exception to this rule and reference the `input` schema for the overall job as their input/output schema:
 
 ```yaml
+input:
+  schema:
+    type: object
+    properties:
+      id:
+        type: string
+        description: The unique identifier for the object.
+      price:
+        type: number
+        description: The price of the item.
+        minimum: 0
+      object_type:
+        type: string
+        description: The type of the order (e.g, widgetA, widgetB)
+output:
+  schema: {...}
+
 activities:
   a1:
     title: Get Approval
     type: trigger
-    output:
-      schema:
-        type: object
-        properties:
-          id:
-            type: string
-            description: The unique identifier for the object.
-          price:
-            type: number
-            description: The price of the item.
-            minimum: 0
-          object_type:
-            type: string
-            description: The type of the order (e.g, widgetA, widgetB)
-    job:
-      schema: {...}
 ```
 
 `Transitions`: Transitions define the flow between activities based on certain conditions. They connect the activities within a graph and determine the path of execution. Transitions can be conditional, which means they depend on the output of previous activities. The conditions property within a transition allows for matching expected values against actual values, with the option to use the '@pipes' functional mapper for data manipulation. Here's an example of a transition:
@@ -132,12 +133,12 @@ Global settings are an important aspect of the application model, as they allow 
 
 To define global settings, include a settings object in the app object of the JSON model. The settings object can contain any number of key-value pairs, with nested objects allowed for more complex configurations.
 
-Here's an example of defining global settings in YAML:
+Here's an example of defining global settings in YAML (note that the `version` field is a string, in support of semantic versioning `0.0.1`):
 
 ```yaml
 app:
   id: myapp
-  version: 1
+  version: '1'
   settings:
     some_boolean: true
     some:
@@ -173,7 +174,7 @@ graphs:
   - activities:
       a1:
         title: "Example Activity"
-        type: "job"
+        type: "activity"
         job:
           maps:
             setting_boolean: "{$app.settings.some_boolean}"
@@ -214,11 +215,11 @@ graphs:
         # ... (activity properties)
       a3:
         title: "Return True"
-        type: "job"
+        type: "activity"
         # ... (activity properties)
       a4:
         title: "Return False"
-        type: "job"
+        type: "activity"
         # ... (activity properties)
     transitions:
       a1:
@@ -280,7 +281,7 @@ Example of a job activity in YAML:
 ```yaml
 a3:
   title: "Return True"
-  type: "job"
+  type: "activity"
   job:
     maps:
       id: "{a1.output.data.id}"
@@ -643,8 +644,8 @@ The first graph includes the following activities:
 
 - `a1`: A trigger activity that receives order approval requests.
 - `a2`: An await activity that requests price approval by emitting an `order.approval.price.requested` event and waits for the corresponding response.
-- `a3`: A job activity that returns a positive approval response if the price approval was successful.
-- `a4`: A job activity that returns a negative approval response if the price approval was unsuccessful.
+- `a3`: An activity that returns a positive approval response if the price approval was successful.
+- `a4`: An activity that returns a negative approval response if the price approval was unsuccessful.
 The transitions in the first graph are as follows:
 
 - From `a1` to `a2`: The flow moves from the trigger activity to the await activity.
@@ -654,8 +655,8 @@ The transitions in the first graph are as follows:
 The second graph handles price approval and includes the following activities:
 
 - `a5`: A trigger activity that receives price approval requests and calculates stats for average price and count by object type.
-- `a6`: A job activity that returns a positive price approval response if the price is less than 100.
-- `a7`: A job activity that returns a negative price approval response if the price is equal to or greater than 100.
+- `a6`: An activity that returns a positive price approval response if the price is less than 100.
+- `a7`: An activity that returns a negative price approval response if the price is equal to or greater than 100.
 The transitions in the second graph are as follows:
 
 - From `a5` to `a6`: If the price is less than 100, the flow moves to the positive price approval response.
@@ -687,8 +688,8 @@ This example demonstrates how the graph model can be used to implement a simple 
 In this section, we will delve deeper into the price approval process, which is handled by the second graph in our example. This graph listens for `order.approval.price.requested` events and publishes `order.approval.price.responded` events. The purpose of this graph is to evaluate whether the price of an order meets certain criteria for approval. The graph includes the following activities:
 
 - `a5`: A trigger activity that receives price approval requests and calculates stats for average price and count by object type (e.g., widgetA, widgetB). This activity outputs the unique identifier, price, and object type of the received order.
-- `a6`: A job activity that returns a positive price approval response (i.e., the approved attribute is set to true) if the price is less than 100.
-- `a7`: A job activity that returns a negative price approval response (i.e., the approved attribute is set to false) if the price is equal to or greater than 100.
+- `a6`: An activity that returns a positive price approval response (i.e., the approved attribute is set to true) if the price is less than 100.
+- `a7`: An activity that returns a negative price approval response (i.e., the approved attribute is set to false) if the price is equal to or greater than 100.
 
 The transitions in the second graph are as follows:
 
@@ -709,4 +710,4 @@ app:
         # ... (transitions between a5, a6, a7)
 ```
 
-In this example, the second graph illustrates how the model can be used to implement a specific part of a larger workflow, in this case, the price approval process. It demonstrates the use of trigger and job activities, conditional transitions with the @pipe functional mapper, and stats to gather data about the received orders. By organizing the logic within separate graphs, the model promotes modularity and separation of concerns, making it easier to understand and maintain.
+In this example, the second graph illustrates how the model can be used to implement a specific part of a larger workflow, in this case, the price approval process. It demonstrates the use of various activities, conditional transitions with the @pipe functional mapper, and stats to gather data about the received orders. By organizing the logic within separate graphs, the model promotes modularity and separation of concerns, making it easier to understand and maintain.

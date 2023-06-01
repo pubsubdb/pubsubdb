@@ -1,6 +1,6 @@
 {
   "name": "@pubsubdb/pubsubdb",
-  "version": "0.0.21",
+  "version": "0.0.22",
   "description": "The PubSubDB Process Database",
   "main": "build/index.js",
   "types": "build/index.d.ts",
@@ -21,11 +21,16 @@
     "start": "ts-node src/index.ts",
     "test": "NODE_ENV=test jest --detectOpenHandles --forceExit --verbose",
     "test:psdb": "NODE_ENV=test jest ./tests/index.test.ts --detectOpenHandles --verbose",
-    "test:redis": "NODE_ENV=test jest ./tests/services/store/stores/redis.test.ts --detectOpenHandles --forceExit --verbose",
-    "test:ioredis": "NODE_ENV=test jest ./tests/services/store/stores/ioredis.test.ts --detectOpenHandles --forceExit --verbose",
+    "test:store:redis": "NODE_ENV=test jest ./tests/services/store/clients/redis.test.ts --detectOpenHandles --forceExit --verbose",
+    "test:store:ioredis": "NODE_ENV=test jest ./tests/services/store/clients/ioredis.test.ts --detectOpenHandles --forceExit --verbose",
+    "test:stream:redis": "NODE_ENV=test jest ./tests/services/stream/clients/redis.test.ts --detectOpenHandles --forceExit --verbose",
+    "test:stream:ioredis": "NODE_ENV=test jest ./tests/services/stream/clients/ioredis.test.ts --detectOpenHandles --forceExit --verbose",
+    "test:sub:redis": "NODE_ENV=test jest ./tests/services/sub/clients/redis.test.ts --detectOpenHandles --forceExit --verbose",
+    "test:sub:ioredis": "NODE_ENV=test jest ./tests/services/sub/clients/ioredis.test.ts --detectOpenHandles --forceExit --verbose",
     "test:compiler": "NODE_ENV=test jest ./tests/services/compiler/index.test.ts --detectOpenHandles --forceExit --verbose",
     "test:reporter": "NODE_ENV=test jest ./tests/services/reporter/index.test.ts --detectOpenHandles --forceExit --verbose",
-    "test:signaler": "NODE_ENV=test jest ./tests/services/signaler/index.test.ts --detectOpenHandles --forceExit --verbose"
+    "test:serializer": "NODE_ENV=test jest ./tests/services/serializer/index.test.ts --detectOpenHandles --forceExit --verbose",
+    "test:signaler:stream": "NODE_ENV=test jest ./tests/services/signaler/stream.test.ts --detectOpenHandles --forceExit --verbose"
   },
   "keywords": [],
   "author": "luke.birdeau@gmail.com",

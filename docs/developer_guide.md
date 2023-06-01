@@ -154,7 +154,6 @@ Proper file organization and directory schemes play a crucial role in maintainin
   - `/graphs` | Graphs (workflows) define the sequence of activities and how they transition. 
   - `/schemas` | Schemas define the incoming and outgoing message format for each activity
   - `/maps` | Maps define how upstream activity data is copied and transformed and used as input to downstream activities
-  -  `/openapis` | The OpenAPI Specs directory is used to store predefined, full specifiations. Workflows can reference operations by name to save time when defining schemas.
 
 ```
 /src
@@ -169,13 +168,11 @@ Proper file organization and directory schemes play a crucial role in maintainin
   │   ├── order.approval.requested.yaml
   │   ├── order.approval.price.requested.yaml
   │   └── ...
-  ├── /maps
-  |   ├── order.approval.requested.yaml
-  |   ├── order.approval.price.requested.yaml
-  │   └── ...
-  └── /openapis
-      ├── asana.1.0.0.yaml
+  └── /maps
+      ├── order.approval.requested.yaml
+      ├── order.approval.price.requested.yaml
       └── ...
+
 ```
 
 The file, `pubsubdb.yaml`, serves as the app manifest and should include a reference to every flow that should be included when the version is compiled and deployed. Removing a flow from deployment is as easy as removing its reference from the `pubsubdb.yaml` file, incrementing the version, and redeploying the app. (*The final deployment step is described [here](#deploy).*)
@@ -184,7 +181,7 @@ The file, `pubsubdb.yaml`, serves as the app manifest and should include a refer
 # ./src/pubsubdb.yaml
 app:
   id: myapp
-  version: 1
+  version: '1'
   settings:
     some_boolean: true
     some:
@@ -208,9 +205,9 @@ The following table lists all fields and their configuration. The `settings` fie
 >The app version is a label to mark your build. It can be an integer, semantic version, date (yyyymmdd) or time value (milliseconds).
 
 ## Define Activity Schemas
-PubSubDB is built using the Open API standard. Any Web service with an Open API spec can be orchestrated by referencing its operation name as it appears in the original spec.  For other activities it is your responsibility to define the schema using the OpenAPI standard. For every activity you define for a workflow, consider the INCOMING and OUTGOING messages for which you  will need a schema. 
+Any Web service with an Open API spec can be referenced (`#ref`) to save time documenting inputs and outputs.  For other activities it is your responsibility to define the schema using the *JSON Schema* standard. For every activity you define for a workflow, consider the INCOMING and OUTGOING messages for which you  will need a schema. 
 
->The `trigger` activity is unique from other activities in that it doesn't use an **input** schema. Instead, it serves as the front-door for the flow, recieving the event payload and passing to downstream activities. From the perspective of downstream activities, the event payload that triggered the flow is the trigger's **output**. From the perspective of outside callers, it is the trigger's **job** (i.e., job data) that matters most as it represents the final output produced by the completed workflow. As you review the remainder of this document, keep this distinction in mind (inside vs outside perspectives) when considering an triggers's "output" vs its "job" data.
+>The `trigger` activity is unique from other activities in that it doesn't use an **input** schema. Instead, it serves as the front-door for the flow, recieving the event payload and passing to downstream activities. From the perspective of downstream activities, the event payload that triggered the flow is the trigger's **output**. From the perspective of outside callers, it is the flow's **output** (i.e., job data) that matters most as it represents the final output produced by the completed workflow. As you review the remainder of this document, keep this distinction in mind (inside vs outside perspectives) when considering an triggers's "output" vs the flow's "output".
 
 When defining schemas, it's useful to consider the messages being exchanged. Let's start with activity, `a5`, which is the trigger activity for the **Approve Order Price** flow. The purpose of the flow is to essentially approve an order based upon its price. The message exchange is as follows:
 
@@ -231,56 +228,64 @@ Let's define the necessary schemas for activity, `a5`. Schemas can be cumbersome
 ```yaml
 # ./src/schemas/order.approval.price.requested.yaml
 
- a5:
-  job:
-    type: object
-    properties:
-      id:
-        type: string
-        description: The unique identifier for the object.
-      price:
-        type: number
-        description: The price of the item.
-        minimum: 0
-      approved:
-        type: boolean
-        description: Approval status of the object.
-  output:
-    type: object
-    properties:
-      id:
-        type: string
-        description: The unique identifier for the object.
-      price:
-        type: number
-        description: The price of the item.
-        minimum: 0
-      object_type:
-        type: string
-        description: The type of the order (e.g., widgetA, widgetB)
-        enum:
-          - widgetA
-          - widgetB
+input:
+  type: object
+  properties:
+    id:
+      type: string
+      description: The unique identifier for the object.
+    price:
+      type: number
+      description: The price of the item.
+      minimum: 0
+    object_type:
+      type: string
+      description: The type of the order (e.g., widgetA, widgetB)
+      enum:
+        - widgetA
+        - widgetB
+output:
+  type: object
+  properties:
+    id:
+      type: string
+      description: The unique identifier for the object.
+    price:
+      type: number
+      description: The price of the item.
+      minimum: 0
+    object_type:
+      type: string
+      description: The type of the order (e.g., widgetA, widgetB)
+      enum:
+        - widgetA
+        - widgetB
+        - widget
+        - order
+    approved:
+      type: boolean
+      description: Approval status of the object.
 ```
 
-The workflow must now be updated to reference (`$ref`) the schema for activity, `a5`.
+The workflow must now be updated to reference (`$ref`) the schema for activity, `a5`. Remember, the input schema for the flow is the same as the output schema for the trigger activity. The trigger (`a5`) is merely passing the flow input to downstream activities.
 
 ```yaml
 # ./src/graphs/order.approval.price.requested.yaml
 subscribes: order.approval.price.requested
 publishes: order.approval.price.responded
 
+input:
+  schema:
+    $ref: '../schemas/order.approval.price.requested.yaml#/input'
+output:
+  schema:
+    $ref: '../schemas/order.approval.price.requested.yaml#/output'
+
 activities:
   a5:
     title: Get Price Approval
     type: trigger
-    output:
-      schema:
-        $ref: '../schemas/order.approval.price.requested.yaml#/a5/output'
-    job:
-      schema:
-        $ref: '../schemas/order.approval.price.requested.yaml#/a5/job'
-...
+  ...
 ```
 
 ## Define Mapping Rules
@@ -298,15 +303,16 @@ In order to do this, we'll need to add a *mapping rules file* and reference from
 
 ```yaml
 # ./src/maps/order.approval.price.requested.yaml
+a5:
+  job:
+    id: "{a5.input.data.id}"
+    price: "{a5.input.data.price}"
+    object_type: "{a5.input.data.object_type}"
 a6:
   job:
-    id: "{a5.output.data.id}"
-    price: "{a5.output.data.price}"
     approved: true
 a7:
   job:
-    id: "{a5.output.data.id}"
-    price: "{a5.output.data.price}"
     approved: false
 ```
 
@@ -344,20 +350,21 @@ Let's extend the **Approve Order Price** workflow once more and add a `stats` se
 subscribes: order.approval.price.requested
 publishes: order.approval.price.responded
 
+input:
+  schema:
+    $ref: '../schemas/order.approval.price.requested.yaml#/input'
+output:
+  schema:
+    $ref: '../schemas/order.approval.price.requested.yaml#/output'
+
 activities:
   a5:
     title: Get Price Approval
     type: trigger
-    output:
-      schema:
-        $ref: '../schemas/order.approval.price.requested.yaml#/a5/output'
-    job:
-      schema:
-        $ref: '../schemas/order.approval.price.requested.yaml#/a5/job'
     stats:
       key: "{a5.input.data.object_type}"
       id: "{a5.input.data.id}"
-      granularity: 1h
+      granularity: 5m
       measures:
         - measure: avg
           target: "{a5.input.data.price}"
@@ -397,9 +404,13 @@ When the `index` measure is collected, the value of the `id` field will be store
 Consider the following query that returns just those jobs with an `object_type` field with a value of `widgetA`. The max response count default is 1,000, but can be increased. *Note how the time range is required. Include `start` **and** `end` values or use a `range` and pin the direction using `start` **or** `end`.*
 
 ```ts
-import { PubSubDB, IORedisStore } from '@pubsubdb/pubsubdb';
+import {
+  PubSubDB,
+  IORedisStore,
+  IORedisStream,
+  IORedisSub } from '@pubsubdb/pubsubdb';
 
-const pubSubDB = PubSubDB.init({ ... });
+const pubSubDB = await PubSubDB.init({ ... });
 
 const jobs = pubSubDB.getJobs('order.approval.price.requested', {
   target: '{object_type:widgetA}',
@@ -438,9 +449,13 @@ The expected JSON output would be as follows. *Note that the `fields` array is o
 PubSubDB supports full lifecycle management like other data storage solutions. The system is designed to protect the models from arbitrary changes, providing migration and deployment tools to support hot deployments with no downtime. It's possible to plan the migration beforehand to better understand the scope of the change and whether or not a full hot deployment is possible. Provide your app manifest to PubSubDB to generate the plan.
 
 ```typescript
-import { PubSubDB, IORedisStore } from '@pubsubdb/pubsubdb';
+import {
+  PubSubDB,
+  IORedisStore,
+  IORedisStream,
+  IORedisSub } from '@pubsubdb/pubsubdb';
 
-const pubSubDB = PubSubDB.init({ ... });
+const pubSubDB = await PubSubDB.init({ ... });
 const plan = pubSubDB.plan('./pubsubdb.yaml');
 ```
 
@@ -448,9 +463,13 @@ const plan = pubSubDB.plan('./pubsubdb.yaml');
 Once you're satisfied with your plan, call deploy to officially compile and deploy the next version of your application.
 
 ```typescript
-import { PubSubDB, IORedisStore } from '@pubsubdb/pubsubdb';
+import {
+  PubSubDB,
+  IORedisStore,
+  IORedisStream,
+  IORedisSub } from '@pubsubdb/pubsubdb';
 
-const pubSubDB = PubSubDB.init({ ... });
+const pubSubDB = await PubSubDB.init({ ... });
 const status = pubSubDB.deploy('./pubsubdb.yaml');
 ```
 
@@ -458,9 +477,13 @@ const status = pubSubDB.deploy('./pubsubdb.yaml');
 Publish events to trigger any flow. In this example, the **Approve Order** flow is triggered by publishing the `order.approval.requested` event. The payload should adhere to the `output` schema defined for the activity trigger, `a1`.
 
 ```ts
-import { PubSubDB, IORedisStore } from '@pubsubdb/pubsubdb';
+import {
+  PubSubDB,
+  IORedisStore,
+  IORedisStream,
+  IORedisSub } from '@pubsubdb/pubsubdb';
 
-const pubSubDB = PubSubDB.init({ ... });
+const pubSubDB = await PubSubDB.init({ ... });
 const jobId = pubSubDB.pub('order.approval.requested', { id: 'order_123', price: 47.99 });
 ```
 
@@ -468,29 +491,41 @@ const jobId = pubSubDB.pub('order.approval.requested', { id: 'order_123', price:
 Retrieve the data for a single workflow using the job ID.
 
 ```ts
-import { PubSubDB, IORedisStore } from '@pubsubdb/pubsubdb';
+import {
+  PubSubDB,
+  IORedisStore,
+  IORedisStream,
+  IORedisSub } from '@pubsubdb/pubsubdb';
 
-const pubSubDB = PubSubDB.init({ ... });
-const job = pubSubDB.get('order_123');
+const pubSubDB = await PubSubDB.init({ ... });
+const job = await pubSubDB.get('order_123');
 ```
 
 ## Get Job Metadata
 Query the status of a single workflow using the job ID. (*This query desccribes all state transitions for the job and the rate at which each activity was processed.*)
 
 ```ts
-import { PubSubDB, IORedisStore } from '@pubsubdb/pubsubdb';
+import {
+  PubSubDB,
+  IORedisStore,
+  IORedisStream,
+  IORedisSub } from '@pubsubdb/pubsubdb';
 
-const pubSubDB = PubSubDB.init({ ... });
-const jobMetadata = pubSubDB.getJobMetadata('order_123');
+const pubSubDB = await PubSubDB.init({ ... });
+const jobMetadata = await pubSubDB.getJobMetadata('order_123');
 ```
 
 ## Get Job Statistics
 Query for aggregation statistics by providing a time range and the data you're interested in. In this example, the stats for the `order.approval.price.requested` topic have been requested for the past 24 hours (`24h`). The `data` field is used to target the desired records and will limit the statistics to just those records with this characteristic.
 
 ```ts
-import { PubSubDB, IORedisStore, RedisStore } from '@pubsubdb/pubsubdb';
+import {
+  PubSubDB,
+  IORedisStore,
+  IORedisStream,
+  IORedisSub } from '@pubsubdb/pubsubdb';
 
-const pubSubDB = PubSubDB.init({ ... });
+const pubSubDB = await PubSubDB.init({ ... });
 
 const payload = {
   data: {
@@ -499,7 +534,7 @@ const payload = {
   range: '24h',
   end: 'NOW'
 };
-const stats = pubSubDB.getStats('order.approval.price.requested', payload);
+const stats = await pubSubDB.getStats('order.approval.price.requested', payload);
 ```
 
 The specific measures that will be returned are defined by the trigger, `a5`. That activity has sole responsibility for the topic. Accordingly, here are the target measures as defined in the workflow for `a5`. 
@@ -594,9 +629,13 @@ When the response is returned, the *average* for the `price` field and the *coun
 All workflow jobs are persisted as time-series data, enabling you to track specific jobs according to their payload. In this example, the stats for the `order.approval.requested` topic have been requested for the past 24 hours (`24h`). The `data` field is used to specify the *shape* of the data, limiting ids to those jobs where the `object_type` is *widgetA*.
 
 ```ts
-import { PubSubDB, IORedisStore, RedisStore } from '@pubsubdb/pubsubdb';
+import {
+  PubSubDB,
+  IORedisStore,
+  IORedisStream,
+  IORedisSub } from '@pubsubdb/pubsubdb';
 
-const pubSubDB = PubSubDB.init({ ... });
+const pubSubDB = await PubSubDB.init({ ... });
 
 const payload = {
   data: {
@@ -605,7 +644,7 @@ const payload = {
   range: '24h',
   end: 'NOW'
 };
-const ids = pubSubDB.getIds('order.approval.requested', payload);
+const ids = await pubSubDB.getIds('order.approval.requested', payload);
 ```
 
 When the response is returned, specific job IDs are returned and will correspond to the count statistics described earlier.

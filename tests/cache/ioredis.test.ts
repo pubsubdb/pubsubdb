@@ -1,6 +1,6 @@
 import { RedisConnection } from '../$setup/cache/ioredis';
 
-describe('RedisConnection', () => {
+describe('IORedisConnection', () => {
 
   afterEach(async () => {
     await RedisConnection.disconnectAll();
@@ -27,7 +27,7 @@ describe('RedisConnection', () => {
 
     expect(RedisConnection['instances'].size).toBe(0);
   });
-  
+
   it('should set and get a value from Redis', async () => {
     const redisConnection = await RedisConnection.getConnection('test-connection');
     const redisClient = await redisConnection.getClient();
@@ -36,7 +36,6 @@ describe('RedisConnection', () => {
     const val = await redisClient.get('test-key');
     expect(val).toBe('test-value');
   });
-
     
   it('should set and get a hash in Redis', async () => {
     const redisConnection = await RedisConnection.getConnection('test-connection');
@@ -46,7 +45,7 @@ describe('RedisConnection', () => {
     const val = await redisClient.hgetall('test-hash');
     expect(val).toEqual(obj);
   });
-  
+
   it('publishes and subscribes', async () => {
     const publisher = await RedisConnection.getConnection('publisher');
     const subscriber = await RedisConnection.getConnection('subscriber');

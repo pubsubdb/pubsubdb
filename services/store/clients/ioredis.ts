@@ -1,39 +1,28 @@
+import { KeyService, KeyStoreParams, KeyType, PSNS } from '../../../modules/key';
 import { Cache } from '../cache';
 import { StoreService } from '../index';
-import { KeyService, KeyStoreParams, KeyType, PSNS } from '../key';
 import { SerializerService } from '../serializer';
 import { ILogger } from '../../logger';
 import { ActivityDataType, ActivityType } from '../../../typedefs/activity';
 import { AppVersion } from '../../../typedefs/app';
-import { SubscriptionCallback } from '../../../typedefs/conductor';
 import { HookRule, HookSignal } from '../../../typedefs/hook';
-import { JobContext, JobData } from '../../../typedefs/job';
-import { PubSubDBApp, PubSubDBSettings } from '../../../typedefs/pubsubdb';
-import { RedisClientType, RedisMultiType } from '../../../typedefs/redis';
+import { RedisClientType, RedisMultiType } from '../../../typedefs/ioredisclient';
+import { JobActivityContext, JobData, JobMetadata, JobOutput } from '../../../typedefs/job';
+import { PubSubDBApp, PubSubDBApps, PubSubDBSettings } from '../../../typedefs/pubsubdb';
 import { IdsData, JobStats, JobStatsRange, StatsType } from '../../../typedefs/stats';
 import { Transitions } from '../../../typedefs/transition';
 
-class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
+class IORedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
   redisClient: RedisClientType;
-  redisSubscriber: RedisClientType;
-  redisStreamer: RedisClientType;
   cache: Cache;
   namespace: string;
-  subscriptionHandler: SubscriptionCallback;
   logger: ILogger;
 
-  constructor(redisClient: RedisClientType, redisSubscriber?: RedisClientType, redisStreamer?: RedisClientType) {
-    super(redisClient, redisSubscriber, redisStreamer);
-    this.redisClient = redisClient;
-    this.redisSubscriber = redisSubscriber;
-    this.redisStreamer = redisStreamer;
+  constructor(redisClient: RedisClientType) {
+    super(redisClient);
   }
 
-  /**
-   * the user calls the constructor to provide the redis instance(s);
-   * the engine calls this method to initialize the store
-   */
-  async init(namespace = PSNS, appId: string, logger: ILogger): Promise<{[appId: string]: PubSubDBApp}> {
+  async init(namespace = PSNS, appId: string, logger: ILogger): Promise<PubSubDBApps> {
     this.namespace = namespace;
     this.logger = logger;
     const settings = await this.getSettings(true);
@@ -43,8 +32,7 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
   }
 
   getMulti(): RedisMultiType {
-    const multi = this.redisClient.MULTI();
-    return multi as unknown as RedisMultiType;
+    return this.redisClient.multi();
   }
 
   mintKey(type: KeyType, params: KeyStoreParams): string {
@@ -73,10 +61,10 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
   }
 
   async setSettings(manifest: PubSubDBSettings): Promise<any> {
-    //PubSubDB heartbeat. If a connection is made, the version will be set
+    //if a connection is made, set the PubSubDB NPM package version
     const params: KeyStoreParams = {};
     const key = this.mintKey(KeyType.PUBSUBDB, params);
-    return await this.redisClient.HSET(key, manifest);
+    return await this.redisClient.hmset(key, manifest);
   }
 
   async getApp(id: string, refresh = false): Promise<PubSubDBApp> {
@@ -84,7 +72,7 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
     if (refresh || !(app && Object.keys(app).length > 0)) {
       const params: KeyStoreParams = { appId: id };
       const key = this.mintKey(KeyType.APP, params);
-      const sApp = await this.redisClient.HGETALL(key);
+      const sApp = await this.redisClient.hgetall(key);
       if (!sApp) return null;
       app = {};
       for (const field in sApp) {
@@ -108,7 +96,7 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
       version,
       [versionId]: `deployed:${new Date().toISOString()}`,
     };
-    await this.redisClient.HSET(key, payload as any);
+    await this.redisClient.hmset(key, payload);
     this.cache.setApp(id, payload);
     return payload;
   }
@@ -128,7 +116,7 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
       Object.entries(payload).forEach(([key, value]) => {
         payload[key] = JSON.stringify(value);
       });
-      return await this.redisClient.HSET(key, payload as any);
+      return await this.redisClient.hmset(key, payload);
     }
     throw new Error(`Version ${version} does not exist for app ${id}`);
   }
@@ -141,28 +129,27 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
       version,
       [`versions/${version}`]: new Date().toISOString()
     };
-    return await this.redisClient.HSET(key, payload as any);
+    return await this.redisClient.hmset(key, payload);
   }
 
-  async setJobStats(jobKey: string, jobId: string, dateTime: string, stats: StatsType, appVersion: AppVersion, multi? : RedisMultiType): Promise<any|string> {
+  async setJobStats(jobKey: string, jobId: string, dateTime: string, stats: StatsType, appVersion: AppVersion, multi? : RedisMultiType): Promise<any> {
     const params: KeyStoreParams = { appId: appVersion.id, jobId, jobKey, dateTime };
-    const privateMulti = multi || this.redisClient.MULTI();
+    const privateMulti = multi || this.redisClient.multi();
     if (stats.general.length) {
       const generalStatsKey = this.mintKey(KeyType.JOB_STATS_GENERAL, params);
       for (const { target, value } of stats.general) {
-        privateMulti.HINCRBYFLOAT(generalStatsKey, target, value as number);
+        privateMulti.hincrbyfloat(generalStatsKey, target, value as number);
       }
     }
     for (const { target, value } of stats.index) {
       const indexParams = { ...params, facet: target };
       const indexStatsKey = this.mintKey(KeyType.JOB_STATS_INDEX, indexParams);
-      privateMulti.RPUSH(indexStatsKey, value.toString());
+      privateMulti.rpush(indexStatsKey, value.toString());
     }
     for (const { target, value } of stats.median) {
       const medianParams = { ...params, facet: target };
       const medianStatsKey = this.mintKey(KeyType.JOB_STATS_MEDIAN, medianParams);
-      // @ts-ignore
-      privateMulti.ZADD(medianStatsKey, { score: value.toString(), value: value.toString() } as any);
+      privateMulti.zadd(medianStatsKey, value.toString(), value.toString());
     }
     if (!multi) {
       return await privateMulti.exec();
@@ -172,8 +159,7 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
   async getJobStats(jobKeys: string[], config: AppVersion): Promise<JobStatsRange> {
     const multi = this.getMulti();
     for (const jobKey of jobKeys) {
-      const jobStatsKey = this.mintKey(KeyType.JOB_STATS_GENERAL, { appId: config.id, jobKey });
-      multi.HGETALL(jobStatsKey);
+      multi.hgetall(jobKey);
     }
     const results = await multi.exec();
     const output: { [key: string]: JobStats } = {};
@@ -195,13 +181,13 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
   async getJobIds(indexKeys: string[], idRange: [number, number]): Promise<IdsData> {
     const multi = this.getMulti();
     for (const idsKey of indexKeys) {
-      multi.LRANGE(idsKey, idRange[0], idRange[1]); //0,-1 returns all ids
+      multi.lrange(idsKey, idRange[0], idRange[1]); //0,-1 returns all ids
     }
     const results = await multi.exec();
     const output: IdsData = {};
     for (const [index, result] of results.entries()) {
       const key = indexKeys[index];
-      const idsList: string[] = result[1];
+      const idsList: string[] = result[1] as string[];
       if (idsList && idsList.length > 0) {
         output[key] = idsList;
       } else {
@@ -211,12 +197,12 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
     return output;
   }
 
-  async updateJobStatus(jobId: string, collationKeyStatus: number, appVersion: AppVersion, multi? : RedisMultiType): Promise<any> {
+  async updateJobStatus(jobId: string, collationKeyStatus: number, appVersion: AppVersion, multi? : any): Promise<any> {
     const jobKey = this.mintKey(KeyType.JOB_DATA, { appId: appVersion.id, jobId });
-    return await (multi || this.redisClient).HINCRBYFLOAT(jobKey, 'm/js', collationKeyStatus);
+    return await (multi || this.redisClient).hincrbyfloat(jobKey, 'm/js', collationKeyStatus);
   }
 
-  async setJob(jobId: string, data: Record<string, unknown>, metadata: Record<string, unknown>, appVersion: AppVersion, multi? : RedisMultiType): Promise<any|string> {
+  async setJob(jobId: string, data: Record<string, unknown>, metadata: Record<string, unknown>, appVersion: AppVersion, multi? : any): Promise<any|string> {
     const hashKey = this.mintKey(KeyType.JOB_DATA, { appId: appVersion.id, jobId });
     const jobData = { }
     if (data && Object.keys(data).length > 0) {
@@ -228,17 +214,19 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
     if (Object.keys(jobData).length !== 0) {
       const hashData = SerializerService.flattenHierarchy({ m: metadata, d: data});
       if (Object.keys(hashData).length !== 0) {
-        await (multi || this.redisClient).HSET(hashKey, hashData);
+        await (multi || this.redisClient).hmset(hashKey, hashData);
         return multi || jobId;
       }
     }
   }
 
-  async getJobMetadata(jobId: string, appVersion: AppVersion): Promise<any> {
-    const metadataFields = ['m/pj', 'm/pa', 'm/aid', 'm/atp', 'm/stp', 'm/jc', 'm/ju', 'm/jid', 'm/key', 'm/ts', 'm/js'];
+  async getJobMetadata(jobId: string, appVersion: AppVersion): Promise<JobMetadata | undefined> {
+    const metadataFields = ['m/ngn', 'm/pj', 'm/pa', 'm/aid', 'm/atp', 'm/stp', 'm/jc', 'm/ju', 'm/jid', 'm/key', 'm/ts', 'm/js'];
     const params: KeyStoreParams = { appId: appVersion.id, jobId };
     const key = this.mintKey(KeyType.JOB_DATA, params);
-    const arrMetadata = await this.redisClient.HMGET(key, metadataFields);
+    // @ts-ignore
+    const arrMetadata = await this.redisClient.hmget(key, metadataFields);
+    //iterate to create an object where the keys are the metadata fields and values are jobMetadata
     const objMetadata = metadataFields.reduce((acc, field, index) => {
       if (arrMetadata[index] === null) return acc; //skip null values (which are optional fields
       acc[field] = arrMetadata[index];
@@ -248,16 +236,16 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
     return metadata.m;
   }
 
-  async getJobContext(jobId: string, appVersion: AppVersion): Promise<JobContext | undefined> {
+  async getJobOutput(jobId: string, appVersion: AppVersion): Promise<JobOutput | undefined> {
     const params: KeyStoreParams = { appId: appVersion.id, jobId };
     const key = this.mintKey(KeyType.JOB_DATA, params);
-    const jobData = await this.redisClient.HGETALL(key);
+    const jobData = await this.redisClient.hgetall(key);
     const data = SerializerService.restoreHierarchy(jobData);
     return data?.m ? { data: data.d, metadata: data.m} : undefined;
   }
 
   async getJobData(jobId: string, appVersion: AppVersion): Promise<JobData | undefined> {
-    const context = await this.getJobContext(jobId, appVersion);
+    const context = await this.getJobOutput(jobId, appVersion);
     return context?.data || undefined;
   }
 
@@ -269,30 +257,32 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
     jobId: string,
     dependsOn: Record<string, string[]>,
     config: AppVersion
-  ): Promise<Partial<JobContext>> {
+  ): Promise<Partial<JobActivityContext>> {
     const multi = this.getMulti();
     const keysAndFields: { activityId: string; key: string; fields: string[] }[] = [];
 
     // 1) get the job metadata
     const jobKey = this.mintKey(KeyType.JOB_DATA, { appId: config.id, jobId });
-    const jobMetdataIds = ['m/pj', 'm/pa', 'm/jid', 'm/key', 'm/ts', 'm/js', 'm/jc', 'm/ju'];
-    multi.HMGET(jobKey, jobMetdataIds);
+    const jobMetdataIds = ['m/ngn', 'm/pj', 'm/pa', 'm/jid', 'm/aid', 'm/key', 'm/ts', 'm/js', 'm/jc', 'm/ju'];
+    // @ts-ignore
+    multi.hmget(jobKey, jobMetdataIds);
     keysAndFields.push({ activityId: '$JOB', key: jobKey, fields: jobMetdataIds });
 
     // 2) iterate dependency list to target-and-pluck data, metadata, and/or hookdata
     for (const [activityId, dependsOnIds] of Object.entries(dependsOn)) {
       const params: KeyStoreParams = { appId: config.id, jobId, activityId };
       const key = this.mintKey(KeyType.JOB_ACTIVITY_DATA, params);
-      multi.HMGET(key, dependsOnIds);
+      // @ts-ignore
+      multi.hmget(key, dependsOnIds);
       keysAndFields.push({ activityId, key, fields: dependsOnIds });
     }
     const results = await multi.exec();
 
     //3) return the restored Context
-    const restoredData: Partial<JobContext> = {};
+    const restoredData: Partial<JobActivityContext> = {};
     for (let i = 0; i < keysAndFields.length; i++) {
       const { activityId, fields } = keysAndFields[i];
-      const data = results[i];
+      const data = results[i][1];
       const upstreamData = SerializerService.restoreHierarchy(fields.reduce(
         (accumulator: Record<string, any>, field, index) => {
           if (data[index] !== null) accumulator[field] = data[index];
@@ -300,6 +290,7 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
         },
         {}
       ));
+
       if (activityId === '$JOB') {
         restoredData.metadata = upstreamData?.m;
       } else {
@@ -321,27 +312,28 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
     }
     return restoredData;
   }
-
+  
   async setActivity(jobId: string, activityId: string, data: Record<string, unknown>, metadata: Record<string, unknown>, hook: Record<string, unknown> | null, appVersion: AppVersion, multi? : RedisMultiType): Promise<RedisMultiType|string>  {
     const hashKey = this.mintKey(KeyType.JOB_ACTIVITY_DATA, { appId: appVersion.id, jobId, activityId });
     const hashData = SerializerService.flattenHierarchy({ m: metadata, d: data, h: hook && Object.keys(hook).length ? hook : undefined });
-    await (multi || this.redisClient).HSET(hashKey, hashData as any);
+    await (multi || this.redisClient).hmset(hashKey, hashData);
     return multi || activityId;
   }
 
   async setActivityNX(jobId: string, activityId: any, config: AppVersion): Promise<number> {
     const hashKey = this.mintKey(KeyType.JOB_ACTIVITY_DATA, { appId: config.id, jobId, activityId });
-    const response = await this.redisClient.HSETNX(hashKey, 'm/aid', activityId);
-    return response ? 1 : 0;
+    const response = await this.redisClient.hsetnx(hashKey, 'm/aid', activityId);
+    return response as number;
   }
 
   async getActivityMetadata(jobId: string, activityId: string, appVersion: AppVersion): Promise<any> {
     const metadataFields = ['m/aid', 'm/atp', 'm/stp', 'm/ac', 'm/au', 'm/jid', 'm/key'];
     const params: KeyStoreParams = { appId: appVersion.id, jobId, activityId };
     const key = this.mintKey(KeyType.JOB_ACTIVITY_DATA, params);
-    const arrMetadata = await this.redisClient.HMGET(key, metadataFields);
+    // @ts-ignore
+    const arrMetadata = await this.redisClient.hmget(key, metadataFields);
     const objMetadata = metadataFields.reduce((acc, field, index) => {
-      if (arrMetadata[index] === null) return acc; //skip null values (which are optional fields
+      if (arrMetadata[index] === null) return acc; //skip null values (which are optional fields)
       acc[field] = arrMetadata[index];
       return acc;
     }, {});
@@ -349,10 +341,10 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
     return metadata.m;
   }
 
-  async getActivityContext(jobId: string, activityId: string, appVersion: AppVersion): Promise<ActivityDataType | null | undefined> {
+  async getActivityContext(jobId: string, activityId: string, appVersion: AppVersion): Promise<ActivityDataType> {
     const params: KeyStoreParams = { appId: appVersion.id, jobId, activityId };
     const key = this.mintKey(KeyType.JOB_ACTIVITY_DATA, params);
-    const activityData = await this.redisClient.HGETALL(key);
+    const activityData = await this.redisClient.hgetall(key);
     if (activityData) {
       const data = SerializerService.restoreHierarchy(activityData);
       if (data) {
@@ -389,7 +381,7 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
       const params: KeyStoreParams = { appId: appVersion.id, appVersion: appVersion.version };
       const key = this.mintKey(KeyType.SCHEMAS, params);
       schemas = {};
-      const hash = await this.redisClient.HGETALL(key);
+      const hash = await this.redisClient.hgetall(key);
       Object.entries(hash).forEach(([key, value]) => {
         schemas[key] = JSON.parse(value as string);
       });
@@ -405,7 +397,7 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
     Object.entries(_schemas).forEach(([key, value]) => {
       _schemas[key] = JSON.stringify(value);
     });
-    const response = await this.redisClient.HSET(key, _schemas);
+    const response = await this.redisClient.hmset(key, _schemas);
     this.cache.setSchemas(appVersion.id, appVersion.version, schemas);
     return response;
   }
@@ -417,7 +409,7 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
     Object.entries(_subscriptions).forEach(([key, value]) => {
       _subscriptions[key] = JSON.stringify(value);
     });
-    await this.redisClient.HSET(key, _subscriptions);
+    const response = await this.redisClient.hmset(key, _subscriptions);
     this.cache.setSubscriptions(appVersion.id, appVersion.version, subscriptions);
   }
 
@@ -428,7 +420,7 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
     } else {
       const params: KeyStoreParams = { appId: appVersion.id, appVersion: appVersion.version };
       const key = this.mintKey(KeyType.SUBSCRIPTIONS, params);
-      subscriptions = await this.redisClient.HGETALL(key) || {};
+      subscriptions = await this.redisClient.hgetall(key) || {};
       Object.entries(subscriptions).forEach(([key, value]) => {
         subscriptions[key] = JSON.parse(value as string);
       });
@@ -450,7 +442,7 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
       _subscriptions[key] = JSON.stringify(value);
     });
     if (Object.keys(_subscriptions).length !== 0) {
-      const response = await this.redisClient.HSET(key, _subscriptions);
+      const response = await this.redisClient.hmset(key, _subscriptions);
       this.cache.setTransitions(appVersion.id, appVersion.version, transitions);
       return response;
     }
@@ -464,7 +456,7 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
       const params: KeyStoreParams = { appId: appVersion.id, appVersion: appVersion.version };
       const key = this.mintKey(KeyType.SUBSCRIPTION_PATTERNS, params);
       transitions = {};
-      const hash = await this.redisClient.HGETALL(key);
+      const hash = await this.redisClient.hgetall(key);
       Object.entries(hash).forEach(([key, value]) => {
         transitions[key] = JSON.parse(value as string);
       });
@@ -480,7 +472,7 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
       _hooks[key.toString()] = JSON.stringify(value);
     });
     if (Object.keys(_hooks).length !== 0) {
-      const response = await this.redisClient.HSET(key, _hooks);
+      const response = await this.redisClient.hmset(key, _hooks);
       this.cache.setHookRules(appVersion.id, hookRules);
       return response;
     }
@@ -492,7 +484,7 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
       return patterns;
     } else {
       const key = this.mintKey(KeyType.HOOKS, { appId: appVersion.id });
-      const _hooks = await this.redisClient.HGETALL(key);
+      const _hooks = await this.redisClient.hgetall(key);
       patterns = {};
       Object.entries(_hooks).forEach(([key, value]) => {
         patterns[key] = JSON.parse(value as string);
@@ -502,53 +494,26 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
     }
   }
 
-  async setHookSignal(hook: HookSignal, appVersion: AppVersion, multi?: RedisMultiType): Promise<any> {
+  async setHookSignal(hook: HookSignal, appVersion: AppVersion, multi? : RedisMultiType): Promise<any> {
     const key = this.mintKey(KeyType.SIGNALS, { appId: appVersion.id });
     const { topic, resolved, jobId} = hook;
-    const payload = {
-      [`${topic}:${resolved}`]: jobId
-    };
-    return await (multi || this.redisClient).HSET(key, payload);
+    return await (multi || this.redisClient).hset(key, `${topic}:${resolved}`, jobId);
   }
 
   async getHookSignal(topic: string, resolved: string, appVersion: AppVersion): Promise<string | undefined> {
     const key = this.mintKey(KeyType.SIGNALS, { appId: appVersion.id });
     const multi = this.getMulti();
-    multi.HGET(key, `${topic}:${resolved}`);
-    multi.HDEL(key, `${topic}:${resolved}`);
-    const response = await multi.exec();
-    return response[0] ? response[0].toString() : undefined;
-  }
-
-  async subscribe(keyType: KeyType.CONDUCTOR, subscriptionHandler: SubscriptionCallback, appVersion: AppVersion): Promise<void> {
-    if (this.redisSubscriber) {
-      const self = this;
-      const topic = this.mintKey(keyType, { appId: appVersion.id });
-      await this.redisSubscriber.subscribe(topic, (message) => {
-        try {
-          const payload = JSON.parse(message);
-          subscriptionHandler(topic, payload);
-        } catch (e) {
-          self.logger.error(`Error parsing message: ${message}`, e);
-        }
-      });
-    }
-  }
-
-  async unsubscribe(topic: string, _: AppVersion): Promise<void> {
-    await this.redisSubscriber?.unsubscribe(topic);
-  }
-
-  async publish(keyType: KeyType.CONDUCTOR, message: Record<string, any>, appVersion: AppVersion): Promise<void> {
-    const topic = this.mintKey(keyType, { appId: appVersion.id });
-    this.redisClient.publish(topic, JSON.stringify(message));
+    multi.hget(key, `${topic}:${resolved}`);
+    multi.hdel(key, `${topic}:${resolved}`);
+    const results = await multi.exec();
+    return results[0][1] as unknown as string;
   }
 
   async addTaskQueues(keys: string[], appVersion: AppVersion): Promise<void> {
     const multi = this.redisClient.multi();
     const zsetKey = this.mintKey(KeyType.WORK_ITEMS, { appId: appVersion.id });
     for (const key of keys) {
-      multi.ZADD(zsetKey, { score: Date.now().toString(), value: key } as any, { NX: true });
+      multi.zadd(zsetKey, 'NX', Date.now(), key);
     }
     await multi.exec();
   }
@@ -558,7 +523,7 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
     let workItemKey = this.cache.getActiveTaskQueue(appId) || null;
     if (!workItemKey) {
       const zsetKey = this.mintKey(KeyType.WORK_ITEMS, { appId });
-      const result = await this.redisClient.ZRANGE(zsetKey, 0, 0);
+      const result = await this.redisClient.zrange(zsetKey, 0, 0);
       workItemKey = result.length > 0 ? result[0] : null;
       if (workItemKey) {
         this.cache.setWorkItem(appId, workItemKey);
@@ -569,64 +534,58 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
 
   async deleteProcessedTaskQueue(workItemKey: string, key: string, processedKey: string, appVersion: AppVersion): Promise<void> {
     const zsetKey = this.mintKey(KeyType.WORK_ITEMS, { appId: appVersion.id });
-    const didRemove = await this.redisClient.ZREM(zsetKey, workItemKey);
+    const didRemove = await this.redisClient.zrem(zsetKey, workItemKey);
     if (didRemove) {
-      await this.redisClient.RENAME(processedKey, key);
+      await this.redisClient.rename(processedKey, key);
     }
     this.cache.removeWorkItem(appVersion.id);
   }
 
   async processTaskQueue(sourceKey: string, destinationKey: string): Promise<any> {
-    return await this.redisClient.LMOVE(sourceKey, destinationKey, 'LEFT', 'RIGHT');
+    return await this.redisClient.lmove(sourceKey, destinationKey, 'LEFT', 'RIGHT');
+  }
+
+  async ping(): Promise<string> {
+    try {
+      return await this.redisClient.ping();
+    } catch (err) {
+      this.logger.error('Error in pinging redis', err);
+      throw err;
+    }
+  }
+
+  async publish(keyType: KeyType.CONDUCTOR, message: Record<string, any>, appId: string, engineId?: string): Promise<void> {
+    const topic = this.mintKey(keyType, { appId, engineId });
+    await this.redisClient.publish(topic, JSON.stringify(message));
   }
 
   async xgroup(command: 'CREATE', key: string, groupName: string, id: string, mkStream?: 'MKSTREAM'): Promise<boolean> {
-    const args = mkStream === 'MKSTREAM' ? ['MKSTREAM'] : [];
-    try {
-      return (await this.redisStreamer.sendCommand(['XGROUP', 'CREATE', key, groupName, id, ...args])) === 1;
-    } catch (err) {
-      const streamType = mkStream === 'MKSTREAM' ? 'with MKSTREAM' : 'without MKSTREAM';
-      this.logger.error(`Error in creating a consumer group ${streamType} for key: ${key} and group: ${groupName}`, err);
-      throw err;
+    if (mkStream === 'MKSTREAM') {
+      try {
+        return (await this.redisClient.xgroup(command, key, groupName, id, mkStream)) === 'OK';
+      } catch (err) {
+        this.logger.warn(`Consumer group not created with MKSTREAM for key: ${key} and group: ${groupName}`, err);
+        throw err;
+      }
+    } else {
+      try {
+        return (await this.redisClient.xgroup(command, key, groupName, id)) === 'OK';
+      } catch (err) {
+        this.logger.warn(`Consumer group not created for key: ${key} and group: ${groupName}`, err);
+        throw err;
+      }
     }
   }
 
   async xadd(key: string, id: string, ...args: string[]): Promise<string> {
     try {
-      return await this.redisStreamer.sendCommand(['XADD', key, id, ...args]);
+      return await this.redisClient.xadd(key, id, ...args);
     } catch (err) {
-      this.logger.error(`Error in adding data to stream with key: ${key}`, err);
-      throw err;
-    }
-  }
-  
-  async xreadgroup(
-    command: 'GROUP',
-    groupName: string,
-    consumerName: string,
-    blockOption: 'BLOCK'|'COUNT',
-    blockTime: number|string,
-    streamsOption: 'STREAMS',
-    streamName: string,
-    id: string
-  ): Promise<string[][][] | null> {
-    try {
-      return await this.redisStreamer.sendCommand(['XREADGROUP', command, groupName, consumerName, blockOption, blockTime.toString(), streamsOption, streamName, id]);
-    } catch (err) {
-      this.logger.error(`Error in reading data from group: ${groupName} in stream: ${streamName}`, err);
+      this.logger.error(`Error publishing 'xadd'; key: ${key}`, err);
       throw err;
     }
   }
 
-  async xack(key: string, group: string, ...ids: string[]): Promise<number> {
-    try {
-      return await this.redisStreamer.sendCommand(['XACK', key, group, ...ids]);
-    } catch (err) {
-      this.logger.error(`Error in acknowledging messages in group: ${group} for key: ${key}`, err);
-      throw err;
-    }
-  }
-  
   async xpending(
     key: string,
     group: string,
@@ -634,20 +593,15 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
     end?: string,
     count?: number,
     consumer?: string
-  ): Promise<[string, string, number, [string, number][]][] | [string, string, number, number]> {
+  ): Promise<[string, string, number, [string, number][]][] | [string, string, number, number] | unknown[]> {
     try {
-      const args = [key, group];
-      if (start) args.push(start);
-      if (end) args.push(end);
-      if (count !== undefined) args.push(count.toString());
-      if (consumer) args.push(consumer);
-      return await this.redisStreamer.sendCommand(['XPENDING', ...args]);
+      return await this.redisClient.xpending(key, group, start, end, count, consumer);
     } catch (err) {
-      this.logger.error(`Error in retrieving pending messages for group: ${group} in key: ${key}`, err);
+      this.logger.error(`Error in retrieving pending messages for [stream ${key}], [group ${group}]`, err);
       throw err;
     }
   }
-  
+
   async xclaim(
     key: string,
     group: string,
@@ -655,23 +609,32 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
     minIdleTime: number,
     id: string,
     ...args: string[]
-  ): Promise<[string, string][]> {
+  ): Promise<[string, string][] | unknown[]> {
     try {
-      return await this.redisStreamer.sendCommand(['XCLAIM', key, group, consumer, minIdleTime.toString(), id, ...args]);
+      return await this.redisClient.xclaim(key, group, consumer, minIdleTime, id, ...args);
     } catch (err) {
       this.logger.error(`Error in claiming message with id: ${id} in group: ${group} for key: ${key}`, err);
       throw err;
     }
   }
 
-  async xdel(key: string, ...ids: string[]): Promise<number> {
+  async xack(key: string, group: string, id: string, multi? : RedisMultiType): Promise<number|RedisMultiType> {
     try {
-      return await this.redisStreamer.sendCommand(['XDEL', key, ...ids]);
+      return await (multi || this.redisClient).xack(key, group, id);
     } catch (err) {
-      this.logger.error(`Error in deleting messages with ids: ${ids} for key: ${key}`, err);
+      this.logger.error(`Error in acknowledging messages in group: ${group} for key: ${key}`, err);
+      throw err;
+    }
+  }
+
+  async xdel(key: string, id: string, multi? : RedisMultiType): Promise<number|RedisMultiType> {
+    try {
+      return await (multi || this.redisClient).xdel(key, id);
+    } catch (err) {
+      this.logger.error(`Error in deleting messages with id: ${id} for key: ${key}`, err);
       throw err;
     }
   }
 }
 
-export { RedisStoreService };
+export { IORedisStoreService };

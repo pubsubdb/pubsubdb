@@ -1,7 +1,7 @@
 import { ILogger } from '../logger';
 import { StoreService as Store } from '../store';
 import {AppVersion} from '../../typedefs/app';
-import { RedisClient, RedisMulti } from '../../typedefs/store';
+import { RedisClient, RedisMulti } from '../../typedefs/redis';
 import {
   GetStatsOptions,
   StatsResponse,

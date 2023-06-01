@@ -14,7 +14,7 @@ import {
   ActivityType,
   HookData
 } from "../../../typedefs/activity";
-import { JobContext } from "../../../typedefs/job";
+import { JobActivityContext } from "../../../typedefs/job";
 
 class Await extends Activity {
   config: AwaitActivity;
@@ -25,7 +25,7 @@ class Await extends Activity {
     metadata: ActivityMetadata,
     hook: HookData | null,
     pubsubdb: PubSubDBService,
-    context?: JobContext) {
+    context?: JobActivityContext) {
       super(config, data, metadata, hook, pubsubdb, context);
   }
 
@@ -59,10 +59,11 @@ class Await extends Activity {
   }
 
   async execActivity(): Promise<void> {
-    const context: JobContext = { 
+    const context: JobActivityContext = { 
       data: this.context.data,
       metadata: { 
         ...this.context.metadata,
+        ngn: undefined,
         pj: this.context.metadata.jid,
         pa: this.metadata.aid
       }

@@ -1,5 +1,5 @@
 import { Pipe } from "../pipe";
-import { JobContext } from "../../typedefs/job";
+import { JobActivityContext } from "../../typedefs/job";
 import { Pipe as PipeType } from "../../typedefs/pipe";
 import { Match, TransitionRule } from "../../typedefs/transition";
 
@@ -7,9 +7,9 @@ type RuleType = null | undefined | boolean | string | number | Date | Record<str
 
 class MapperService {
   private rules: Record<string, unknown>;
-  private data: JobContext;
+  private data: JobActivityContext;
 
-  constructor(rules: Record<string, unknown>, data: JobContext) {
+  constructor(rules: Record<string, unknown>, data: JobActivityContext) {
     this.rules = rules;
     this.data = data;
   }
@@ -54,7 +54,7 @@ class MapperService {
     return pipe.process();
   }
 
-  static evaluate(transitionRule: TransitionRule|boolean, context: JobContext): boolean {
+  static evaluate(transitionRule: TransitionRule|boolean, context: JobActivityContext): boolean {
     if (typeof transitionRule === 'boolean') {
       return transitionRule;
     }

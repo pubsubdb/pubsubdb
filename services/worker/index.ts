@@ -2,7 +2,7 @@ import { ILogger } from '../logger';
 import { PubSubDBService } from '../pubsubdb';
 import { StoreService } from '../store';
 import { AppVersion } from '../../typedefs/app';
-import { RedisClient, RedisMulti } from '../../typedefs/store';
+import { RedisClient, RedisMulti } from '../../typedefs/redis';
 
 class WorkerService {
   appVersion: AppVersion;

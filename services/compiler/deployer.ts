@@ -1,7 +1,7 @@
 import { ActivityType } from "../../typedefs/activity";
 import { HookRule } from "../../typedefs/hook";
 import { PubSubDBGraph, PubSubDBManifest } from "../../typedefs/pubsubdb";
-import { RedisClient, RedisMulti } from "../../typedefs/store";
+import { RedisClient, RedisMulti } from "../../typedefs/redis";
 import { CollatorService } from "../collator";
 import { StoreService } from '../store';
 
@@ -9,16 +9,20 @@ type JsonObject = { [key: string]: any };
 
 class Deployer {
   manifest: PubSubDBManifest | null = null;
-  private store: StoreService<RedisClient, RedisMulti> | null;
+  store: StoreService<RedisClient, RedisMulti> | null;
 
-  async deploy(manifest: PubSubDBManifest, store: StoreService<RedisClient, RedisMulti>) {
+  constructor(manifest: PubSubDBManifest) {
     this.manifest = manifest;
-    this.store = store;
+  }
 
+  async deploy(store: StoreService<RedisClient, RedisMulti>) {
+    this.store = store;
     //external compilation services (collator, etc)
     CollatorService.compile(this.manifest.app.graphs);
 
     //local compilation services
+    this.copyJobSchemas();
+    this.copyPublishTopics();
     this.resolveMappingDependencies();
     await this.deployHookPatterns();
     await this.deployActivitySchemas();
@@ -35,6 +39,49 @@ class Deployer {
       id: this.manifest.app.id,
       version: this.manifest.app.version,
     };
+  }
+
+  /**
+   * job schemas are copied to the trigger activity, as the trigger
+   * is a standin for the overall job. this lets users model things
+   * intuitively, but lets the system optimize around this conflation.
+   */
+  copyJobSchemas() {
+    const graphs = this.manifest!.app.graphs;
+    for (const graph of graphs) {
+      const jobSchema = graph.output?.schema;
+      const outputSchema = graph.input?.schema;
+      if (!jobSchema && !outputSchema) continue;
+      const activities = graph.activities;
+      // Find the trigger activity and bind the job schema to it
+      // at execution time, the trigger is a standin for the job
+      for (const activityKey in activities) {
+        if (activities[activityKey].type === 'trigger') {
+          const trigger = activities[activityKey];
+          if (jobSchema) {
+            //possible for trigger to have job mappings
+            if (!trigger.job) { trigger.job = {}; }
+            trigger.job.schema = jobSchema;
+          }
+          if (outputSchema) {
+            //impossible for trigger to have output mappings.
+            trigger.output = { schema: outputSchema };
+          }
+        }
+      }
+    }
+  }
+
+  //makes runtime subscription lookups faster by copying the schemas
+  copyPublishTopics() {
+    for (const graph of this.manifest!.app.graphs) {
+      const activities = graph.activities;
+      for (const activityKey in activities) {
+        if (graph.publishes) {
+          activities[activityKey].publishes = graph.publishes;
+        }
+      }
+    }
   }
 
   resolveMappingDependencies() {

@@ -1,51 +1,68 @@
-import { getSubscriptionTopic, getGuid } from '../../modules/utils';
+import { KeyType, PSNS } from '../../modules/key';
+import { getSubscriptionTopic, getGuid, sleepFor } from '../../modules/utils';
 import { CollatorService } from '../collator';
 import { CompilerService } from '../compiler';
 import { LoggerService, ILogger } from '../logger';
 import { ReporterService as Reporter } from '../reporter';
-import { SignalerService } from '../signaler';
+import { StoreSignaler } from '../signaler/store';
+import { StreamSignaler } from '../signaler/stream';
 import { StoreService } from '../store';
-import { KeyType, PSNS } from '../store/key';
+import { StreamService } from '../stream';
+import { SubService } from '../sub';
 import { WorkerService } from '../worker';
 import Activities from './activities';
-import { Activity, ActivityType } from './activities/activity';
+import { Activity } from './activities/activity';
 import { Await } from './activities/await';
 import { Exec } from './activities/exec';
 import { Trigger } from './activities/trigger';
-import { ActivityMetadata } from '../../typedefs/activity';
-import { ConductorMessage, SubscriptionCallback } from '../../typedefs/conductor';
-import { JobContext, JobData, MinimumInitialJobContext } from '../../typedefs/job';
+import { ActivityMetadata, ActivityType } from '../../typedefs/activity';
+import { AppVersion } from '../../typedefs/app';
+import {
+  ConductorMessage,
+  JobMessage,
+  JobMessageCallback,
+  SubscriptionCallback } from '../../typedefs/conductor';
+import {
+  JobActivityContext,
+  JobData,
+  JobOutput,
+  PartialJobContext } from '../../typedefs/job';
 import {
   PubSubDBApps,
   PubSubDBConfig,
   PubSubDBManifest,
   PubSubDBSettings } from '../../typedefs/pubsubdb';
+import { RedisClient, RedisMulti } from '../../typedefs/redis';
 import {
   JobStatsInput,
   GetStatsOptions,
   IdsResponse,
   StatsResponse } from '../../typedefs/stats';
-import { AppVersion } from '../../typedefs/app';
-import { RedisClient, RedisMulti } from '../../typedefs/store';
 import { StreamDataResponse } from '../../typedefs/stream';
 
-//todo: can be multiple instances; track as a Map
 let instance: PubSubDBService;
 
 //wait time to see if quorum is reached
 const QUORUM_DELAY = 250;
 
+//wait time to see if a job is complete
+const OTT_WAIT_TIME = 1000;
+
 class PubSubDBService {
   namespace: string;
-  appId: string;
-  store: StoreService<RedisClient, RedisMulti> | null;
   apps: PubSubDBApps | null;
-  signaler: SignalerService | null;
-  logger: ILogger;
+  appId: string;
   guid: string;
+  store: StoreService<RedisClient, RedisMulti> | null;
+  stream: StreamService<RedisClient, RedisMulti> | null;
+  subscribe: SubService<RedisClient, RedisMulti> | null;
+  storeSignaler: StoreSignaler | null;
+  streamSignaler: StreamSignaler | null;
+  logger: ILogger;
   cacheMode: 'nocache' | 'cache' = 'cache';
   untilVersion: string | null = null;
   quorum: number | null = null;
+  jobCallbacks: Record<string, JobMessageCallback> = {};
 
   verifyNamespace(namespace?: string) {
     if (!namespace) {
@@ -67,28 +84,47 @@ class PubSubDBService {
     }
   }
 
-  async verifyStore(store: StoreService<RedisClient, RedisMulti>): Promise<AppVersion> {
-    if (!(store instanceof StoreService)) {
-      throw new Error(`store ${store} is invalid`);
-    } else {
-      this.store = store;
-      this.apps = await this.store.init(this.namespace, this.appId, this.logger);
-      return { id: this.appId, version: this.apps[this.appId].version};
+  verifyEngineFields(config: PubSubDBConfig) {
+    if (!(config.engine.store instanceof StoreService) || 
+      !(config.engine.stream instanceof StreamService) ||
+      !(config.engine.sub instanceof SubService)) {
+      throw new Error('engine config must include `store`, `stream`, and `sub` fields.');
     }
   }
 
-  registerAdapters({ adapters }: PubSubDBConfig) {
-    adapters?.forEach((adapter) => {
-      if (adapter.topic && adapter.callback) {
-        const key = this.store?.mintKey(KeyType.STREAMS, { appId: this.appId, topic: adapter.topic });
-        this.signaler.consumeMessages(key, 'ADAPTER', this.guid, adapter.callback);
-      }
-    });
+  async registerEngine(config: PubSubDBConfig): Promise<AppVersion> {
+    if (config.engine) {
+      this.verifyEngineFields(config);
+      this.store = config.engine.store;
+      this.stream = config.engine.stream;
+      this.subscribe = config.engine.sub;
+      //initialize the `store` client for read/write data access
+      this.apps = await this.store.init(this.namespace, this.appId, this.logger);
+      const appConfig = await this.getAppConfig();
+      //initialize the `sub` client (will wire-up all subscriptions needed by the engine)
+      await this.subscribe.init(this.namespace, this.appId, this.guid, this.logger, this.subscriptionHandler());
+      //initialize the `stream` client and signaler to get buffered tasks
+      this.stream.init(this.namespace, this.appId, this.logger);
+      const key = this.stream.mintKey(KeyType.STREAMS, { appId: this.appId });
+      this.streamSignaler = new StreamSignaler(this.appId, this.stream, this.store, this.logger);
+      this.streamSignaler.consumeMessages(key, 'ENGINE', this.guid, this.processWorkerResponse.bind(this));
+      //bind handler that processes external signals (webhooks) from outside callers
+      this.storeSignaler = new StoreSignaler(appConfig, this);
+      //chip away at any outstanding `quorum tasks` (like `hookAll`, `garbage collection`, etc.)
+      this.processWorkItems();
+      return appConfig;
+    }
   }
 
-  registerEngine() {
-    const key = this.store?.mintKey(KeyType.STREAMS, { appId: this.appId });
-    this.signaler.consumeMessages(key, 'ENGINE', this.guid, this.routeAdapterResponse.bind(this));
+  registerWorkers({ workers }: PubSubDBConfig) {
+    workers?.forEach((worker) => {
+      if (worker.topic && worker.callback && worker.stream) {
+        worker.stream.init(this.namespace, this.appId, this.logger);
+        const key = worker.stream.mintKey(KeyType.STREAMS, { appId: this.appId, topic: worker.topic });
+        worker.streamSignaler = new StreamSignaler(this.appId, worker.stream, worker.store, this.logger);
+        worker.streamSignaler.consumeMessages(key, 'WORKER', this.guid, worker.callback);
+      }
+    });
   }
 
   /**
@@ -99,22 +135,9 @@ class PubSubDBService {
     instance.logger = new LoggerService(config.logger);
     instance.verifyNamespace(config.namespace);
     instance.verifyAppId(config.appId);
-    const appConfig = await instance.verifyStore(config.store);
-    await instance.store.subscribe(
-      KeyType.CONDUCTOR,
-      instance.subscriptionHandler(),
-      appConfig
-    );
     instance.guid = getGuid();
-    instance.signaler = new SignalerService(
-      appConfig,
-      instance.store,
-      instance.logger,
-      instance
-    );
-    instance.registerEngine();
-    instance.registerAdapters(config);
-    instance.processWorkItems();
+    await instance.registerEngine(config);
+    instance.registerWorkers(config);
     return instance;
   }
 
@@ -149,15 +172,25 @@ class PubSubDBService {
       if (message.type === 'activate') {
         self.setCacheMode(message.cache_mode, message.until_version);
       } else if (message.type === 'ping') {
-        self.store.publish(KeyType.CONDUCTOR, { type: 'pong', guid: self.guid, originator: message.originator }, await this.getAppConfig());
+        self.store.publish(KeyType.CONDUCTOR, { type: 'pong', guid: self.guid, originator: message.originator }, this.appId);
       } else if (message.type === 'pong') {
         if (self.guid === message.originator) {
           self.quorum = self.quorum + 1;
         }
       } else if (message.type === 'work') {
         self.processWorkItems()
+      } else if (message.type === 'job') {
+        self.routeToSubscribers(message.topic, message.job)
       }
     };
+  }
+
+  async routeToSubscribers(topic: string, message: JobOutput) {
+    const jobCallback = this.jobCallbacks[message.metadata.jid];
+    if (jobCallback) {
+      this.delistJobCallback(message.metadata.jid);
+      jobCallback(topic, message);
+    }
   }
 
   async processWorkItems() {
@@ -169,14 +202,14 @@ class PubSubDBService {
   async requestQuorum(): Promise<number> {
     const quorum = this.quorum;
     this.quorum = 0;
-    await this.store.publish(KeyType.CONDUCTOR, { type: 'ping', originator: this.guid }, await this.getAppConfig())
-    await new Promise(resolve => setTimeout(resolve, QUORUM_DELAY));
+    await this.store.publish(KeyType.CONDUCTOR, { type: 'ping', originator: this.guid }, this.appId);
+    await sleepFor(QUORUM_DELAY);
     return quorum;
   }
 
 
   // ************* METADATA/MODEL METHODS *************
-  async initActivity(topic: string, data: JobData, context?: JobContext): Promise<Activity> {
+  async initActivity(topic: string, data: JobData, context?: JobActivityContext): Promise<Activity> {
     if (!data) {
       throw new Error(`payload data is required and must be an object`);
     }
@@ -247,7 +280,7 @@ class PubSubDBService {
       this.store.publish(
         KeyType.CONDUCTOR,
         { type: 'activate', cache_mode: 'nocache', until_version: version },
-        await this.getAppConfig()
+        this.appId
       );
       await new Promise(resolve => setTimeout(resolve, QUORUM_DELAY));
       //confirm we received the activation message
@@ -293,42 +326,30 @@ class PubSubDBService {
   }
 
 
-  // ********************** XSTREAM/RESOLVE METHOD ***********************
-  async routeAdapterResponse(streamData: StreamDataResponse): Promise<void> {
-    const context: MinimumInitialJobContext = {
+  // ****************** `EXEC` ACTIVITY RE-ENTRY POINT *****************
+  async processWorkerResponse(streamData: StreamDataResponse): Promise<void> {
+    const context: PartialJobContext = {
       metadata: {
         jid: streamData.metadata.jid,
         aid: streamData.metadata.aid,
       },
       data: streamData.data,
     };
-    const activityHandler = await this.initActivity(`.${streamData.metadata.aid}`, context.data, context as JobContext) as Exec;
+    const activityHandler = await this.initActivity(`.${streamData.metadata.aid}`, context.data, context as JobActivityContext) as Exec;
     //return void; it is a signal to the
-    await activityHandler.processAdapterResponse(streamData.status);
+    await activityHandler.processWorkerResponse(streamData.status);
   }
 
 
-  // ********************** ASYNC/RESOLVE METHODS ***********************
-  hasParentJob(context: JobContext): boolean {
+  // ***************** `ASYNC` ACTIVITY RE-ENTRY POINT ****************
+  hasParentJob(context: JobActivityContext): boolean {
     return Boolean(context.metadata.pj && context.metadata.pa);
   }
-  async transitionJob(context: JobContext, toDecrement: number): Promise<void> {
-    if (toDecrement) {
-      const activityStatus = await this.store.updateJobStatus(
-        context.metadata.jid,
-        toDecrement,
-        await this.getAppConfig()
-      );
-      if (CollatorService.isJobComplete(activityStatus) && this.hasParentJob(context)) {
-        await this.resolveAwait(context); //todo: add job to a 'completed' worker list
-      }
-    }
-  }
-  async resolveAwait(context: JobContext) {
+  async resolveAwait(context: JobActivityContext) {
     if (this.hasParentJob(context)) {
       const completedJobId = context.metadata.jid;
       const config = await this.getAppConfig();
-      const parentContext: Partial<JobContext> = {
+      const parentContext: Partial<JobActivityContext> = {
         data: await this.store.getJob(completedJobId, config),
         metadata: { 
           ...context.metadata,
@@ -338,15 +359,15 @@ class PubSubDBService {
           pa: undefined,
         }
       };
-      const activityHandler = await this.initActivity(`.${parentContext.metadata.aid}`, parentContext.data, parentContext as JobContext) as Await;
+      const activityHandler = await this.initActivity(`.${parentContext.metadata.aid}`, parentContext.data, parentContext as JobActivityContext) as Await;
       return await activityHandler.resolveAwait();
     }
   }
 
 
-  // ********************** SIGNAL/HOOK METHODS ***********************
+  // ****************** `HOOK` ACTIVITY RE-ENTRY POINT *****************
   async hook(topic: string, data: JobData) {
-    const hookRule = await this.signaler.getHookRule(topic);
+    const hookRule = await this.storeSignaler.getHookRule(topic);
     if (hookRule) {
       const activityHandler = await this.initActivity(`.${hookRule.to}`, data);
       return await activityHandler.processHookSignal();
@@ -355,14 +376,14 @@ class PubSubDBService {
     }
   }
   async hookAll(hookTopic: string, data: JobData, query: JobStatsInput, queryFacets: string[] = []): Promise<string[]> {
-    const { id, version } = await this.getAppConfig();
-    const hookRule = await this.signaler.getHookRule(hookTopic);
+    const config = await this.getAppConfig();
+    const hookRule = await this.storeSignaler.getHookRule(hookTopic);
     if (hookRule) {
-      const subscriptionTopic = await getSubscriptionTopic(hookRule.to, this.store, { id, version })
+      const subscriptionTopic = await getSubscriptionTopic(hookRule.to, this.store, config)
       const resolvedQuery = await this.resolveQuery(subscriptionTopic, query);
-      const reporter = new Reporter({ id, version }, this.store, this.logger);
+      const reporter = new Reporter(config, this.store, this.logger);
       const workItems = await reporter.getWorkItems(resolvedQuery, queryFacets);
-      const workerService = new WorkerService({ id, version}, this, this.store, this.logger);
+      const workerService = new WorkerService(config, this, this.store, this.logger);
       await workerService.enqueueWorkItems(
         workItems.map(
           workItem => `${hookTopic}::${workItem}::${JSON.stringify(data)}`
@@ -370,7 +391,7 @@ class PubSubDBService {
       this.store.publish(
         KeyType.CONDUCTOR,
         { type: 'work', originator: this.guid },
-        { id, version }
+        this.appId
       );
       return workItems;
     } else {
@@ -379,8 +400,9 @@ class PubSubDBService {
   }
 
 
-  // ************************** PUB/SUB METHODS **************************
-  async pub(topic: string, data: JobData, context?: JobContext) {
+  // ********************** PUB/SUB ENTRY POINT **********************
+  //publish (returns just the job id)
+  async pub(topic: string, data: JobData, context?: JobActivityContext) {
     const activityHandler = await this.initActivity(topic, data, context);
     if (activityHandler) {
       return await activityHandler.process();
@@ -388,13 +410,95 @@ class PubSubDBService {
       throw new Error(`unable to process activity for topic ${topic}`);
     }
   }
-  sub(topic: string, callback: (data: Record<string, any>) => void) {
+  //subscribe to all jobs for a topic
+  async sub(topic: string, callback: JobMessageCallback): Promise<void> {
+    const subscriptionCallback: SubscriptionCallback = async (topic: string, message: {topic: string, job: JobOutput}) => {
+      callback(message.topic, message.job);
+    };
+    return await this.subscribe.subscribe(KeyType.CONDUCTOR, subscriptionCallback, this.appId, topic);
+  }
+  //unsubscribe to all jobs for a topic
+  async unsub(topic: string): Promise<void> {
+    return await this.subscribe.unsubscribe(KeyType.CONDUCTOR, this.appId, topic);
+  }
+  //publish and await (returns the job and data (if ready)); throws error with jobid if not
+  async pubsub(topic: string, data: JobData, timeout = OTT_WAIT_TIME): Promise<JobOutput> {
+    const context = { metadata: { ngn: this.guid } } as JobActivityContext;
+    const jobId = await this.pub(topic, data, context);
+    return new Promise((resolve, reject) => {
+      this.registerJobCallback(jobId, (topic: string, output: JobOutput) => {
+        resolve(output);
+      });
+      setTimeout(() => {
+        this.delistJobCallback(jobId);
+        reject({
+          status: 'error',
+          type: 'timeout',
+          id: jobId,
+        });
+      }, timeout);
+    });
+  }
+  async resolveOneTimeSubscription(context: JobActivityContext) {
+    if (this.hasOneTimeSubscription(context)) {
+      const config = await this.getAppConfig();
+      const jobOutput = await this.store.getJobOutput(context.metadata.jid, config);
+      const message: JobMessage = {
+        type: 'job',
+        topic: context.metadata.jid,
+        job: jobOutput,
+      };
+      this.store.publish(KeyType.CONDUCTOR, message, this.appId, context.metadata.ngn);
+    }
+  }
+  async resolvePersistentSubscriptions(context: JobActivityContext) {
+    const config = await this.getAppConfig();
+    const schema = await this.store.getSchema(context.metadata.aid, config);
+    const topic = schema.publishes;
+    if (topic) {
+      const jobOutput = await this.store.getJobOutput(context.metadata.jid, config);
+      const message: JobMessage = {
+        type: 'job',
+        topic,
+        job: jobOutput,
+      };
+      this.store.publish(KeyType.CONDUCTOR, message, this.appId, topic);
+    }
+  }
+  registerJobCallback(jobId: string, jobCallback: JobMessageCallback) {
+    this.jobCallbacks[jobId] = jobCallback;
+  }
+  delistJobCallback(jobId: string) {
+    delete this.jobCallbacks[jobId];
+  }
+  hasOneTimeSubscription(context: JobActivityContext): boolean {
+    return Boolean(context.metadata.ngn);
   }
 
 
-  // ***************** STORE METHODS (ACTIVITY/JOB DATA) *****************
+  // ***************** JOB COMPLETION/CLEANUP *****************
+  async updateJobStatus(context: JobActivityContext, toDecrement: number): Promise<void> {
+    if (toDecrement) {
+      const activityStatus = await this.store.updateJobStatus(
+        context.metadata.jid,
+        toDecrement,
+        await this.getAppConfig()
+      );
+      if (CollatorService.isJobComplete(activityStatus)) {
+        this.runJobCompletionTasks(context);
+      }
+    }
+  }
+  runJobCompletionTasks(context: JobActivityContext) {
+    this.resolveAwait(context);
+    this.resolveOneTimeSubscription(context);
+    this.resolvePersistentSubscriptions(context);
+    //todo: this.markJobComplete(context);
+  }
+
+
+  // *************** COMMON/ALIASED STORE METHODS *****************
   async get(key: string) {
-    //get job by id
     return this.store.getJob(key, await this.getAppConfig());
   }
 }

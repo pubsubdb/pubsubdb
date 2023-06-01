@@ -2,29 +2,28 @@
 ![alpha release](https://img.shields.io/badge/release-alpha-yellow)
 
 ## Overview
-PubSubDB is a unified *integration*, *orchestration*, and *operational data* platform. Design your key business workflows using standard graph notation, while PubSubDB handles the implementation. PubSubDB is designed to work with any backend data store, with a reference implementation using *Redis*. Refer to this guide for more information on how to get started with PubSubDB.
+The issue of asymmetry in microservices and the cloud in general isn\'t new. It\'s a significant challenge that solutions like Kafka were designed to address. The core principle behind these solutions is [CQRS](https://learn.microsoft.com/en-us/azure/architecture/patterns/cqrs), which separates the responsibility of publishing events and consuming them. This serves to absorb spikes and smooth the flow of information between services.
+
+Consider an analogy: you\'re coordinating a relay race. An event streaming solution like Kafka would serve as your detailed ledger, recording when the race began, who had the baton, when it was passed on, etc. You could wire up consumers to this ledger, developing a real-time app showing runners\' positions, baton handoffs, and timings.
+
+In contrast, think of PubSubDB as an on-the-ground, real-time race coach. It\'s not just logging events—it\'s instructing runners when to start, when to pass the baton, when to stop. It\'s managing the *execution* of the race, rather than simply recording its progress.
+
+This real-time coordination is driven by Redis, which serves as PubSubDB\'s backend. Redis behaves like a flexible buffer, expanding and contracting as necessary to match the pace of information flow. If all receivers perform as expected, Redis stays slim and essentially serves as a network router, executing stateful workflows at stateless speeds.
 
 ## Benefits
-PubSubDB is distinguished by is its elegant twist on state management. The magic happens at compilation when the rules of the system are compiled down to pure events. The end result is a high-performance, low-latency workflow engine that can model any complex business process at a fraction of the cost.
+In the realm of network flow management, PubSubDB enables developers not just to adapt to changes in network flow, but to actively control it. Pause entire work streams, analyze and redirect. Watch as PubSubDB automatically catches up to the current state of the network.
 
-### Operationalized Data
-Expose a real-time operational data layer with microsecond latency. The correlation engine will manage the entire cascade of business events, implicitly orchestrating the event stream through its conclusion.
+### Uniform Data Exchange
+Integrate external SaaS services without burst, timeout or orverprovisioning risk.
 
-### Point-to-Point Integration
-Map data between internal systems and external SaaS services, using standard Open API specs to define activities. Synchronize data between systems by mapping outputs from upstream activities.
-
-### Workflow Orchestration
-Unify the third-party tools used by lines of business (e.g, Asana, Slack) with internal systems. Design long-running approval processes with complex conditional processing.
+### Sophisticated Multi-System Workflows
+Design long-running multi-step approvals across departments and services.
 
 ### Actionable Analytics
-Design self-referential flows that react to events at scale. Gather process-level insights about aggregate processes over time.
+Gather actionable insights about aggregate processes over time.
 
-## System Design
-PubSubDB uses standard graph notation to define the activities (nodes) and transitions (edges) between them. Consider the following sequence of 3 activities.
-
-![Multistep Workflow](./docs/img/workflow.png)
-
-Multistep workflows like this are defined using YAML and adhere to the Open API 3.0 specfication. This approach allows PubSubDB to leverage standard Open API specs when orchestrating API endpoints. For example, the *input* and *output* schemas for the **[Create Asana Task]** activity above are already defined in the official Asana Open API specification, and the extension can reference them using a standard `$ref` tag.
+### Loosely Coupled Maintainability
+Promote the creation of adaptable, loosely-coupled systems.
 
 ## Install
 [![npm version](https://badge.fury.io/js/%40pubsubdb%2Fpubsubdb.svg)](https://badge.fury.io/js/%40pubsubdb%2Fpubsubdb)
@@ -34,95 +33,168 @@ npm install @pubsubdb/pubsubdb
 ```
 
 ## Initialize
-Pass your Redis client library (`redis` and `ioredis` are supported) to serve as the backend Data Store used by PubSubDB:
+Pass a Redis client (`redis` and `ioredis` are supported) to serve as the backend when initializing PubSubDB.
 
 ```ts
-import { PubSubDB, RedisStore } from '@pubsubdb/pubsubdb';
+import {
+  PubSubDB,
+  RedisStore,
+  RedisStream,
+  RedisSub } from '@pubsubdb/pubsubdb';
 
-//initialize 3 standard Redis clients using `ioredis` or `redis`
-const pubClient = await getRedisClient(...)
-const subClient = await getReadOnlyRedisClient(...)
-const xstreamClient = await getRedisClient(...)
+//init 3 Redis clients using `ioredis` or `redis` NPM packages
+const storeClient = await getRedisClient(...)
+const streamClient = await getRedisClient(...)
+const subClient = await getRedisClient(...)
 
-//note: use `RedisStore` if using the `redis` npm package
-const store = new IORedisStore(pubClient, subClient, xstreamClient);
-
-//initialize PubSubDB
-pubSubDB = await PubSubDB.init({ appId: 'myapp', store});
+//init/start PubSubDB
+const pubSubDB = await PubSubDB.init({
+  appId: 'myapp',
+  engine: {
+    store: new RedisStore(storeClient),
+    stream: new RedisStream(streamClient),
+    sub: new RedisSub(subClient),
+  }
+});
 ```
 
 ## Design
-PubSub DB apps are modeled using YAML. These can be considered the execution instructions for the app, describing its activity and data flow. For introductory purposes, let's consider the simplest flow possible: *a one-step process*. 
+PubSubDB apps are modeled using YAML. These are the *execution instructions* for the app, describing its activity and data flow. Consider the following example flow that checks if there is a customer discount available for a given product. Note the following:
 
-A process with only one step can seem relatively unremarkable. Without additional activities, it is (more-or-less) a traditional data store,  but it serves to reveal the type of information that is tracked by the system and how to take advantage of it. Consider the following relational database table design: a two-column table, indexed on the email, which serves as the primary key.
+1. **Subscription and Publishing**: Each YAML file represents a flow of activities within your application, subscribing to and publishing events. In this case, the app subscribes to 'discount.requested' and publishes 'discount.responded' events.
 
-```sql
-CREATE TABLE Order (
-    email VARCHAR(255) PRIMARY KEY,
-    size ENUM('sm', 'md', 'lg') NOT NULL
-);
-```
+2. **Input\/Output Schemas**: Each YAML file also defines input and output schemas, referenced from another YAML file. These schemas describe the structure of data that the flow expects to receive and send. Each activity can have its own custom schema, separate from the input and output schemas for the overall flow.
 
-The equivalent declaration in PubSubDB targets an `activity` (not a `table`) but includes similar affordances for setting up indexes and declaring data types. 
+3. **Activities**: Activities are the building blocks of your workflow. Each activity, such as 'get_discount' in the example, represents a single step in the process.
+
+4. **Activity Properties**: Each activity contains various properties:
+   - `title`: Describes the activity's purpose.
+   - `type`: Defines the type of activity, for example, a 'trigger'.
+   - `stats`: This section is used to track statistical data related to the activity. The `key`, `id`, `granularity`, and `measures` properties are used to define how and what data will be measured.
+   
+5. **Data Mapping**: You'll notice syntax like `{a5.input.data.object_type}` throughout the YAML file. This is a way to dynamically map data between activities. The mapping syntax, referred to as [@pipes](./docs/data_mapping.md), allows you to navigate the JSON objects that the workflow is processing.
+
+6. **Aggregate Statistics**: Under the `measures` section, we have `avg` and `index` as types of measurements. `avg` will calculate the average of a specific target over the specified granularity, and `index` will create an index of the specified target.
+
+This model provides a clear, straightforward way to define complex workflows, track statistics, and handle dynamic data, all within a single, human-readable YAML file.
 
 ```yaml
-  order:
+# ./src/graphs/discount.requested.yaml
+subscribes: discount.requested
+publishes: discount.responded
+
+input:
+  schema:
+    $ref: '.discount.requested.yaml#/get_discount/input'
+output:
+  schema:
+    $ref: './discount.requested.yaml#/get_discount/output'
+
+activities:
+  get_discount:
+    title: Get Price Discount
     type: trigger
-    job:
-      schema:
-        type: object
-        properties:
-          email:
-            type: string
-          size:
-            type: string
-            enum:
-            - sm
-            - md
-            - lg
-      maps:
-        email: '{$self.input.data.email}'
-        size: '{$self.input.data.size}'
     stats:
-      id: '{$self.input.data.email}'
+      key: "{a5.input.data.object_type}"
+      id: "{a5.input.data.id}"
+      granularity: 5m
+      measures:
+        - measure: avg
+          target: "{a5.input.data.price}"
+        - measure: index
+          target: "{a5.input.data.object_type}"
+  ...
 ```
 
-Let's start by inserting some data. With a traditional RDS solution, we might use an ORM or update using SQL.
+## Invoking Your Application's Endpoints
+Once your application is deployed and activated, you'll be able to kick off workflows and track their progress. PubSubDB provides three methods for this: 
 
-```sql
-INSERT INTO Orders (email, size) 
-  VALUES ('jdoe@email.com', 'lg');
+* *pub* for one-way (fire-and-forget) workflows
+* *sub* for global subscriptions for all workflow output
+* *pubsub* for stateful, one-time request/response exchanges
+
+### Pub
+Suppose you need to kick off a workflow but the answer isn't relevant at this time. You can optionally await the response (the job ID) to confirm that the request was received, but otherwise, this is a simple fire-and-forget call.
+
+```javascript
+const payload = { operation: 'add', values: [1, 2, 3] };
+const jobId = await pubSubDB.pub('calculate', payload);
+//jobId is system-assigned in this context (e.g., `af45e56.235af0`)
 ```
 
-PubSubDB's interface expects a `topic` for identifiying the target (i.e., `item.ordered`), but the mechanics of the interaction are essentially the same.
+### Sub
+Suppose you need to listen in on the results of all computations on a particular topic, not just the ones you initiated. In that case, you can use the `sub` method.
 
-```ts
-const order = pubSubDB.pub('item.ordered', { 'email': 'jdoe@email.com', 'size': 'lg' });
+This is useful in scenarios where you're interested in monitoring global computation results, performing some action based on them, or even just logging them for auditing purposes.
+
+```javascript
+await pubSubDB.sub('calculated', (topic: string, jobOutput: JobOutput) => {
+  console.log(`Topic: ${topic}`, jobOutput);
+  // `jobOutput.data.result` (answer will be `5`)
+});
+
+//publish one event to test...
+const payload = { operation: 'divide', values: [100, 4, 5] };
+const jobId = await pubSubDB.pub('calculate', payload);
 ```
 
-Of course, the true benefit of a *process database* like PubSubDB is that it orchestrates and tracks the flow of information over time. Traditional RDS solutions are great at reading and writing snapshots of data, but they're not so great at modeling data in motion--and using that information to trigger and orchestrate a business process. The difference is more apparent as you expand your models and declare additional activities and the transitions between them.
+### PubSub
+If you need to kick off a workflow and await the response, use the `pubsub` method. PubSubDB will create a one-time subscription, making it simple to model the request using a standard `await`. The benefit, of course, is that this is a fully duplexed call that adheres to the principles of CQRS, thereby avoiding the overhead of a typical HTTP request/response exchange.
 
-```yaml
-transitions:
-  a1:
-    - to: a2
-  a2:
-    - to: a3
-      conditions:
-        match:
-          - expected: true
-            actual: '{a2.output.data.approved}'
-    - to: a4
-      conditions:
-        match:
-          - expected: false
-            actual: '{a2.output.data.approved}'
+```javascript
+const payload = { operation: 'add', values: [1, 2, 3] };
+const jobOutput: JobOutput = await pubSubDB.pubsub('calculate', payload);
+//jobOutput.data.result is `6`
 ```
 
-Understanding these key concepts is essential for working with the model, as they form the foundation of the application's logic and data flow. Refer to the following documents to better understand the approach and get details on getting started.
+No matter where in the network the calculation is performed (no matter the microservice that is subscribed as the official "handler" to perform the calculation...or even if multiple microservices are invoked during the workflow execution), the answer will always be published back to the originating caller the moment it's ready. It's a one-time subscription handled automatically by the engine, enabling traditional request/response semantics but without network back-pressure risk.
+
+## Workers
+Any microservice running an instance of PubSubDB can register a function with a named topic. Thereafter, any time that PubSubDB runs a workflow with an `exec` activity ,that matches this topic, it will call the function in *job* context, passing all job data described by the schema. 
+
+In the following example, PubSubDB is registering a worker to run a function when the `calculation.execute` topic is encountered in a flow. The function will execute in buffered job context, isolated from network back-pressure risk. And even if you deploy more workers than engines (even if you introduce asymmetry into the network), PubSubDB will automatically balance network pressure to only run as fast as the slowest endpoint.
+
+```javascript
+import {
+  PubSubDB,
+  PubSubDBConfig,
+  RedisStore
+  RedisStream
+  RedisSub } from '@pubsubdb/pubsubdb';
+
+//init 3 Redis clients
+const redisClient1 = getMyRedisClient();
+const redisClient2 = getMyRedisClient();
+const redisClient3 = getMyRedisClient();
+
+const pubSubDB = await PubSubDB.init({
+  appId: "my-app",
+  workers: [
+    { 
+      topic: 'calculation.execute',
+      store: new RedisStore(redisClient1),
+      stream: new RedisStream(redisClient2),
+      sub: new RedisSub(redisClient3),
+      callback: async (data: StreamData) => {
+        //add numbers and return result
+        const jobData = data.data;
+        const result = jobData.values.reduce((a, b) => a + b, 0);
+        return {
+          status: 'success',
+          metadata: { ...data.metadata },
+          data: { result }
+        };
+      }
+    }
+  ]
+};
+```
 
 ## First Principles
-Refer to the [Architecture First Principles](./docs/architecture.md) for an overview of why PubSubDB outperforms existing process orchestration platforms.
+Refer to the [Architectural First Principles Overview](./docs/architecture.md) for details on why PubSubDB outperforms existing process orchestration platforms.
+
+## My First App
+Design a [Network Calculator App](./docs/my_first_app.md) to learn the principles behind statefully orchestrating multi-service workflows at asynchronous speeds.
 
 ## Developer Guide
 Refer to the [Developer Guide](./docs/developer_guide.md) for more information on the full end-to-end development process, including details about schemas and APIs.

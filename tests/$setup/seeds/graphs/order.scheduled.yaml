@@ -1,16 +1,18 @@
 subscribes: order.scheduled
 publishes: order.fulfilled
 
+input:
+  schema:
+    $ref: '../schemas/order.scheduled.yaml#/order'
+output:
+  schema:
+    $ref: '../schemas/order.scheduled.yaml#/order'
+
 activities:
   schedule:
     title: Schedule Order
     type: trigger
-    output:
-      schema:
-        $ref: '../schemas/order.scheduled.yaml#/schedule/output'
     job:
-      schema:
-        $ref: '../schemas/order.scheduled.yaml#/schedule/job'
       maps:
         $ref: '../maps/order.scheduled.yaml#/schedule/job'
     stats:
@@ -29,6 +31,7 @@ activities:
           target: "{schedule.input.data.primacy}"
         - measure: count
           target: "{schedule.input.data.primacy}"
+
   route:
     title: Route Order
     type: activity
@@ -38,6 +41,7 @@ activities:
     job:
       maps:
         $ref: '../maps/order.scheduled.yaml#/route/job'
+
   fulfill:
     title: Fulfill Order
     type: activity

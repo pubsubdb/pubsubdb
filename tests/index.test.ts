@@ -1,35 +1,63 @@
-import { PubSubDB, PubSubDBConfig, IORedisStore } from '../index';
-import { RedisConnection, RedisClientType } from './$setup/cache/ioredis';
-import { PSNS } from '../services/store/key';
+import { PSNS } from '../modules/key';
+import {
+  PubSubDB,
+  PubSubDBConfig,
+  IORedisStore,
+  IORedisStream,
+  IORedisSub } from '../index';
 import { JobStatsInput } from '../typedefs/stats';
-import { StreamData, StreamDataResponse, StreamStatus } from '../typedefs/stream';
+import {
+  StreamData,
+  StreamDataResponse,
+  StreamStatus } from '../typedefs/stream';
+import { RedisConnection, RedisClientType } from './$setup/cache/ioredis';
+import { StreamSignaler } from '../services/signaler/stream';
+import { JobOutput } from '../typedefs/job';
 
 describe('pubsubdb', () => {
   const appConfig = { id: 'test-app', version: '1' };
   const CONNECTION_KEY = 'manual-test-connection';
   const SUBSCRIPTION_KEY = 'manual-test-subscription';
-  const STREAM_CONNECTION_KEY = 'manual-test-stream-connection';
+  const STREAM_ENGINE_CONNECTION_KEY = 'manual-test-stream-engine-connection';
+  const STREAM_WORKER_CONNECTION_KEY = 'manual-test-stream-worker-connection';
   let pubSubDB: PubSubDB;
+  //Redis connections
   let redisConnection: RedisConnection;
   let subscriberConnection: RedisConnection;
-  let streamerConnection: RedisConnection;
-  let redisClient: RedisClientType;
+  let streamerEngineConnection: RedisConnection;
+  let streamerWorkerConnection: RedisConnection;
+  //Redis clients
+  let redisStorer: RedisClientType;
   let redisSubscriber: RedisClientType;
-  let redisStreamer: RedisClientType;
+  let redisEngineStreamer: RedisClientType;
+  let redisWorkerStreamer: RedisClientType;
+  //PubSubDB Redis wrappers
   let redisStore: IORedisStore;
+  let redisEngineStream: IORedisStream;
+  let redisWorkerStream: IORedisStream;
+  let redisSub: IORedisSub;
 
   beforeAll(async () => {
+    //initialize redis connections
     redisConnection = await RedisConnection.getConnection(CONNECTION_KEY);
+    streamerEngineConnection = await RedisConnection.getConnection(STREAM_ENGINE_CONNECTION_KEY);
+    streamerWorkerConnection = await RedisConnection.getConnection(STREAM_WORKER_CONNECTION_KEY);
     subscriberConnection = await RedisConnection.getConnection(SUBSCRIPTION_KEY);
-    streamerConnection = await RedisConnection.getConnection(STREAM_CONNECTION_KEY);
-    redisClient = await redisConnection.getClient();
+    //initialize redis clients (and flushdb)
+    redisStorer = await redisConnection.getClient();
+    redisEngineStreamer = await streamerEngineConnection.getClient();
+    redisWorkerStreamer = await streamerWorkerConnection.getClient();
     redisSubscriber = await subscriberConnection.getClient();
-    redisStreamer = await streamerConnection.getClient();
-    redisClient.flushdb();
-    redisStore = new IORedisStore(redisClient, redisSubscriber, redisStreamer);
+    await redisStorer.flushdb();
+    //initialize psdb wrappers (3 for engine, 1 for worker)
+    redisStore = new IORedisStore(redisStorer);
+    redisEngineStream = new IORedisStream(redisEngineStreamer);
+    redisWorkerStream = new IORedisStream(redisWorkerStreamer);
+    redisSub = new IORedisSub(redisSubscriber);
   });
 
   afterAll(async () => {
+    await StreamSignaler.stopConsuming();
     await RedisConnection.disconnectAll();
   });
 
@@ -38,12 +66,16 @@ describe('pubsubdb', () => {
       const config: PubSubDBConfig = {
         appId: appConfig.id,
         namespace: PSNS,
-        store: redisStore,
-        //adapters are optional and will perform units of work as directed by the stream
-        adapters: [
+        engine: {
+          store: redisStore,
+          stream: redisEngineStream,
+          sub: redisSub,
+        },
+        workers: [
           {
-            //any 'exec' activity with this topic as 'subtype' will be streamed the data
             topic: 'order.bundle',
+            store: redisStore,
+            stream: redisWorkerStream,
             callback: async (streamData: StreamData) => {
               const streamDataResponse: StreamDataResponse = {
                 status: StreamStatus.SUCCESS,
@@ -84,16 +116,15 @@ describe('pubsubdb', () => {
         price: 49.99, 
         object_type: 'widgetA'
       }
-      const jobId = await pubSubDB.pub('order.approval.requested', payload);
+      const job: JobOutput = await pubSubDB.pubsub('order.approval.requested', payload);
+      const jobId = job?.metadata.jid;
       expect(jobId).not.toBeNull();
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      const job = await pubSubDB.get(jobId) as { price: number, approvals: { price: boolean}};
-      expect(job?.price).toBe(payload.price);
-      //values under 49.99 are approved
-      expect(job?.approvals?.price).toBe(true);
+      expect(job?.data?.price).toBe(payload.price);
+      //values under 100 are approved
+      expect((job?.data?.approvals as { price: boolean }).price).toBe(true);
       const spawnedJob = await pubSubDB.get(payload.id);
       expect(spawnedJob?.id).toBe(payload.id);
-    }, 10000);
+    });
 
     it('executes an `await` activity that resolves to false', async () => {
       const payload = { 
@@ -101,16 +132,15 @@ describe('pubsubdb', () => {
         price: 149.99, 
         object_type: 'widgetA'
       }
-      const jobId = await pubSubDB.pub('order.approval.requested', payload);
+      const job: JobOutput = await pubSubDB.pubsub('order.approval.requested', payload);
+      const jobId = job?.metadata.jid;
       expect(jobId).not.toBeNull();
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      const job = await pubSubDB.get(jobId) as { price: number, approvals: { price: boolean}};
-      expect(job?.price).toBe(payload.price);
+      expect(job?.data?.price).toBe(payload.price);
       //values over 100 are rejected
-      expect(job?.approvals?.price).toBe(false);
+      expect((job?.data?.approvals as { price: boolean }).price).toBe(false);
       const spawnedJob = await pubSubDB.get(payload.id);
       expect(spawnedJob?.id).toBe(payload.id);
-    }, 10000);
+    });
 
     it('should publish a message to Flow B', async () => {
       let payload: any;
@@ -120,11 +150,9 @@ describe('pubsubdb', () => {
           price: 49.99 + i, 
           object_type: i % 2 ? 'widget' : 'order'
         }
-        await pubSubDB.pub('order.approval.price.requested', payload);
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        const job = await pubSubDB.get(payload.id) as { id: string, approved: boolean };
-        expect(job?.id).toBe(payload.id);
-        expect(job?.approved).toBe(true);
+        const job: JobOutput = await pubSubDB.pubsub('order.approval.price.requested', payload);
+        expect(job?.data?.id).toBe(payload.id);
+        expect(job?.data?.approved).toBe(true);
       }
     });
 
@@ -137,10 +165,9 @@ describe('pubsubdb', () => {
         send_date: new Date(),
         must_release_series: '202304120015'
       };
-      const pubResponse = await pubSubDB.pub('order.scheduled', payload);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      expect(pubResponse).not.toBeNull();
-    }, 100000);
+      const jobId = await pubSubDB.pub('order.scheduled', payload);
+      expect(jobId).not.toBeNull();
+    });
 
     it('should should signal a hook to resume Flow C', async () => {
       const payload = {
@@ -148,10 +175,9 @@ describe('pubsubdb', () => {
         facility: 'acme',
         actual_release_series: '202304110015'
       };
-      const hookResponse = await pubSubDB.hook('order.routed', payload);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      expect(hookResponse).not.toBeNull();
-    }, 100000);
+      const jobId = await pubSubDB.hook('order.routed', payload);
+      expect(jobId).not.toBeNull();
+    });
 
     it('should distribute messages to different job queues', async () => {
       const sizes = ['sm', 'md', 'lg'];
@@ -179,7 +205,6 @@ describe('pubsubdb', () => {
           }
         }
       }
-      //todo:locate all data in redis and verify
     });
 
     it('should throw an error when publishing duplicates', async () => {
@@ -214,10 +239,10 @@ describe('pubsubdb', () => {
         actual_release_series: '202304110000',
         facility: 'acme',
       };
-      const pubResponse = await pubSubDB.pub('order.finalize', payload);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      expect(pubResponse).not.toBeNull();
-      const jobResponse = await pubSubDB.get(payload.id);
+      const jobId = await pubSubDB.pub('order.finalize', payload);
+      expect(jobId).not.toBeNull();
+      //note: jobResponse is undefined, because there is no job data per the YAML spec
+      //const jobResponse = await pubSubDB.get(payload.id);
     });
   });
 
@@ -261,7 +286,6 @@ describe('pubsubdb', () => {
         actual_release_series: '202304110015',
       };
       const response = await pubSubDB.hook('order.routed', payload);
-      await new Promise(resolve => setTimeout(resolve, 1000));
       expect(response).not.toBeNull();
     });
   });
@@ -282,7 +306,6 @@ describe('pubsubdb', () => {
         end: 'NOW',
       };
       const response = await pubSubDB.hookAll('order.routed', payload, query, ['color:red']);
-      await new Promise(resolve => setTimeout(resolve, 1000));
       expect(response).not.toBeNull();
     });
   });
