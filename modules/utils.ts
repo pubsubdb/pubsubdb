@@ -1,9 +1,15 @@
 import { StoreService } from "../services/store";
 import { AppSubscriptions, AppTransitions, AppVersion } from "../typedefs/app";
-import { RedisClient, RedisMulti } from "../typedefs/store";
+import { RedisClient, RedisMulti } from "../typedefs/redis";
 
 export function getGuid() {
-  return Math.floor(Math.random() * 100000000).toString();
+  //prefer guids with a GMT time aspect
+  const randomTenDigitNumber = Math.floor(Math.random() * 1e10);
+  return `${Date.now().toString(16)}.${randomTenDigitNumber.toString(16)}`;
+}
+
+export async function sleepFor(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export function findTopKey(obj: AppTransitions, input: string): string | null {

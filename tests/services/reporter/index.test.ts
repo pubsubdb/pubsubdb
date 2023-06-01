@@ -1,12 +1,11 @@
-import { ReporterService } from '../../../services/reporter';
+import { PSNS } from '../../../modules/key';
 import { ILogger } from '../../../services/logger';
-import { IORedisStoreService as IORedisStore } from '../../../services/store/stores/ioredis';
-import { RedisClientType, RedisConnection } from '../../$setup/cache/ioredis';
+import { ReporterService } from '../../../services/reporter';
+import { IORedisStoreService as IORedisStore } from '../../../services/store/clients/ioredis';
 import { JobStatsRange } from '../../../typedefs/stats';
-import { PSNS } from '../../../services/store/key';
+import { RedisClientType, RedisConnection } from '../../$setup/cache/ioredis';
 
-// Mock the IORedisStoreService class
-jest.mock('../../../services/store/stores/ioredis', () => {
+jest.mock('../../../services/store/clients/ioredis', () => {
   return {
     IORedisStoreService: jest.fn().mockImplementation(() => {
       return {
@@ -19,7 +18,6 @@ jest.mock('../../../services/store/stores/ioredis', () => {
 
 const getTimeSeriesStamp = (granularity = '5m', minutesInThePast = 0): string => {
   const _now = new Date();
-  //add minutes if provided
   const now = new Date(_now.getTime() - minutesInThePast * 60 * 1000);
   const granularityUnit = granularity.slice(-1);
   const granularityValue = parseInt(granularity.slice(0, -1), 10);

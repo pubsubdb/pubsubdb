@@ -14,9 +14,9 @@ import {
   ActivityType,
   HookData
 } from "../../../typedefs/activity";
-import { JobContext } from "../../../typedefs/job";
+import { JobActivityContext } from "../../../typedefs/job";
 import { StreamData, StreamStatus } from "../../../typedefs/stream";
-import { KeyType } from "../../store/key";
+import { KeyType } from "../../../modules/key";
 
 class Exec extends Activity {
   config: ExecActivity;
@@ -27,7 +27,7 @@ class Exec extends Activity {
     metadata: ActivityMetadata,
     hook: HookData | null,
     pubsubdb: PubSubDBService,
-    context?: JobContext) {
+    context?: JobActivityContext) {
       super(config, data, metadata, hook, pubsubdb, context);
   }
 
@@ -70,13 +70,13 @@ class Exec extends Activity {
       data: this.context.data
     };
     const key = this.pubsubdb.store?.mintKey(KeyType.STREAMS, { appId: this.pubsubdb.appId, topic: this.config.subtype });
-    this.pubsubdb.signaler.publishMessage(key, streamData);
+    this.pubsubdb.streamSignaler?.publishMessage(key, streamData);
   }
 
 
   //********  `RESOLVE` ENTRY POINT (B)  ********//
   //remote adapter responses are published and routed here
-  async processAdapterResponse(status: StreamStatus): Promise<void> {
+  async processWorkerResponse(status: StreamStatus): Promise<void> {
     await this.restoreJobContext(this.context.metadata.jid);
     this.context[this.metadata.aid].output.data = this.data;
     this.mapJobData();

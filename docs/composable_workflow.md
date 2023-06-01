@@ -1,7 +1,5 @@
 # Composable Workflow
-PubSubDB workflows are modeled as *rooted trees* using graphs with a single root (trigger), from which the `activities` branch out in a tree-like structure, *with no cycles*. This structure allows for efficient scheduling and execution of tasks and is used in parallel and distributed computing systems.
-
-When the graph is deployed, the PubSubDB compiler will subscribe activities to topics, ensuring workflow activities execute in sequence, while still adhering to the principles of a loosely-coupled, event-driven architecture.
+PubSubDB workflows are modeled as directed acyclic graphs (*rooted trees*). This structure allows for efficient scheduling and execution of tasks and is used in parallel and distributed computing systems.
 
 <small>**PUBSUBDB WORKFLOW DEFINITION FILE**</small>
 
@@ -12,7 +10,7 @@ activities:
     type: trigger
   a2:
     title: Create Asana Task
-    type: openapi
+    type: exec
     subtype: asana.1.createTask
   a3:
     title: Save Task ID
@@ -52,99 +50,94 @@ Given the `conditions` for activity `a2` (as defined by its `hooks` configuratio
 
 ```yaml
 # ./myapp/2/flowb/1.yaml
-openapi: 3.0.3
-components:
 
-  x-pubsubdb:
-    activities:
-      a1:
-        title: Get Approval
-        type: trigger
-        output:
-          schema:
-            $ref: ./schemas.yaml#/a1/output
-        job:
-          schema:
-            $ref: ./schemas.yaml#/a1/job
-        errors:
-          schema:
-            $ref: ./schemas.yaml#/a1/errors
-        stats:
-          id: "{$self.output.data.id}"
-          key: "{$self.output.data.object_type}"
-          measures:
-            - measure: count
-              target: "{$self.output.data.region}"
-            - measure: count
-              target: "{$self.output.data.division}"
-      a2:
-        title: Exec Asana Task
-        type: openapi
-        # Asana Open API Operation Name (`createTask`)
-        openapi: asana.1.createTask
-        credentials: asana.1.mycreds
-        hook:
-          schema:
-            $ref: ./schemas.yaml#/a2/hook
-        input:
-          schema:
-            $ref: /specs/asana/1.yml#/TaskRequest
-          maps:
-            $ref: ./maps.yaml#/a2/input
-        output:
-          schema:
-            $ref: /specs/asana/1.yml#/TaskResponse
-        errors:
-          schema:
-            $ref: /specs/asana/1.yml#/TaskResponseError
-      a3:
-        title: Return True
-        type: job
-        input:
-          job:
-            $ref: './maps.yaml#/a3/job'
-      a4:
-        title: Return False
-        type: job
-        job:
-          maps:
-            $ref: './maps.yaml#/a4/job'
+subscribes: order.approve
+publishes: order.approved
 
-    transitions:
-      a1:
-        - to: a2
-      a2:
-        - to: a3
-          conditions:
-            match:
-              - expected: true
-                actual: "{a2.hook.data.approved}"
-        - to: a4
-          conditions:
-            gate: or
-            match:
-              - expected: false
-                actual: "{a2.hook.data.approved}"
-              - expected: false
-                actual: 
-                  "@pipe":
-                    - ["{a1.output.data.price}", 100]
-                    - ["{@number.gt}"]
+activities:
+  a1:
+    title: Get Approval
+    type: trigger
+    output:
+      schema:
+        $ref: ./schemas.yaml#/a1/output
+    job:
+      schema:
+        $ref: ./schemas.yaml#/a1/job
+    errors:
+      schema:
+        $ref: ./schemas.yaml#/a1/errors
+    stats:
+      id: "{$self.output.data.id}"
+      key: "{$self.output.data.object_type}"
+      measures:
+        - measure: count
+          target: "{$self.output.data.region}"
+        - measure: count
+          target: "{$self.output.data.division}"
+  a2:
+    title: Exec Asana Task
+    type: exec
+    exec: asana.1.createTask
+    credentials: asana.1.mycreds
+    hook:
+      schema:
+        $ref: ./schemas.yaml#/a2/hook
+    input:
+      schema:
+        $ref: /specs/asana/1.yml#/TaskRequest
+      maps:
+        $ref: ./maps.yaml#/a2/input
+    output:
+      schema:
+        $ref: /specs/asana/1.yml#/TaskResponse
+    errors:
+      schema:
+        $ref: /specs/asana/1.yml#/TaskResponseError
+  a3:
+    title: Return True
+    type: job
+    input:
+      job:
+        $ref: './maps.yaml#/a3/job'
+  a4:
+    title: Return False
+    type: job
+    job:
+      maps:
+        $ref: './maps.yaml#/a4/job'
 
-    hooks:
-      asana.1.taskUpdated:
-        - to: a2
-          conditions:
-            gate: and
-            match:
-              - expected: "{$self.output.data.task_id}"
-                actual: "{$self.hook.data.task_id}"
-              - expected: completed
-                actual: "{$self.hook.data.status}"
+transitions:
+  a1:
+    - to: a2
+  a2:
+    - to: a3
+      conditions:
+        match:
+          - expected: true
+            actual: "{a2.hook.data.approved}"
+    - to: a4
+      conditions:
+        gate: or
+        match:
+          - expected: false
+            actual: "{a2.hook.data.approved}"
+          - expected: false
+            actual: 
+              "@pipe":
+                - ["{a1.output.data.price}", 100]
+                - ["{@number.gt}"]
 
-    subscribes: order.approve
-
-    publishes: order.approved
+hooks:
+  asana.1.taskUpdated:
+    - to: a2
+      conditions:
+        gate: and
+        match:
+          - expected: "{$self.output.data.task_id}"
+            actual: "{$self.hook.data.task_id}"
+          - expected: completed
+            actual: "{$self.hook.data.status}"
 ```
 
 ### Example 2 | Await
@@ -155,67 +148,63 @@ Flow A also includes a *compositional* activity, namely, **Get Approval** (`a6`)
 
 ```yaml
 # ./myapp/2/flowa/1.yaml
-openapi: 3.0.3
-components:
-  x-pubsubdb:
 
-    activities:
-      a5:
-        title: Review Order
-        type: trigger
-        output:
-          schema:
-            $ref: ./schemas.yaml#/a5/output
-        job:
-          schema:
-            $ref: ./schemas.yaml#/a5/job
-        errors:
-          schema:
-            $ref: ./schemas.yaml#/a5/errors
-        stats:
-          key: "{a1.input.data.object_type}"
-          measures:
-            - measure: sum
-              target: "{a1.input.data.price}"
-            - measure: count
-              target: "{a1.input.data.price}"
-              operator: ">"
-              value: 100
-            - measure: avg
-              target: "{a1.input.data.price}"
-      a6:
-        title: Get Approval
-        type: await
-        subtype: order.approve
-        input:
-          schema:
-            $ref: ./schemas.yaml#/a6/input
-        output:
-          schema:
-            $ref: ./schemas.yaml#/a6/output
-        errors:
-          schema:
-            $ref: ./schemas.yaml#/a6/errors
-      a7:
-        title: Return Review
-        type: job
-        job:
-          maps:
-            $ref: ./maps.yaml#/a7/job
+subscribes: order.review
+publishes: order.reviewed
 
-    transitions:
-      a5:
-        - to: a6
-      a6:
-        - to: a7
+activities:
+  a5:
+    title: Review Order
+    type: trigger
+    output:
+      schema:
+        $ref: ./schemas.yaml#/a5/output
+    job:
+      schema:
+        $ref: ./schemas.yaml#/a5/job
+    errors:
+      schema:
+        $ref: ./schemas.yaml#/a5/errors
+    stats:
+      key: "{a1.input.data.object_type}"
+      measures:
+        - measure: sum
+          target: "{a1.input.data.price}"
+        - measure: count
+          target: "{a1.input.data.price}"
+          operator: ">"
+          value: 100
+        - measure: avg
+          target: "{a1.input.data.price}"
+  a6:
+    title: Get Approval
+    type: await
+    subtype: order.approve
+    input:
+      schema:
+        $ref: ./schemas.yaml#/a6/input
+    output:
+      schema:
+        $ref: ./schemas.yaml#/a6/output
+    errors:
+      schema:
+        $ref: ./schemas.yaml#/a6/errors
+  a7:
+    title: Return Review
+    type: job
+    job:
+      maps:
+        $ref: ./maps.yaml#/a7/job
 
-    subscribes: order.review
-
-    publishes: order.reviewed
+transitions:
+  a5:
+    - to: a6
+  a6:
+    - to: a7
 ```
 
 ## Asana Open API Spec
-Here is a snapshot of the official Asana Open API Spec with just the createTask operation included. Incorporating external services like Asana into the activity flow is possible using a standard Open API schema.
+Here is a snapshot of the official Asana Open API Spec with just the `createTask` operation included. Incorporating external services like Asana into the activity flow is possible using a standard Open API specification as the request/response call flow aligns with PubSubDB's input/output semantics. Reference (`$ref`) the Asana schema from your flow to save time documenting input and output fields.
 
 ```yaml
 openapi: 3.0.3

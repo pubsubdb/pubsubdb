@@ -1,6 +1,6 @@
 import { Redis, RedisOptions as RedisClientOptions } from 'ioredis';
 import config from '../config';
-import { RedisClientType, RedisMultiType } from '../../../typedefs/ioredis';
+import { RedisClientType, RedisMultiType } from '../../../typedefs/ioredisclient';
 
 class RedisConnection {
   private connection: any | null = null;

@@ -1,16 +1,18 @@
 subscribes: order.approval.price.requested
 publishes: order.approval.price.responded
 
+input:
+  schema:
+    $ref: '../schemas/order.approval.price.requested.yaml#/input'
+output:
+  schema:
+    $ref: '../schemas/order.approval.price.requested.yaml#/output'
+
 activities:
   a5:
     title: Get Price Approval
     type: trigger
-    output:
-      schema:
-        $ref: '../schemas/order.approval.price.requested.yaml#/a5/output'
     job:
-      schema:
-        $ref: '../schemas/order.approval.price.requested.yaml#/a5/job'
       maps:
         $ref: '../maps/order.approval.price.requested.yaml#/a5/job'
     stats:

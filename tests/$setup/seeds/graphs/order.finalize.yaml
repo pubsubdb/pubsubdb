@@ -1,16 +1,15 @@
 subscribes: order.finalize
 publishes: order.finalized
 
+input:
+  schema:
+    $ref: '../schemas/order.finalize.yaml#/order'
+
 activities:
 
   finalizer:
     title: Finalize Routed Order
     type: trigger
-    output:
-      schema:
-        $ref: '../schemas/order.finalize.yaml#/order'
-      maps:
-        $ref: '../maps/order.finalize.yaml#/finalizer/output'
     stats:
       granularity: 5m
       id: '{$self.input.data.id}'

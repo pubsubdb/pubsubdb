@@ -1,6 +1,6 @@
 import { PubSubDBService } from '..';
 import { Pipe } from "../../pipe";
-import { KeyType } from '../../store/key';
+import { KeyType } from '../../../modules/key';
 import { SerializerService } from '../../store/serializer';
 import { Activity } from "./activity";
 // import {
@@ -17,10 +17,11 @@ import {
   TriggerActivity,
   FlattenedDataObject, 
   HookData} from "../../../typedefs/activity";
-import { JobContext } from '../../../typedefs/job';
+import { JobActivityContext } from '../../../typedefs/job';
 import { StatsType, Stat } from '../../../typedefs/stats';
 import { CollatorService } from '../../collator';
-import { RedisMulti } from '../../../typedefs/store';
+import { RedisMulti } from '../../../typedefs/redis';
+import { getGuid } from '../../../modules/utils';
 
 class Trigger extends Activity {
   config: TriggerActivity;
@@ -31,15 +32,16 @@ class Trigger extends Activity {
     metadata: ActivityMetadata,
     hook: HookData | null,
     pubsubdb: PubSubDBService,
-    context?: JobContext) {
+    context?: JobActivityContext) {
       super(config, data, metadata, hook, pubsubdb, context);
   }
 
   async process(): Promise<string> {
     try {
       await this.createContext();
-      await this.mapJobData();
-      await this.mapOutputData();
+      this.mapJobData();
+      this.mapOutputData();
+      //todo: should target job id instead (not job+activity!)
       await this.saveActivityNX();
 
       /////// MULTI:START ///////
@@ -68,7 +70,7 @@ class Trigger extends Activity {
     }
   }
 
-  createInputContext(): Partial<JobContext> {
+  createInputContext(): Partial<JobActivityContext> {
     const input = { 
       [this.metadata.aid]: {
         input: { data: this.data }
@@ -77,7 +79,7 @@ class Trigger extends Activity {
         input: { data: this.data },
         output: { data: this.data }
       },
-    } as Partial<JobContext>;
+    } as Partial<JobActivityContext>;
     return input
   }
 
@@ -93,6 +95,7 @@ class Trigger extends Activity {
     this.context = {
       metadata: {
         ...this.metadata,
+        ngn: this.context.metadata.ngn,
         pj: this.context.metadata.pj,
         pa: this.context.metadata.pa,
         app: id,
@@ -125,17 +128,22 @@ class Trigger extends Activity {
     return this.config.collationKey - this.config.collationInt * 3;
   }
 
-  resolveJobId(context: Partial<JobContext>): string {
+  resolveJobId(context: Partial<JobActivityContext>): string {
     const stats = this.config.stats;
     const jobId = stats?.id;
     if (jobId) {
       return Pipe.resolve(jobId, context);
     } else {
-      return `${Date.now().toString()}.${parseInt((Math.random() * 1000).toString(), 10)}`; //todo: uuid, etc (configurable)
+      return getGuid();
     }
   }
 
-  resolveJobKey(context: Partial<JobContext>): string {
+  generateUniqueId() {
+    const randomTenDigitNumber = Math.floor(Math.random() * 1e10);
+    return `${Date.now().toString(16)}.${randomTenDigitNumber.toString(16)}`;
+  }
+
+  resolveJobKey(context: Partial<JobActivityContext>): string {
     const stats = this.config.stats;
     const jobKey = stats?.measures?.length && stats?.key;
     if (jobKey) {
@@ -145,7 +153,7 @@ class Trigger extends Activity {
     }
   }
 
-  async mapOutputData(): Promise<void> {
+  mapOutputData(): void {
     //this.config.dependents = [ "d/operation", "d/values" ];
     //this.config.depends = { "calculate": ["d/operation", "d/values"], "operate": ["d/result"]}
     const aid = this.metadata.aid;
@@ -169,6 +177,7 @@ class Trigger extends Activity {
   }
 
   async saveActivityNX(): Promise<void> {
+    //TODO: target the bare job id (not + activity)...can produce a collision still and subordinate to the wrong job
     //NX ensures no job id dupes
     const jobId = this.context.metadata.jid;
     const activityId = this.metadata.aid;

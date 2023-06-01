@@ -1,17 +1,17 @@
 subscribes: calculate
 publishes: calculated
 
-activities:
+input:
+  schema:
+    $ref: '../schemas/calculate.yaml#/input'
+output:
+  schema:
+    $ref: '../schemas/calculate.yaml#/output'
 
+activities:
   calculate:
     title: Calculate
     type: trigger
-    output:
-      schema:
-        $ref: '../schemas/calculate.yaml#/output'
-    job:
-      schema:
-        $ref: '../schemas/calculate.yaml#/job'
 
   operate:
     title: Operate
@@ -19,7 +19,7 @@ activities:
     subtype: calculation.execute
     input:
       schema:
-        $ref: '../schemas/calculate.yaml#/output'
+        $ref: '../schemas/calculate.yaml#/input'
       maps:
         $ref: '../maps/calculate.yaml#/operate/input'
     job:

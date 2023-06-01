@@ -6,7 +6,7 @@ import { ILogger } from '../logger';
 import { Deployer } from './deployer';
 import { Validator } from './validator';
 import { PubSubDBManifest, StoreService } from '../../typedefs/pubsubdb';
-import { RedisClient, RedisMulti } from '../../typedefs/store';
+import { RedisClient, RedisMulti } from '../../typedefs/redis';
 
 /**
  * The compiler service converts a graph into a executable program.
@@ -30,8 +30,8 @@ class CompilerService {
       const schema = await $RefParser.dereference(path) as PubSubDBManifest;
 
       // 1) validate the manifest file
-      const validator = new Validator();
-      validator.validate(schema, this.store);
+      const validator = new Validator(schema);
+      validator.validate(this.store);
 
       // 2) todo: add a PlannerService module that will plan the deployment (what might break, drift, etc)
 
@@ -47,19 +47,19 @@ class CompilerService {
    */
   async deploy(mySchemaPath: string, activate = false): Promise<PubSubDBManifest> {
     try {
-      // 0) parse the manifest file and save fully resolved as a JSON file
+      // 0) parse and resolve all $refs to create a single manifest
       const schema = await $RefParser.dereference(mySchemaPath) as PubSubDBManifest;
 
-      // 1) save the manifest file as a JSON file
+      // 1) save the manifest as a JSON file
       await this.saveAsJSON(mySchemaPath, schema);
 
       // 2) validate the manifest file (synchronous operation...no callbacks)
-      const validator = new Validator();
-      validator.validate(schema, this.store);
+      const validator = new Validator(schema);
+      validator.validate(this.store);
 
-      // 3) deploy the schema (save to Redis)
-      const deployer = new Deployer();
-      await deployer.deploy(schema, this.store);
+      // 3) deploy the schema (segment, optimize, etc; save to Redis)
+      const deployer = new Deployer(schema);
+      await deployer.deploy(this.store);
 
       // 4) save the app version to Redis (so it can be activated later)
       await this.store.setApp(schema.app.id, schema.app.version);

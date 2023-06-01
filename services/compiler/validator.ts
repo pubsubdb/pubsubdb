@@ -1,7 +1,7 @@
 import { Pipe } from "../pipe";
 import { MappingStatements } from "../../typedefs/map";
 import { PubSubDBManifest, StoreService } from "../../typedefs/pubsubdb";
-import { RedisClient, RedisMulti } from "../../typedefs/store";
+import { RedisClient, RedisMulti } from "../../typedefs/redis";
 
 class Validator {
   manifest: PubSubDBManifest | null = null;
@@ -9,14 +9,15 @@ class Validator {
   mappingStatements: MappingStatements = {};
   store: StoreService<RedisClient, RedisMulti> | null = null;
 
+  constructor(manifest: PubSubDBManifest) {
+    this.manifest = manifest;
+  }
+
   /**
    * validate the manifest file
-   * @param {PubSubDBManifest} manifest - the full compiled JSON tree with all $refs resolved
    */
-  async validate(manifest: PubSubDBManifest, store: StoreService<RedisClient, RedisMulti>) {
-    this.manifest = manifest;
+  async validate(store: StoreService<RedisClient, RedisMulti>) {
     this.store = store;
-
     this.getMappingStatements();
     this.validateActivityIds();
     this.validateReferencedActivityIds();

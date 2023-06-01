@@ -8,7 +8,7 @@ import { PubSubDBService } from "..";
 import { CollatorService } from "../../collator";
 import { ILogger } from "../../logger";
 import { MapperService } from '../../mapper';
-import { SignalerService } from "../../signaler";
+import { StoreSignaler } from "../../signaler/store";
 import { SerializerService } from '../../store/serializer';
 import { 
   ActivityType,
@@ -16,9 +16,9 @@ import {
   ActivityMetadata,
   FlattenedDataObject, 
   HookData} from "../../../typedefs/activity";
-import { JobContext } from "../../../typedefs/job";
+import { JobActivityContext } from "../../../typedefs/job";
 import { TransitionRule, Transitions } from "../../../typedefs/transition";
-import { RedisMulti } from "../../../typedefs/store";
+import { RedisMulti } from "../../../typedefs/redis";
 
 /**
  * The base class for all activities
@@ -28,7 +28,7 @@ class Activity {
   data: ActivityData;
   metadata: ActivityMetadata;
   hook: HookData;
-  context: JobContext;
+  context: JobActivityContext;
   pubsubdb: PubSubDBService;
   logger: ILogger;
 
@@ -38,14 +38,14 @@ class Activity {
     metadata: ActivityMetadata,
     hook: HookData | null,
     pubsubdb: PubSubDBService,
-    context?: JobContext) {
+    context?: JobActivityContext) {
       this.config = config;
       this.data = data;
       this.metadata = metadata;
       this.hook = hook;
       this.pubsubdb = pubsubdb;
       this.logger = this.pubsubdb.logger;
-      this.context = context || { data: {}, metadata: {} } as JobContext;
+      this.context = context || { data: {}, metadata: {} } as JobActivityContext;
   }
 
   //********  INITIAL ENTRY POINT (A)  ********//
@@ -56,7 +56,7 @@ class Activity {
 
       /////// MULTI: START ///////
       const multi = this.pubsubdb.store.getMulti();
-      //await this.mapInputData();      //subclasses (openapi) implement this
+      //await this.mapInputData();      //subclasses (exec) implement this
       //await this.registerResponse();  //subclasses implement this
       //await this.registerTimeout();   //subclasses implement this
       await this.saveJobData(multi);
@@ -99,22 +99,14 @@ class Activity {
   //********  SIGNALER ENTRY POINT (C)  ********//
   async registerExpectedHook(multi?: RedisMulti): Promise<string | void> {
     if (this.config.hook?.topic) {
-      const signaler = new SignalerService(
-        await this.pubsubdb.getAppConfig(),
-        this.pubsubdb.store,
-        this.pubsubdb.logger,
-        this.pubsubdb
-      );
+      const config = await this.pubsubdb.getAppConfig();
+      const signaler = new StoreSignaler(config, this.pubsubdb);
       return await signaler.registerHook(this.config.hook.topic, this.context, multi);
     }
   }
   async processHookSignal(): Promise<void> {
-    const signaler = new SignalerService(
-      await this.pubsubdb.getAppConfig(),
-      this.pubsubdb.store,
-      this.pubsubdb.logger,
-      this.pubsubdb
-    );
+    const config = await this.pubsubdb.getAppConfig();
+    const signaler = new StoreSignaler(config, this.pubsubdb);
     const jobId = await signaler.process(this.config.hook.topic, this.data);
     if (jobId) {
       await this.restoreJobContext(jobId);
@@ -143,7 +135,7 @@ class Activity {
       jobId,
       this.config.depends,
       config
-    ) as JobContext;
+    ) as JobActivityContext;
     if (!this.context[this.metadata.aid]) {
       this.context[this.metadata.aid] = { input: {}, output: {}, hook: {} };
     }
@@ -184,17 +176,14 @@ class Activity {
 
   async subscribeToResponse(): Promise<void> {
     //base `activity` type doesn't execute anything
-    //`async` and `openapi` subtypes will override this method
   }
 
   async registerTimeout(): Promise<void> {
     //base `activity` type doesn't execute anything
-    //`async` and `openapi` subtypes will override this method
   }
 
   async execActivity(): Promise<void> {
     //base `activity` type doesn't execute anything
-    //`async` and `openapi` subtypes will override this method
   }
 
   saveJobMetadata(): boolean {
@@ -237,7 +226,7 @@ class Activity {
   async skipDescendants(activityId: string, transitions: Transitions, toDecrement: number): Promise<number> {
     const config = await this.pubsubdb.getAppConfig();
     const schema = await this.pubsubdb.store.getSchema(activityId, config);
-    toDecrement = toDecrement - schema.collationInt * 6; // 3 = 'skipped'
+    toDecrement = toDecrement - (schema.collationInt * 6); // 3 = 'skipped'
     const transition = transitions[`.${activityId}`];
     if (transition) {
       for (const toActivityId in transition) {
@@ -251,23 +240,19 @@ class Activity {
     //if any descendant activity is skipped, toDecrement will
     //be a negative number that can be used to update job status
     const toDecrement = await this.transitionActivity(isComplete);
-    this.pubsubdb.transitionJob(this.context, toDecrement);
-  }
-
-  hasParentJob(): boolean {
-    return Boolean(this.context.metadata.pj && this.context.metadata.pa);
+    //this is an extra call to the db and is job-specific
+    //todo: create a 'job' object/class for such methods (use pubsubdb for now)
+    this.pubsubdb.updateJobStatus(this.context, toDecrement);
   }
 
   async transitionActivity(isComplete: boolean): Promise<number> {
-    //transitions can cascade through the descendant activities
-    //toDecrement (e.g. -600600) is the result of the cascade
-    let toDecrement = 0;
     if (isComplete) {
-      if (this.hasParentJob()) {
-        await this.pubsubdb.resolveAwait(this.context);
-      }
-      return toDecrement;
+      this.pubsubdb.runJobCompletionTasks(this.context);
+      return 0;
     } else {
+      //transitions can cascade through the descendant activities
+      //toDecrement (e.g. -600600) is the result of the cascade
+      let toDecrement = 0;
       const transitions = await this.pubsubdb.store.getTransitions(await this.pubsubdb.getAppConfig());
       const transition = transitions[`.${this.metadata.aid}`];
       if (transition) {
@@ -284,8 +269,8 @@ class Activity {
           }
         }
       }
+      return toDecrement;
     }
-    return toDecrement;
   }
 }
 

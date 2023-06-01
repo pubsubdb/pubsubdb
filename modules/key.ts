@@ -41,6 +41,7 @@ enum KeyType {
 //when minting a key, the following parameters are used to create a unique key per entity
 type KeyStoreParams = {
   appId?: string;       //app id is a uuid for a pubsubdb app
+  engineId?: string;    //unique auto-generated guid for an ephemeral engine instance
   appVersion?: string;  //(e.g. "1.0.0", "1", "1.0")
   jobId?: string;       //a customer-defined id for job; must be unique for the entire app
   activityId?: string;  //activity id is a uuid for a given pubsubdb app
@@ -68,7 +69,7 @@ class KeyService {
       case KeyType.PUBSUBDB:
         return namespace;
       case KeyType.CONDUCTOR:
-        return `${namespace}:${params.appId}::conductor`;
+        return `${namespace}:${params.appId}::conductor:${params.engineId || ''}`;
       case KeyType.WORK_ITEMS:
           return `${namespace}:${params.appId}::workitems`;
       case KeyType.APP:

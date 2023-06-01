@@ -1,21 +1,23 @@
 subscribes: order.approval.requested
 publishes: order.approval.responded
 
+input:
+  schema:
+    $ref: '../schemas/order.approval.requested.yaml#/input'
+output:
+  schema:
+    $ref: '../schemas/order.approval.requested.yaml#/output'
+
 activities:
   a1:
     title: Get Approval
     type: trigger
-    output:
-      schema:
-        $ref: '../schemas/order.approval.requested.yaml#/a1/output'
-    job:
-      schema:
-        $ref: '../schemas/order.approval.requested.yaml#/a1/job'
     stats:
       id:
         "@pipe":
           - ['{a1.input.data.id}', '_caller']
           - ['{@string.concat}']
+
   a2:
     title: Get Price Approval
     type: await
@@ -28,12 +30,14 @@ activities:
     output:
       schema:
         $ref: '../schemas/order.approval.requested.yaml#/a2/output'
+
   a3:
     title: Return True
     type: activity
     job:
       maps:
         $ref: '../maps/order.approval.requested.yaml#/a3/job'
+
   a4:
     title: Return False
     type: activity
