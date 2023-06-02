@@ -342,30 +342,23 @@ a2:
 
 #### 4.1.4. Exec
 
-An `exec` activity is used to execute a method in the system. The typicaly workflow would be to instantiate an instance of PubSubDB and provide/register callback methods to handle the desired topics. As the engine orchestrates worflows, it will invoke the callback handler, providing a payload with the request. Registered callbacks are expected to return a data payload in the exact shape as what was returned 
+An `exec` activity is used to execute a method in the system. The typical workflow would be to instantiate an instance of PubSubDB and provide/register callback methods to handle the desired topics. As the engine orchestrates worflows, it will invoke the callback handler, providing a payload with the request. Registered callbacks are expected to return a data payload in the exact shape as what was received (as per the schema for the activity). 
 
-Example of an await activity in YAML:
+Example of an exec activity in YAML:
 
 ```yaml
-a2:
-  title: "Get Price Approval"
-  type: "await"
-  subtype: "order.approval.price.requested"
+my_calculator_activity:
+  title: Calculate Something
+  type: exec
+  subtype: calculation.execute
   input:
     schema:
-      type: "object"
-      properties:
-        id:
-          type: "string"
-          description: "The unique identifier for the object."
-        # ...
-  output:
-    schema:
-      type: "object"
-      properties:
-        id:
-          type: "string"
-          description: "The unique identifier for the object."
+      $ref: '../schemas/calculate.yaml#/input'
+    maps:
+      $ref: '../maps/calculation.execute.yaml#/executor/input'
+  job:
+    maps:
+      $ref: '../maps/calculation.execute.yaml#/executor/job'
         # ...
 ```
 
