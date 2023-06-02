@@ -14,7 +14,7 @@ This real-time coordination is driven by Redis, which serves as PubSubDB\'s back
 In the realm of network flow management, PubSubDB enables developers not just to adapt to changes in network flow, but to actively control it. Pause entire work streams, analyze and redirect. Watch as PubSubDB automatically catches up to the current state of the network.
 
 ### Uniform Data Exchange
-Integrate external SaaS services without burst, timeout or orverprovisioning risk.
+Integrate external SaaS services without burst, timeout or overprovisioning risk.
 
 ### Sophisticated Multi-System Workflows
 Design long-running multi-step approvals across departments and services.
@@ -95,14 +95,14 @@ activities:
     title: Get Price Discount
     type: trigger
     stats:
-      key: "{a5.input.data.object_type}"
-      id: "{a5.input.data.id}"
+      key: "{$self.input.data.object_type}"
+      id: "{$self.input.data.id}"
       granularity: 5m
       measures:
         - measure: avg
-          target: "{a5.input.data.price}"
+          target: "{$self.input.data.price}"
         - measure: index
-          target: "{a5.input.data.object_type}"
+          target: "{$self.input.data.object_type}"
   ...
 ```
 
@@ -190,12 +190,6 @@ const pubSubDB = await PubSubDB.init({
 };
 ```
 
-## First Principles
-Refer to the [Architectural First Principles Overview](./docs/architecture.md) for details on why PubSubDB outperforms existing process orchestration platforms.
-
-## My First App
-Design a [Network Calculator App](./docs/my_first_app.md) to learn the principles behind statefully orchestrating multi-service workflows at asynchronous speeds.
-
 ## Developer Guide
 Refer to the [Developer Guide](./docs/developer_guide.md) for more information on the full end-to-end development process, including details about schemas and APIs.
 
@@ -207,3 +201,12 @@ Sharing data between activities is central to PubSubDB. Refer to the [Data Mappi
 
 ## Composition
 The simplest graphs are linear, defining a predictable sequence of non cyclical activities. But graphs can be composed to model complex business scenarios and can even be designed to support long-running workflows lasting weeks or months. Refer to the [Composable Workflow Guide](./docs/composable_workflow.md) for more information.
+
+## First Principles
+Refer to the [Architectural First Principles Overview](./docs/architecture.md) for details on why PubSubDB outperforms existing process orchestration platforms.
+
+## Headless Orchestration
+PubSubDB is a headless orchestration engine. Refer to the [Headless Orchestration Guide](./docs/headless_orchestration.md) for more information on the approach.
+
+## My First App
+Design a [Network Calculator App](./docs/my_first_app.md) to learn the principles behind statefully orchestrating multi-service workflows at asynchronous speeds.

@@ -12,11 +12,14 @@ This guide defines the recommended development process for deploying a PubSubDB 
 7. [Define Map Rules](#define-map-rules)
 8. [Define Statistics](#define-statistics)
 9. [Plan](#plan)
-10. [Deploy](#deploy)
-11. [Trigger Workflow Job](#trigger-workflow-job)
-12. [Get Job Data](#get-job-data)
-13. [Retrieve Job Metadata](#get-job-metadata)
-14. [Get Aggregat e Job Statistics](#get-job-statistics)
+10. [Deploy and Activate](#deploy-and-activate)
+11. [Pub (Trigger Workflow Job)](#pub-trigger-workflow-job)
+12. [Sub (Listen for Job Results)](#sub-listen-for-job-results)
+13. [PubSub (One-Time Subscriptions)](#pubsub-one-time-subscriptions)
+14. [Get Job Data](#get-job-data)
+15. [Get Job Metadata](#get-job-metadata)
+16. [Get Aggregate Job Statistics](#get-job-statistics)
+17. [Get Job Ids](#get-job-ids)
 
 
 ## Define the Business Process
@@ -403,15 +406,7 @@ When the `index` measure is collected, the value of the `id` field will be store
 
 Consider the following query that returns just those jobs with an `object_type` field with a value of `widgetA`. The max response count default is 1,000, but can be increased. *Note how the time range is required. Include `start` **and** `end` values or use a `range` and pin the direction using `start` **or** `end`.*
 
-```ts
-import {
-  PubSubDB,
-  IORedisStore,
-  IORedisStream,
-  IORedisSub } from '@pubsubdb/pubsubdb';
-
-const pubSubDB = await PubSubDB.init({ ... });
-
+```javascript
 const jobs = pubSubDB.getJobs('order.approval.price.requested', {
   target: '{object_type:widgetA}',
   fields: ['id', 'price'],
@@ -459,74 +454,70 @@ const pubSubDB = await PubSubDB.init({ ... });
 const plan = pubSubDB.plan('./pubsubdb.yaml');
 ```
 
-## Deploy
-Once you're satisfied with your plan, call deploy to officially compile and deploy the next version of your application.
+## Deploy and Activate
+Once you're satisfied with your plan, call deploy to officially compile and deploy the next version of your application. This will create a new version of the application and make it available for use. The system will only activate the version if you explicitly tell it which version to use. All running clients in the network will simultaneously switch to the new version.
 
-```typescript
-import {
-  PubSubDB,
-  IORedisStore,
-  IORedisStream,
-  IORedisSub } from '@pubsubdb/pubsubdb';
-
-const pubSubDB = await PubSubDB.init({ ... });
-const status = pubSubDB.deploy('./pubsubdb.yaml');
+```javascript
+const deploymentStatus = await pubSubDB.deploy('./pubsubdb.yaml');
+const activationStatus = await pubSubDB.activate('1');
 ```
 
-## Trigger Workflow Job
-Publish events to trigger any flow. In this example, the **Approve Order** flow is triggered by publishing the `order.approval.requested` event. The payload should adhere to the `output` schema defined for the activity trigger, `a1`.
+### Pub (Trigger Job)
+Suppose you need to kick off a workflow but the answer isn't relevant at this time. You can optionally await the response (the job ID) to confirm that the request was received, but otherwise, this is a simple fire-and-forget call.
 
-```ts
-import {
-  PubSubDB,
-  IORedisStore,
-  IORedisStream,
-  IORedisSub } from '@pubsubdb/pubsubdb';
-
-const pubSubDB = await PubSubDB.init({ ... });
-const jobId = pubSubDB.pub('order.approval.requested', { id: 'order_123', price: 47.99 });
+```javascript
+const payload = { id: 'order_123', price: 47.99 };
+const topic = 'order.approval.requested';
+const jobId = await pubSubDB.pub(topic, payload);
+//jobId is `order_123`
 ```
+
+### Sub (Listen for Job Results)
+Suppose you need to listen in on the results of all computations on a particular topic, not just the ones you initiated. In that case, you can use the `sub` method.
+
+This is useful in scenarios where you're interested in monitoring global computation results, performing some action based on them, or even just logging them for auditing purposes.
+
+```javascript
+await pubSubDB.sub('order.approval.responded', (topic: string, jobOutput: JobOutput) => {
+  // `jobOutput.data:` { id: 'order_123', price: 47.99, approved: true }
+});
+
+//publish one event
+const payload = { id: 'order_123', price: 47.99 };
+const topic = 'order.approval.requested';
+pubSubDB.pub(topic, payload);
+```
+
+### PubSub (One-Time Subscriptions)
+If you need to kick off a workflow and await the response, use the `pubsub` method. PubSubDB will create a one-time subscription, making it simple to model the request using a standard `await`. The benefit, of course, is that this is a fully duplexed call that adheres to the principles of CQRS, thereby avoiding the overhead of a typical HTTP request/response exchange.
+
+```javascript
+const payload = { id: 'order_123', price: 47.99 };
+const topic = 'order.approval.requested';
+const jobOutput = await pubSubDB.pubsub(topic, payload);
+//jobOutput is `{ id: 'order_123', price: 47.99, approved: true }`
+```
+
+No matter where in the network the calculation is performed (no matter the microservice that is subscribed as the official "handler" to perform the calculation...or even if multiple microservices are invoked during the workflow execution), the answer will always be published back to the originating caller the moment it's ready. It's a one-time subscription handled automatically by the engine, enabling traditional request/response semantics but without network back-pressure risk.
 
 ## Get Job Data
 Retrieve the data for a single workflow using the job ID.
 
-```ts
-import {
-  PubSubDB,
-  IORedisStore,
-  IORedisStream,
-  IORedisSub } from '@pubsubdb/pubsubdb';
-
-const pubSubDB = await PubSubDB.init({ ... });
+```javascript
 const job = await pubSubDB.get('order_123');
 ```
 
 ## Get Job Metadata
 Query the status of a single workflow using the job ID. (*This query desccribes all state transitions for the job and the rate at which each activity was processed.*)
 
-```ts
-import {
-  PubSubDB,
-  IORedisStore,
-  IORedisStream,
-  IORedisSub } from '@pubsubdb/pubsubdb';
-
-const pubSubDB = await PubSubDB.init({ ... });
+```javascript
 const jobMetadata = await pubSubDB.getJobMetadata('order_123');
 ```
 
 ## Get Job Statistics
 Query for aggregation statistics by providing a time range and the data you're interested in. In this example, the stats for the `order.approval.price.requested` topic have been requested for the past 24 hours (`24h`). The `data` field is used to target the desired records and will limit the statistics to just those records with this characteristic.
 
-```ts
-import {
-  PubSubDB,
-  IORedisStore,
-  IORedisStream,
-  IORedisSub } from '@pubsubdb/pubsubdb';
-
-const pubSubDB = await PubSubDB.init({ ... });
-
+```javascript
 const payload = {
   data: {
     object_type: 'widgetA'
@@ -534,7 +525,8 @@ const payload = {
   range: '24h',
   end: 'NOW'
 };
-const stats = await pubSubDB.getStats('order.approval.price.requested', payload);
+const topic = 'order.approval.price.requested';
+const stats = await pubSubDB.getStats(topic, payload);
 ```
 
 The specific measures that will be returned are defined by the trigger, `a5`. That activity has sole responsibility for the topic. Accordingly, here are the target measures as defined in the workflow for `a5`. 
@@ -628,15 +620,7 @@ When the response is returned, the *average* for the `price` field and the *coun
 ## Get Job Ids
 All workflow jobs are persisted as time-series data, enabling you to track specific jobs according to their payload. In this example, the stats for the `order.approval.requested` topic have been requested for the past 24 hours (`24h`). The `data` field is used to specify the *shape* of the data, limiting ids to those jobs where the `object_type` is *widgetA*.
 
-```ts
-import {
-  PubSubDB,
-  IORedisStore,
-  IORedisStream,
-  IORedisSub } from '@pubsubdb/pubsubdb';
-
-const pubSubDB = await PubSubDB.init({ ... });
-
+```javascript
 const payload = {
   data: {
     object_type: 'widgetA'
