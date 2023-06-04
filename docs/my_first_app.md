@@ -70,11 +70,13 @@ There are four primary types of activities in PubSubDB:
       PubSubDB,
       PubSubDBConfig,
       RedisStore
-      RedisStream } from '@pubsubdb/pubsubdb';
+      RedisStream,
+      RedisSub } from '@pubsubdb/pubsubdb';
 
-    //init TWO Redis clients
+    //init 3 Redis clients
     const redisClient1 = getMyRedisClient();
     const redisClient2 = getMyRedisClient();
+    const redisClient3 = getMyRedisClient();
 
     const config: PubSubDBConfig = {
       appId: "my-app",
@@ -83,6 +85,7 @@ There are four primary types of activities in PubSubDB:
           topic: 'calculation.execute',
           store: new RedisStore(redisClient1),
           stream: new RedisStream(redisClient2),
+          sub: new RedisSub(redisClient3),
           callback: async (data: StreamData) => {
             //do something with data and return
           }
@@ -372,13 +375,12 @@ Here's how it might look:
 
 ```javascript
 await pubSubDB.sub('calculated', (topic: string, message: JobOutput) => {
-  // This callback will be executed for every message published on 'calculated' topic
-  console.log(`Received result: ${message.data.result} for job ID: ${message.metadata.jid}`);
+  console.log(`Received: ${message.data.result} for: ${message.metadata.jid}`);
+  // Output will be: `Received: 5 for: <assigned_job_id>`
 });
 
 const payload = { operation: 'divide', values: [100, 4, 5] };
 const jobId = await pubSubDB.pub('calculate', payload);
-// Output will be "Received result: 5 for job ID: <assigned_job_id>"
 ```
 
 ### PubSub

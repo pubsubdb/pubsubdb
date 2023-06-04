@@ -75,10 +75,10 @@ class CollatorService {
    * then the collation key will be updated to 998999999999900.
    * This means that the activity is running. When an activity completes, 2 will be subtracted.
    * @param {number} position - between 0 and 14 inclusive
-   * @param {number} multiplier - binary flag (1 pending, 2 complete, 4 bypassed, 8 error) that indicates the activity's status
+   * @param {number} multiplier
    * @returns {number}
    */
-  static getDecrement(position: number, multiplier: 1|2|3|4 = 1): number {
+  static getDecrement(position: number, multiplier: 1|2|3|4|5|6|7|8|9 = 1): number {
     if (position < 0 || position > 14) {
       throw new Error('Invalid position. Must be between 0 and 14, inclusive.');
     }

@@ -1,6 +1,6 @@
 # Collation Service
 
-The Collation Service tracks the state of all activities in a running graph (i.e., "Job"), using a multi-digit collation key. Each digit in the collation key represents the status of an activity.
+The Collation Service tracks the state of all activities in a running graph (i.e., "Job"), using a multi-digit collation key. Each digit in the collation key represents the status of a single activity in the graph.
 
 - 9: Pending
 - 8: Started
@@ -81,7 +81,7 @@ The `quick`, `brown`, `fox`, and `slept` activities have *completed*. The `jumpe
 | slept    | Completed | 6             |
 | ate      | Paused    | 5             |
 
-### Example 4: 466366000000000
+### Example 5: 466366000000000
 The `quick`, `brown`, `fox`, and `slept` activities have *completed*. The `jumped` activity was *skipped*. The `ate` activity was paused and has now been *released* (4).
 
 >NOTE: This flow is considered 'complete' as no activities are active (6, 4, 3). At execution time, one can assume that the `ate` activity would have decremented its value by '1' unit upon resumption of the paused activity state (5 => 4), resulting in a final integer of `466366000000000`. The engine would know based upon this value that no other activity is possibly active and would complete the job.

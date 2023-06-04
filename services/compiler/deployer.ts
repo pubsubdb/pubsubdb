@@ -1,11 +1,10 @@
+import { CollatorService } from "../collator";
+import { StoreService } from '../store';
 import { ActivityType } from "../../typedefs/activity";
 import { HookRule } from "../../typedefs/hook";
 import { PubSubDBGraph, PubSubDBManifest } from "../../typedefs/pubsubdb";
 import { RedisClient, RedisMulti } from "../../typedefs/redis";
-import { CollatorService } from "../collator";
-import { StoreService } from '../store';
-
-type JsonObject = { [key: string]: any };
+import { MultiDimensionalDocument } from "../../typedefs/serializer";
 
 class Deployer {
   manifest: PubSubDBManifest | null = null;
@@ -34,7 +33,7 @@ class Deployer {
     await this.publishActivateCommandToInstances();
   }
 
-  getAppConfig() {
+  getVID() {
     return {
       id: this.manifest.app.id,
       version: this.manifest.app.version,
@@ -87,7 +86,7 @@ class Deployer {
   resolveMappingDependencies() {
     const dynamicMappingRules: string[] = [];
     //recursive function to descend into the object and find all dynamic mapping rules
-    function traverse(obj: JsonObject, depends: string[]): void {
+    function traverse(obj: MultiDimensionalDocument, depends: string[]): void {
       for (const key in obj) {
         if (typeof obj[key] === 'string') {
           const stringValue = obj[key] as string;
@@ -172,7 +171,7 @@ class Deployer {
         activitySchemas[activityKey] = activities[activityKey];
       }
     }
-    await this.store.setSchemas(activitySchemas, this.getAppConfig());
+    await this.store.setSchemas(activitySchemas, this.getVID());
   }
 
   async deploySubscriptions() {
@@ -189,7 +188,7 @@ class Deployer {
         }
       }
     }
-    await this.store.setSubscriptions(publicSubscriptions, this.getAppConfig());
+    await this.store.setSubscriptions(publicSubscriptions, this.getVID());
   }
 
   findTrigger(graph: PubSubDBGraph): [string, any] | null {
@@ -230,7 +229,7 @@ class Deployer {
         }
       }
     }
-    await this.store.setTransitions(privateSubscriptions, this.getAppConfig());
+    await this.store.setTransitions(privateSubscriptions, this.getVID());
   }
 
   async deployHookPatterns() {
@@ -252,7 +251,7 @@ class Deployer {
         }
       }
     }
-    await this.store.setHookRules(hookRules, this.getAppConfig());
+    await this.store.setHookRules(hookRules);
   }
 
   // 2.3) Compile the list of publications; used for dynamic subscriptions (block if nonexistent)

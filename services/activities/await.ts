@@ -4,8 +4,7 @@
 //          RegisterTimeoutError, 
 //          ExecActivityError, 
 //          DuplicateActivityError} from '../../../modules/errors';
-import { CollatorService } from "../../collator";
-import { PubSubDBService } from "..";
+import { CollatorService } from "../collator";
 import { Activity } from "./activity";
 import {
   ActivityData,
@@ -13,8 +12,9 @@ import {
   AwaitActivity,
   ActivityType,
   HookData
-} from "../../../typedefs/activity";
-import { JobActivityContext } from "../../../typedefs/job";
+} from "../../typedefs/activity";
+import { JobActivityContext } from "../../typedefs/job";
+import { EngineService } from "../engine";
 
 class Await extends Activity {
   config: AwaitActivity;
@@ -24,9 +24,9 @@ class Await extends Activity {
     data: ActivityData,
     metadata: ActivityMetadata,
     hook: HookData | null,
-    pubsubdb: PubSubDBService,
+    engine: EngineService,
     context?: JobActivityContext) {
-      super(config, data, metadata, hook, pubsubdb, context);
+      super(config, data, metadata, hook, engine, context);
   }
 
   //********  INITIAL ENTRY POINT (A)  ********//
@@ -35,7 +35,7 @@ class Await extends Activity {
       await this.restoreJobContext(this.context.metadata.jid);
 
       /////// MULTI: START ///////
-      const multi = this.pubsubdb.store.getMulti();
+      const multi = this.store.getMulti();
       this.mapInputData();
       //todo: await this.registerTimeout();
       await this.saveActivity(multi);
@@ -68,7 +68,7 @@ class Await extends Activity {
         pa: this.metadata.aid
       }
     };
-    await this.pubsubdb.pub(
+    await this.engine.pub(
       this.config.subtype,
       this.context.data,
       context
@@ -87,7 +87,7 @@ class Await extends Activity {
       this.mapJobData(); //persist any data to the job
       await this.serializeMappedData('output');
       //******      MULTI: START      ******//
-      const multi = this.pubsubdb.store.getMulti();
+      const multi = this.store.getMulti();
       await this.saveActivity(multi);
       await this.saveJobData(multi);
       await this.saveActivityStatus(2, multi); //(8-2=6)

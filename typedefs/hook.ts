@@ -25,4 +25,8 @@ interface Hooks {
 
 type HookSignal = { topic: string, resolved: string, jobId: string};
 
-export { Condition, Gate, HookConditions, HookRule, Hooks, HookSignal };
+interface HookInterface {
+  (topic: string, data: { [key: string]: any, id: string }): Promise<void>;
+}
+
+export { Condition, Gate, HookConditions, HookRule, HookInterface, Hooks, HookSignal };

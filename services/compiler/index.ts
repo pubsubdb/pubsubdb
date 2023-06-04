@@ -79,8 +79,8 @@ class CompilerService {
    * @param appId 
    * @param appVersion 
    */
-  async activate(appId: string, appVersion: string): Promise<void> {
-    await this.store.activateAppVersion(appId, appVersion);
+  async activate(appId: string, appVersion: string): Promise<boolean> {
+    return await this.store.activateAppVersion(appId, appVersion);
   }
 
   async saveAsJSON(originalPath: string, schema: PubSubDBManifest): Promise<void> {

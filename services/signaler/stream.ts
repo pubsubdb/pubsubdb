@@ -1,10 +1,12 @@
+import { KeyType } from '../../modules/key';
+import { sleepFor } from '../../modules/utils';
 import { ILogger } from '../logger';
 import { StreamService } from '../stream';
 import { RedisClient, RedisMulti } from '../../typedefs/redis';
 import { StreamData, StreamDataResponse } from '../../typedefs/stream';
-import { KeyType } from '../../modules/key';
+
 import { StoreService } from '../store';
-import { sleepFor } from '../../modules/utils';
+import { QuorumProcessed, QuorumProfile } from '../../typedefs/quorum';
 
 const MAX_TIMEOUT_MS = 60000;
 const GRADUATED_INTERVAL_MS = 5000;
@@ -14,16 +16,27 @@ const BLOCK_DURATION = 15000;
 const TEST_BLOCK_DURATION = 1000;
 const BLOCK_TIME_MS = process.env.NODE_ENV === 'test' ? TEST_BLOCK_DURATION : BLOCK_DURATION;
 
+const REPORT_INTERVAL = 10000;
+
 class StreamSignaler {
+  namespace: string;
   appId: string;
+  guid: string;
   store: StoreService<RedisClient, RedisMulti>;
   stream: StreamService<RedisClient, RedisMulti>;
-  logger: ILogger
+  logger: ILogger;
+  throttle = 0;
+  currentSlot: number | null = null;
+  currentBucket: QuorumProcessed | null = null;
+  auditData: QuorumProcessed[] = [];
+
   static shouldConsume: boolean;
   static signalers: Set<StreamSignaler> = new Set();
 
-  constructor(appId: string, stream: StreamService<RedisClient, RedisMulti>, store: StoreService<RedisClient, RedisMulti>, logger: ILogger) {
+  constructor(namespace: string, appId: string, guid: string, stream: StreamService<RedisClient, RedisMulti>, store: StoreService<RedisClient, RedisMulti>, logger: ILogger) {
+    this.namespace = namespace;
     this.appId = appId;
+    this.guid = guid;
     this.stream = stream;
     this.store = store;
     this.logger = logger;
@@ -68,23 +81,11 @@ class StreamSignaler {
           const [[, messages]] = result;
           for (const [id, message] of messages) {
             try {
-              this.logger.info(`Received message: ${id}`);
-              const streamData: StreamData = JSON.parse(message[1]);
-              const streamDataResponse = await callback(streamData);
-              //if worker function returns a message, call `publishMessage` on their behaf;
-              //otherwise, worker must manually call 'publishMessage' to complete the round trip
-              if (streamDataResponse) {
-                const key = this.stream.mintKey(KeyType.STREAMS, { appId: this.appId });
-                this.publishMessage(key, streamDataResponse as StreamDataResponse);
-              }
+              await this.doSomeWork(id, message, streamName, groupName, callback.bind(this));
+              //reset the error count if successful
               errorCount = 0;
-              /////// MULTI: START ///////
-              const multi = this.stream.getMulti();
-              await this.stream.xack(streamName, groupName, id, multi);
-              await this.stream.xdel(streamName, id, multi);
-              multi.exec();
-              //////// MULTI: END ////////
             } catch (err) {
+              //worker or engine should never throw an error; todo: `policy` service
               this.logger.error(`Error processing message: ${id} in stream: ${streamName}`, err);
             }
           }
@@ -106,6 +107,29 @@ class StreamSignaler {
     }
     consume.call(this);
   }
+
+  async doSomeWork(id: string, message: string[], streamName: string, groupName: string, callback: (streamData: StreamData) => Promise<StreamDataResponse|void>) {
+    this.logger.info(`Received message: ${id}`);
+    const streamData: StreamData = JSON.parse(message[1]);
+    //await worker function and then AUDIT the data flow
+    const streamDataResponse = await callback(streamData);
+    const bytesIn = Buffer.byteLength(message[1], 'utf8');
+    const bytesOut = streamDataResponse ? Buffer.byteLength(JSON.stringify(streamDataResponse), 'utf8') : 0;
+    this.audit(bytesIn, bytesOut, true);
+    //if worker function returns a message, call `publishMessage` on their behalf;
+    //otherwise, worker must manually call 'publishMessage' to complete the round trip
+    if (streamDataResponse) {
+      const key = this.stream.mintKey(KeyType.STREAMS, { appId: this.appId });
+      this.publishMessage(key, streamDataResponse as StreamDataResponse);
+    }
+    /////// MULTI: START ///////
+    const multi = this.stream.getMulti();
+    await this.stream.xack(streamName, groupName, id, multi);
+    await this.stream.xdel(streamName, id, multi);
+    multi.exec();
+    //////// MULTI: END ////////
+    await sleepFor(this.throttle);
+  }
   
   static async stopConsuming() {
     //iterate the set of signalers and ping each one to stop consuming
@@ -114,6 +138,72 @@ class StreamSignaler {
       signaler.logger.info('Stopping Stream Consumer');
     }
     await sleepFor(BLOCK_TIME_MS); //wait for all blocking calls to return
+  }
+
+  audit(bytesIn: number, bytesOut: number, success: boolean) {
+    const currentTimestamp = Date.now();
+    const currentSlot = Math.floor(currentTimestamp / REPORT_INTERVAL);
+    if (this.currentSlot === currentSlot) {
+      this.currentBucket.t = currentSlot * REPORT_INTERVAL;
+      this.currentBucket.i += bytesIn;
+      this.currentBucket.o += bytesOut;
+      this.currentBucket.p += 1;
+      this.currentBucket.f += success ? 0 : 1;
+      this.currentBucket.s += success ? 1 : 0;
+    } else {
+      this.currentSlot = currentSlot;
+      this.currentBucket = {
+        t: currentSlot * REPORT_INTERVAL,
+        i: bytesIn,
+        o: bytesOut,
+        p: 1,
+        f: success ? 0 : 1,
+        s: success ? 1 : 0
+      };
+      this.auditData.push(this.currentBucket);
+    }
+    this.cleanOldData();
+  }
+
+  cleanOldData() {
+    const oneHourAgo = Date.now() - 3600000;
+    this.auditData = this.auditData.filter(data => data.t >= oneHourAgo);
+  }  
+
+  report(): QuorumProfile {
+    this.cleanOldData();
+    const report: QuorumProfile = {
+      namespace: this.namespace,
+      appId: this.appId,
+      guid: this.guid,
+      status: 'active',
+      throttle: this.throttle,
+      d: this.auditData
+    };
+    return report;
+  }
+
+  reportNow(): QuorumProfile {
+    const currentTimestamp = Date.now();
+    const fiveSecondsAgo = currentTimestamp - REPORT_INTERVAL;
+      const currentWindowData = this.auditData.filter((data) => {
+      return data.t >= fiveSecondsAgo && data.t <= currentTimestamp;
+    });
+    return {
+      namespace: this.namespace,
+      appId: this.appId,
+      guid: this.guid,
+      status: 'active',
+      throttle: this.throttle,
+      d: currentWindowData
+    };
+  }
+
+  setThrottle(delayInMillis: number) {
+    if (!Number.isInteger(delayInMillis) || delayInMillis < 0) {
+      throw new Error('Throttle must be a non-negative integer');
+    }
+    this.throttle = delayInMillis;
   }
 
   async claimUnacknowledgedMessages(streamName: string, groupName: string, newConsumerName: string, idleTimeMs: number) {

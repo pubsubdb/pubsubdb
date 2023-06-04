@@ -2,13 +2,14 @@ import {
   PubSubDB,
   IORedisStore,
   IORedisStream,
-  IORedisSub } from '../../../../index';
+  IORedisSub } from '../../../index';
 import {
   ActivityType,
   ActivityData,
-  ActivityMetadata } from '../../../../typedefs/activity';
-import { Trigger } from '../../../../services/pubsubdb/activities/trigger';
-import { RedisConnection } from '../../../$setup/cache/ioredis';
+  ActivityMetadata } from '../../../typedefs/activity';
+import { Trigger } from '../../../services/activities/trigger';
+import { RedisConnection } from '../../$setup/cache/ioredis';
+import { EngineService } from '../../../services/engine';
 
 describe('Trigger class', () => {
   let pubSubDB: PubSubDB;
@@ -58,7 +59,7 @@ describe('Trigger class', () => {
     };
     const activityHookData = null;
 
-    const trigger = new Trigger(ActivityType, activityData, activityMetadata, activityHookData, pubSubDB);
+    const trigger = new Trigger(ActivityType, activityData, activityMetadata, activityHookData, pubSubDB?.engine as EngineService);
     const createJobSpy = jest.spyOn(trigger, 'resolveJobId');
     trigger.resolveJobId(trigger.createInputContext());
     expect(createJobSpy).toHaveBeenCalledTimes(1);

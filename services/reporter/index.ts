@@ -1,6 +1,9 @@
 import { ILogger } from '../logger';
+import { Pipe } from '../pipe';
 import { StoreService as Store } from '../store';
-import {AppVersion} from '../../typedefs/app';
+import {AppVID} from '../../typedefs/app';
+import { TriggerActivity } from '../../typedefs/activity';
+import { JobActivityContext } from '../../typedefs/job';
 import { RedisClient, RedisMulti } from '../../typedefs/redis';
 import {
   GetStatsOptions,
@@ -13,21 +16,20 @@ import {
   IdsResponse,
   MeasureIds, 
   TimeSegment,
-  CountByFacet } from '../../typedefs/stats';
+  CountByFacet, 
+  StatsType,
+  Stat } from '../../typedefs/stats';
 
 class ReporterService {
-  private appConfig: AppVersion;
+  private appVersion: AppVID;
   private logger: ILogger;
   private store: Store<RedisClient, RedisMulti>;
+  static DEFAULT_GRANULARITY = '5m';
 
-  constructor(appConfig: AppVersion, store: Store<RedisClient, RedisMulti>, logger: ILogger) {
-    this.appConfig = appConfig;
+  constructor(appVersion: AppVID, store: Store<RedisClient, RedisMulti>, logger: ILogger) {
+    this.appVersion = appVersion;
     this.logger = logger;
     this.store = store;
-  }
-
-  getAppConfig() {
-    return this.appConfig;
   }
 
   async getStats(options: GetStatsOptions): Promise<StatsResponse> {
@@ -36,7 +38,7 @@ class ReporterService {
     this.validateOptions(options);
     const dateTimeSets = this.generateDateTimeSets(granularity, range, end, start);
     const redisKeys = dateTimeSets.map((dateTime) => this.buildRedisKey(key, dateTime));
-    const rawData = await this.store.getJobStats(redisKeys, this.getAppConfig());
+    const rawData = await this.store.getJobStats(redisKeys);
     const [count, aggregatedData] = this.aggregateData(rawData);
     const statsResponse = this.buildStatsResponse(rawData, redisKeys, aggregatedData, count, options);
     return statsResponse;
@@ -119,7 +121,7 @@ class ReporterService {
   }  
 
   private buildRedisKey(key: string, dateTime: string, subTarget = ''): string {
-    return `psdb:${this.appConfig.id}:s:${key}:${dateTime}${subTarget?':'+subTarget:''}`;
+    return `psdb:${this.appVersion.id}:s:${key}:${dateTime}${subTarget?':'+subTarget:''}`;
   }
 
   private aggregateData(rawData: JobStatsRange): [number, AggregatedData] {
@@ -306,6 +308,71 @@ class ReporterService {
       }
     }
     return workerLists;
+  }
+
+  /**
+   * called by `trigger` activity to generate the stats that should
+   * be saved to the database. doesn't actually save the stats, but
+   * just generates the info that should be saved
+   */
+  resolveTriggerStatistics({ stats: statsConfig}: TriggerActivity, context: JobActivityContext): StatsType {
+    const stats: StatsType = {
+      general: [],
+      index: [],
+      median: []
+    }
+    stats.general.push({ metric: 'count', target: 'count', value: 1 });
+    for (const measure of statsConfig.measures) {
+      const metric = this.resolveMetric({ metric: measure.measure, target: measure.target }, context);
+      if (this.isGeneralMetric(measure.measure)) {
+        stats.general.push(metric);
+      } else if (this.isMedianMetric(measure.measure)) {
+        stats.median.push(metric);
+      } else if (this.isIndexMetric(measure.measure)) {
+        stats.index.push(metric);
+      }
+    }
+    return stats;
+  }
+
+  isGeneralMetric(metric: string): boolean {
+    return metric === 'sum' || metric === 'avg' || metric === 'count';
+  }
+
+  isMedianMetric(metric: string): boolean {
+    return metric === 'mdn';
+  }
+
+  isIndexMetric(metric: string): boolean {
+    return metric === 'index';
+  }
+
+  resolveMetric({metric, target}, context: JobActivityContext): Stat {
+    const pipe = new Pipe([[target]], context);
+    const resolvedValue = pipe.process().toString();
+    const resolvedTarget = this.resolveTarget(metric, target, resolvedValue);
+    if (metric === 'index') {
+      return { metric, target: resolvedTarget, value: context.metadata.jid };
+    } else if (metric === 'count') {
+      return { metric, target: resolvedTarget, value: 1 };
+    }
+    return { metric, target: resolvedTarget, value: resolvedValue } as Stat;
+  }
+
+  isCardinalMetric(metric: string): boolean {
+    return metric === 'index' || metric === 'count';
+  }
+
+  resolveTarget(metric: string, target: string, resolvedValue: string): string {
+    const trimmed = target.substring(1, target.length - 1);
+    const trimmedTarget = trimmed.split('.').slice(3).join('/');
+    let resolvedTarget: string;
+    if (this.isCardinalMetric(metric)) {
+      resolvedTarget = `${metric}:${trimmedTarget}:${resolvedValue}`;
+    } else {
+      resolvedTarget = `${metric}:${trimmedTarget}`;
+    }
+    return resolvedTarget;
   }
 }
 

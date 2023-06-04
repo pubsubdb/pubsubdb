@@ -17,7 +17,6 @@ describe('IORedisStoreService', () => {
   beforeEach(async () => {
     await redisClient.flushdb();
     redisStoreService = new IORedisStoreService(redisClient);
-    const appConfig = { id: 'APP_ID', version: 'APP_VERSION' };
     await redisStoreService.init(PSNS, appConfig.id, new LoggerService());
   });
 
@@ -103,7 +102,7 @@ describe('IORedisStoreService', () => {
   });
 
   describe('setJobStats', () => {
-    it('should set job stats correctly', async () => {
+    it('should set and get job stats correctly', async () => {
       const jobKey = 'job-key';
       const jobId = 'job-id';
       const dateTime = '202304170000';
@@ -127,6 +126,10 @@ describe('IORedisStoreService', () => {
       const medianStatsKey = redisStoreService.mintKey(KeyType.JOB_STATS_MEDIAN, { ...cacheConfig, jobId, jobKey, dateTime, facet: stats.median[0].target });
       const medianStats = await redisClient.zrange(medianStatsKey, 0, -1);
       expect(medianStats[0]).toEqual(stats.median[0].value.toString());
+
+      //expect getStats to cast the value to a number, so it is an exact match even though a string in redis
+      const jobStats = await redisStoreService.getJobStats([generalStatsKey]);
+      expect(jobStats[generalStatsKey][stats.general[0].target]).toEqual(stats.general[0].value);
     });
   });
 
@@ -168,6 +171,14 @@ describe('IORedisStoreService', () => {
       await redisStoreService.setActivity(jobId, activityId, data, metadata, hook, appConfig);
       const result = await redisStoreService.getActivityContext(jobId, activityId, appConfig);
       expect(result?.data).toEqual(data);
+    });
+
+    it('should activate existing app version', async () => {
+      const appId = 'testAppId';
+      const version = 'testVersion';
+      await redisStoreService.setApp(appId, version);
+      const response = await redisStoreService.activateAppVersion(appId, version);
+      expect(response).toBeTruthy();
     });
   });
 
@@ -265,7 +276,7 @@ describe('IORedisStoreService', () => {
   describe('addTaskQueues', () => {
     it('should enqueue work items correctly', async () => {
       const keys = ['work-item-1', 'work-item-2', 'work-item-3'];
-      await redisStoreService.addTaskQueues(keys, appConfig);
+      await redisStoreService.addTaskQueues(keys);
       const zsetKey = redisStoreService.mintKey(KeyType.WORK_ITEMS, { appId: appConfig.id });
       for (const key of keys) {
         const score = await redisClient.zscore(zsetKey, key);
@@ -278,7 +289,7 @@ describe('IORedisStoreService', () => {
       const existingScore = Date.now() - 1000;
       const zsetKey = redisStoreService.mintKey(KeyType.WORK_ITEMS, { appId: appConfig.id });
       await redisClient.zadd(zsetKey, existingScore.toString(), existingKey);
-      await redisStoreService.addTaskQueues([existingKey], appConfig);
+      await redisStoreService.addTaskQueues([existingKey]);
       const newScore = await redisClient.zscore(zsetKey, existingKey);
       expect(newScore).toEqual(existingScore.toString());
     });
@@ -299,7 +310,7 @@ describe('IORedisStoreService', () => {
       for (const item of workItems) {
         await redisStoreService.redisClient.zadd(zsetKey, item.score.toString(), item.key);
       }
-      const workItemKey = await redisStoreService.getActiveTaskQueue(appConfig);
+      const workItemKey = await redisStoreService.getActiveTaskQueue();
       expect(workItemKey).toEqual(workItems[0].key);
     });
 
@@ -308,12 +319,12 @@ describe('IORedisStoreService', () => {
       const zsetKey = redisStoreService.mintKey(KeyType.WORK_ITEMS, { appId: appConfig.id });
       await redisStoreService.redisClient.zadd(zsetKey, '1000', cachedKey);
       redisStoreService.cache.setWorkItem(appConfig.id, cachedKey);
-      const workItemKey = await redisStoreService.getActiveTaskQueue(appConfig);
+      const workItemKey = await redisStoreService.getActiveTaskQueue();
       expect(workItemKey).toEqual(cachedKey);
     });
 
     it('should return null if no work items are available', async () => {
-      const workItemKey = await redisStoreService.getActiveTaskQueue(appConfig);
+      const workItemKey = await redisStoreService.getActiveTaskQueue();
       expect(workItemKey).toBeNull();
     });
   });
@@ -330,7 +341,7 @@ describe('IORedisStoreService', () => {
       const zsetKey = redisStoreService.mintKey(KeyType.WORK_ITEMS, { appId: appConfig.id });
       await redisStoreService.redisClient.zadd(zsetKey, 'NX', 1000, workItemKey);
       await redisStoreService.redisClient.set(processedKey, 'processed data');
-      await redisStoreService.deleteProcessedTaskQueue(workItemKey, key, processedKey, appConfig);
+      await redisStoreService.deleteProcessedTaskQueue(workItemKey, key, processedKey);
       const workItemExists = await redisStoreService.redisClient.exists(workItemKey);
       const processedItemExists = await redisStoreService.redisClient.exists(processedKey);
       const workItemInZSet = await redisStoreService.redisClient.zrank(zsetKey, workItemKey);
@@ -344,7 +355,7 @@ describe('IORedisStoreService', () => {
       const key = 'item-cached';
       const processedKey = 'processed-item-cached';
       redisStoreService.cache.setWorkItem(appConfig.id, workItemKey);
-      await redisStoreService.deleteProcessedTaskQueue(workItemKey, key, processedKey, appConfig);
+      await redisStoreService.deleteProcessedTaskQueue(workItemKey, key, processedKey);
       const cachedWorkItem = redisStoreService.cache.getActiveTaskQueue(appConfig.id);
       expect(cachedWorkItem).toBeUndefined();
     });
@@ -395,7 +406,7 @@ describe('IORedisStoreService', () => {
         resolved: 'test-resolved',
         jobId: 'test-job-id',
       };
-      await redisStoreService.setHookSignal(hook, appConfig);
+      await redisStoreService.setHookSignal(hook);
       const key = redisStoreService.mintKey(KeyType.SIGNALS, { appId: appConfig.id });
       const value = await redisClient.hget(key, `${hook.topic}:${hook.resolved}`);
       expect(value).toEqual(hook.jobId);
@@ -409,8 +420,8 @@ describe('IORedisStoreService', () => {
         resolved: 'test-resolved',
         jobId: 'test-job-id',
       };
-      await redisStoreService.setHookSignal(hook, appConfig);
-      const retrievedSignal = await redisStoreService.getHookSignal(hook.topic, hook.resolved, appConfig);
+      await redisStoreService.setHookSignal(hook);
+      const retrievedSignal = await redisStoreService.getHookSignal(hook.topic, hook.resolved);
       expect(retrievedSignal).toEqual(hook.jobId);
       const key = redisStoreService.mintKey(KeyType.SIGNALS, { appId: appConfig.id });
       const remainingValue = await redisClient.hget(key, `${hook.topic}:${hook.resolved}`);

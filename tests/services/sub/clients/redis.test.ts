@@ -2,7 +2,7 @@ import { KeyType, PSNS } from '../../../../modules/key';
 import { LoggerService } from '../../../../services/logger';
 import { RedisStoreService } from '../../../../services/store/clients/redis';
 import { RedisSubService } from '../../../../services/sub/clients/redis';
-import { SubscriptionCallback } from '../../../../typedefs/conductor';
+import { SubscriptionCallback } from '../../../../typedefs/quorum';
 import { RedisConnection, RedisClientType } from '../../../$setup/cache/redis';
 
 describe('RedisSubService', () => {
@@ -36,29 +36,29 @@ describe('RedisSubService', () => {
   describe('init', () => {
     it('subscribes during initialization', async () => {
       const subscriptionHandler: SubscriptionCallback = (topic, message) => {
-        const topicKey = redisSubService.mintKey(KeyType.CONDUCTOR, { appId: appConfig.id });
+        const topicKey = redisSubService.mintKey(KeyType.QUORUM, { appId: appConfig.id });
         expect(topic).toEqual(topicKey);
         expect(message).toEqual(payload);
       };
-      await redisSubService.init(PSNS, appConfig.id, engineId, new LoggerService(), subscriptionHandler);
+      await redisSubService.init(PSNS, appConfig.id, engineId, new LoggerService());
       const payload = { 'any': 'data' };
-      await redisSubService.subscribe(KeyType.CONDUCTOR, subscriptionHandler, appConfig.id);
-      await redisPubService.publish(KeyType.CONDUCTOR, payload, appConfig.id);
+      await redisSubService.subscribe(KeyType.QUORUM, subscriptionHandler, appConfig.id);
+      await redisPubService.publish(KeyType.QUORUM, payload, appConfig.id);
     });
   });
 
   describe('subscribe', () => {
     it('unsubscribes and subscribes', async () => {
       const subscriptionHandler: SubscriptionCallback = (topic, message) => {
-        const topicKey = redisSubService.mintKey(KeyType.CONDUCTOR, { appId: appConfig.id });
+        const topicKey = redisSubService.mintKey(KeyType.QUORUM, { appId: appConfig.id });
         expect(topic).toEqual(topicKey);
         expect(message).toEqual(payload);
       };
-      await redisSubService.init(PSNS, appConfig.id, engineId, new LoggerService(), subscriptionHandler);
+      await redisSubService.init(PSNS, appConfig.id, engineId, new LoggerService());
       const payload = { 'any': 'data' };
-      await redisSubService.unsubscribe(KeyType.CONDUCTOR, appConfig.id);
-      await redisSubService.subscribe(KeyType.CONDUCTOR, subscriptionHandler, appConfig.id);
-      await redisPubService.publish(KeyType.CONDUCTOR, payload, appConfig.id);
+      await redisSubService.subscribe(KeyType.QUORUM, subscriptionHandler, appConfig.id);
+      const pub = await redisPubService.publish(KeyType.QUORUM, payload, appConfig.id);
+      expect(pub).toBeTruthy();
     });
   });
 });
