@@ -13,7 +13,7 @@ This guide defines the recommended development process for deploying a PubSubDB 
 8. [Define Statistics](#define-statistics)
 9. [Plan](#plan)
 10. [Deploy and Activate](#deploy-and-activate)
-11. [Pub (Trigger Workflow Job)](#pub-trigger-workflow-job)
+11. [Pub (Trigger Workflow Job)](#pub-trigger-job)
 12. [Sub (Listen for Job Results)](#sub-listen-for-job-results)
 13. [PubSub (One-Time Subscriptions)](#pubsub-one-time-subscriptions)
 14. [Get Job Data](#get-job-data)
@@ -210,7 +210,7 @@ The following table lists all fields and their configuration. The `settings` fie
 ## Define Activity Schemas
 Any Web service with an Open API spec can be referenced (`#ref`) to save time documenting inputs and outputs.  For other activities it is your responsibility to define the schema using the *JSON Schema* standard. For every activity you define for a workflow, consider the INCOMING and OUTGOING messages for which you  will need a schema. 
 
->The `trigger` activity is unique from other activities in that it doesn't use an **input** schema. Instead, it serves as the front-door for the flow, recieving the event payload and passing to downstream activities. From the perspective of downstream activities, the event payload that triggered the flow is the trigger's **output**. From the perspective of outside callers, it is the flow's **output** (i.e., job data) that matters most as it represents the final output produced by the completed workflow. As you review the remainder of this document, keep this distinction in mind (inside vs outside perspectives) when considering an triggers's "output" vs the flow's "output".
+>The `trigger` activity is unique from other activities in that it doesn't define an **input** schema. Instead, it serves as the front-door for the flow, recieving the event payload and passing to downstream activities. From the perspective of downstream activities, the event payload that triggered the flow is the trigger's **output**. From the perspective of outside callers, it is the flow's **output** (i.e., job data) that matters most as it represents the final output produced by the completed workflow. As you review the remainder of this document, keep this distinction in mind (inside vs outside perspectives) when considering a trigger's "output" vs the flow's "output".
 
 When defining schemas, it's useful to consider the messages being exchanged. Let's start with activity, `a5`, which is the trigger activity for the **Approve Order Price** flow. The purpose of the flow is to essentially approve an order based upon its price. The message exchange is as follows:
 
@@ -226,7 +226,7 @@ When defining schemas, it's useful to consider the messages being exchanged. Let
 
 Let's define the necessary schemas for activity, `a5`. Schemas can be cumbersome to hand code, but there is sufficient tooling to make things manageable. 
 
->ChatGPT is an expert at schema design and needs little more than a list of field names: `Create a YAML spec with a field named 'a5' and subfield named 'job'. Append a JSON schema with fields: id, price, approved. Add another subfield named 'output' and include fields: id, price, object_type (enum: widgetA, widgetB).`
+>ChatGPT is an expert at schema design and needs little more than a list of field names: `Create a JSON Schema with 'input' and 'output' objects, each having 'id', 'price', and 'object_type' properties, the 'object_type' property being an enum. 'output' should also have an 'approved' property.`
 
 ```yaml
 # ./src/schemas/order.approval.price.requested.yaml
@@ -441,17 +441,10 @@ The expected JSON output would be as follows. *Note that the `fields` array is o
 ```
 
 ## Plan
-PubSubDB supports full lifecycle management like other data storage solutions. The system is designed to protect the models from arbitrary changes, providing migration and deployment tools to support hot deployments with no downtime. It's possible to plan the migration beforehand to better understand the scope of the change and whether or not a full hot deployment is possible. Provide your app manifest to PubSubDB to generate the plan.
+PubSubDB supports full lifecycle management like other data storage solutions. The system is designed to protect the models from arbitrary changes but is still able to support hot deployments. Plan the migration beforehand to better understand the scope of the change and whether or not a full hot deployment is possible. Provide your app manifest to PubSubDB to generate the plan.
 
-```typescript
-import {
-  PubSubDB,
-  IORedisStore,
-  IORedisStream,
-  IORedisSub } from '@pubsubdb/pubsubdb';
-
-const pubSubDB = await PubSubDB.init({ ... });
-const plan = pubSubDB.plan('./pubsubdb.yaml');
+```javascript
+const plan = await pubSubDB.plan('./pubsubdb.yaml');
 ```
 
 ## Deploy and Activate
@@ -462,7 +455,7 @@ const deploymentStatus = await pubSubDB.deploy('./pubsubdb.yaml');
 const activationStatus = await pubSubDB.activate('1');
 ```
 
-### Pub (Trigger Job)
+## Pub (Trigger Job)
 Suppose you need to kick off a workflow but the answer isn't relevant at this time. You can optionally await the response (the job ID) to confirm that the request was received, but otherwise, this is a simple fire-and-forget call.
 
 ```javascript
@@ -472,7 +465,7 @@ const jobId = await pubSubDB.pub(topic, payload);
 //jobId is `order_123`
 ```
 
-### Sub (Listen for Job Results)
+## Sub (Listen for Job Results)
 Suppose you need to listen in on the results of all computations on a particular topic, not just the ones you initiated. In that case, you can use the `sub` method.
 
 This is useful in scenarios where you're interested in monitoring global computation results, performing some action based on them, or even just logging them for auditing purposes.
@@ -488,7 +481,7 @@ const topic = 'order.approval.requested';
 pubSubDB.pub(topic, payload);
 ```
 
-### PubSub (One-Time Subscriptions)
+## PubSub (One-Time Subscriptions)
 If you need to kick off a workflow and await the response, use the `pubsub` method. PubSubDB will create a one-time subscription, making it simple to model the request using a standard `await`. The benefit, of course, is that this is a fully duplexed call that adheres to the principles of CQRS, thereby avoiding the overhead of a typical HTTP request/response exchange.
 
 ```javascript
@@ -628,7 +621,8 @@ const payload = {
   range: '24h',
   end: 'NOW'
 };
-const ids = await pubSubDB.getIds('order.approval.requested', payload);
+const topic = 'order.approval.requested';
+const ids = await pubSubDB.getIds(topic, payload);
 ```
 
 When the response is returned, specific job IDs are returned and will correspond to the count statistics described earlier.

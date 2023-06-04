@@ -129,11 +129,11 @@ This is useful in scenarios where you're interested in monitoring global computa
 
 ```javascript
 await pubSubDB.sub('calculated', (topic: string, jobOutput: JobOutput) => {
-  console.log(`Topic: ${topic}`, jobOutput);
-  // `jobOutput.data.result` (answer will be `5`)
+  console.log(jobOutput.data.result);
+  // Output will be: `5`
 });
 
-//publish one event to test...
+//publish one test event
 const payload = { operation: 'divide', values: [100, 4, 5] };
 const jobId = await pubSubDB.pub('calculate', payload);
 ```

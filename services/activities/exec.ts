@@ -4,8 +4,7 @@
 //          RegisterTimeoutError, 
 //          ExecActivityError, 
 //          DuplicateActivityError} from '../../../modules/errors';
-import { CollatorService } from "../../collator";
-import { PubSubDBService } from "..";
+import { CollatorService } from "../collator";
 import { Activity } from "./activity";
 import {
   ActivityData,
@@ -13,10 +12,11 @@ import {
   ExecActivity,
   ActivityType,
   HookData
-} from "../../../typedefs/activity";
-import { JobActivityContext } from "../../../typedefs/job";
-import { StreamData, StreamStatus } from "../../../typedefs/stream";
-import { KeyType } from "../../../modules/key";
+} from "../../typedefs/activity";
+import { JobActivityContext } from "../../typedefs/job";
+import { StreamData, StreamStatus } from "../../typedefs/stream";
+import { KeyType } from "../../modules/key";
+import { EngineService } from "../engine";
 
 class Exec extends Activity {
   config: ExecActivity;
@@ -26,9 +26,9 @@ class Exec extends Activity {
     data: ActivityData,
     metadata: ActivityMetadata,
     hook: HookData | null,
-    pubsubdb: PubSubDBService,
+    engine: EngineService,
     context?: JobActivityContext) {
-      super(config, data, metadata, hook, pubsubdb, context);
+      super(config, data, metadata, hook, engine, context);
   }
 
   //********  INITIAL ENTRY POINT (A)  ********//
@@ -37,7 +37,7 @@ class Exec extends Activity {
       await this.restoreJobContext(this.context.metadata.jid);
 
       /////// MULTI: START ///////
-      const multi = this.pubsubdb.store.getMulti();
+      const multi = this.store.getMulti();
       this.mapInputData();
       //todo: await this.registerTimeout();
       await this.saveActivity(multi);
@@ -69,8 +69,8 @@ class Exec extends Activity {
       },
       data: this.context.data
     };
-    const key = this.pubsubdb.store?.mintKey(KeyType.STREAMS, { appId: this.pubsubdb.appId, topic: this.config.subtype });
-    this.pubsubdb.streamSignaler?.publishMessage(key, streamData);
+    const key = this.store?.mintKey(KeyType.STREAMS, { appId: this.engine.appId, topic: this.config.subtype });
+    this.engine.streamSignaler?.publishMessage(key, streamData);
   }
 
 
@@ -82,7 +82,7 @@ class Exec extends Activity {
     this.mapJobData();
     await this.serializeMappedData('output');
     //******      MULTI: START      ******//
-    const multi = this.pubsubdb.store.getMulti();
+    const multi = this.store.getMulti();
     await this.saveActivity(multi);
     await this.saveJobData(multi);
     if (status === StreamStatus.PENDING) {

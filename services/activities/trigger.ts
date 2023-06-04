@@ -1,7 +1,6 @@
-import { PubSubDBService } from '..';
-import { Pipe } from "../../pipe";
-import { KeyType } from '../../../modules/key';
-import { SerializerService } from '../../store/serializer';
+import { Pipe } from "../pipe";
+import { KeyType } from '../../modules/key';
+import { SerializerService } from '../store/serializer';
 import { Activity } from "./activity";
 // import {
 //   RestoreJobContextError, 
@@ -16,12 +15,13 @@ import {
   ActivityType,
   TriggerActivity,
   FlattenedDataObject, 
-  HookData} from "../../../typedefs/activity";
-import { JobActivityContext } from '../../../typedefs/job';
-import { StatsType, Stat } from '../../../typedefs/stats';
-import { CollatorService } from '../../collator';
-import { RedisMulti } from '../../../typedefs/redis';
-import { getGuid } from '../../../modules/utils';
+  HookData} from "../../typedefs/activity";
+import { JobActivityContext } from '../../typedefs/job';
+import { CollatorService } from '../collator';
+import { RedisMulti } from '../../typedefs/redis';
+import { getGuid, getTimeSeriesStamp } from '../../modules/utils';
+import { EngineService } from '../engine';
+import { ReporterService } from '../reporter';
 
 class Trigger extends Activity {
   config: TriggerActivity;
@@ -31,9 +31,9 @@ class Trigger extends Activity {
     data: ActivityData,
     metadata: ActivityMetadata,
     hook: HookData | null,
-    pubsubdb: PubSubDBService,
+    engine: EngineService,
     context?: JobActivityContext) {
-      super(config, data, metadata, hook, pubsubdb, context);
+      super(config, data, metadata, hook, engine, context);
   }
 
   async process(): Promise<string> {
@@ -45,7 +45,7 @@ class Trigger extends Activity {
       await this.saveActivityNX();
 
       /////// MULTI:START ///////
-      const multi = this.pubsubdb.store.getMulti();
+      const multi = this.store.getMulti();
       await this.saveActivity(multi);
       await this.saveJobData(multi);
       await this.saveJobStats(multi);
@@ -90,7 +90,7 @@ class Trigger extends Activity {
 
     //create job context
     const utc = new Date().toISOString();
-    const { id, version } = await this.pubsubdb.getAppConfig();
+    const { id, version } = await this.engine.getVID();
     const activityMetadata = { ...this.metadata, jid: jobId, key: jobKey };
     this.context = {
       metadata: {
@@ -104,7 +104,7 @@ class Trigger extends Activity {
         key: jobKey,
         jc: utc,
         ju: utc,
-        ts: this.getTimeSeriesStamp(),
+        ts: getTimeSeriesStamp(this.resolveGranularity()),
         js: this.getJobStatus(),
       },
       data: {},
@@ -124,6 +124,10 @@ class Trigger extends Activity {
     this.context['$self'] = this.context[this.metadata.aid];
   }
 
+  resolveGranularity(): string {
+    return this.config.stats?.granularity || ReporterService.DEFAULT_GRANULARITY;
+  }
+
   getJobStatus(): number {
     return this.config.collationKey - this.config.collationInt * 3;
   }
@@ -138,18 +142,13 @@ class Trigger extends Activity {
     }
   }
 
-  generateUniqueId() {
-    const randomTenDigitNumber = Math.floor(Math.random() * 1e10);
-    return `${Date.now().toString(16)}.${randomTenDigitNumber.toString(16)}`;
-  }
-
   resolveJobKey(context: Partial<JobActivityContext>): string {
     const stats = this.config.stats;
     const jobKey = stats?.measures?.length && stats?.key;
     if (jobKey) {
       return Pipe.resolve(jobKey, context);
     } else {
-      return '';
+      return ''; //no key means no stats are saved
     }
   }
 
@@ -181,110 +180,31 @@ class Trigger extends Activity {
     //NX ensures no job id dupes
     const jobId = this.context.metadata.jid;
     const activityId = this.metadata.aid;
-    const response = await this.pubsubdb.store.setActivityNX(
+    const response = await this.store.setActivityNX(
       jobId,
       activityId,
-      await this.pubsubdb.getAppConfig()
+      await this.engine.getVID()
     );
     if (response !== 1) {
-      const key = this.pubsubdb.store.mintKey(
+      const key = this.store.mintKey(
         KeyType.JOB_ACTIVITY_DATA, 
-        { appId: (await this.pubsubdb.getAppConfig()).id, jobId, activityId }
+        { appId: (await this.engine.getVID()).id, jobId, activityId }
       );
       throw new Error(`Duplicate. Job ${jobId} already exists`);
     }
   }
 
-  resolveStats(): StatsType {
-    const s = this.config.stats;
-    const stats: StatsType = {
-      general: [],
-      index: [],
-      median: []
-    }
-    stats.general.push({ metric: 'count', target: 'count', value: 1 });
-    for (const measure of s.measures) {
-      const metric = this.resolveMetric({ metric: measure.measure, target: measure.target });
-      if (this.isGeneralMetric(measure.measure)) {
-        stats.general.push(metric);
-      } else if (this.isMedianMetric(measure.measure)) {
-        stats.median.push(metric);
-      } else if (this.isIndexMetric(measure.measure)) {
-        stats.index.push(metric);
-      }
-    }
-    return stats;
-  }
-
-  isGeneralMetric(metric: string): boolean {
-    return metric === 'sum' || metric === 'avg' || metric === 'count';
-  }
-
-  isMedianMetric(metric: string): boolean {
-    return metric === 'mdn';
-  }
-
-  isIndexMetric(metric: string): boolean {
-    return metric === 'index';
-  }
-
-  resolveMetric({metric, target}): Stat {
-    const pipe = new Pipe([[target]], this.context);
-    const resolvedValue = pipe.process().toString();
-    const resolvedTarget = this.resolveTarget(metric, target, resolvedValue);
-    if (metric === 'index') {
-      return { metric, target: resolvedTarget, value: this.context.metadata.jid };
-    } else if (metric === 'count') {
-      return { metric, target: resolvedTarget, value: 1 };
-    }
-    return { metric, target: resolvedTarget, value: resolvedValue } as Stat;
-  }
-
-  isCardinalMetric(metric: string): boolean {
-    return metric === 'index' || metric === 'count';
-  }
-
-  resolveTarget(metric: string, target: string, resolvedValue: string): string {
-    const trimmed = target.substring(1, target.length - 1);
-    const trimmedTarget = trimmed.split('.').slice(3).join('/');
-    let resolvedTarget: string;
-    if (this.isCardinalMetric(metric)) {
-      resolvedTarget = `${metric}:${trimmedTarget}:${resolvedValue}`;
-    } else {
-      resolvedTarget = `${metric}:${trimmedTarget}`;
-    }
-    return resolvedTarget;
-  }
-
-  /**
-   * returns the time series stamp to use (12-digit derivation of ISOString)
-   */
-  getTimeSeriesStamp(): string {
-    const now = new Date();
-    const granularity = this.resolveGranularity();
-    const granularityUnit = granularity.slice(-1);
-    const granularityValue = parseInt(granularity.slice(0, -1), 10);
-    if (granularityUnit === 'm') {
-      const minute = Math.floor(now.getMinutes() / granularityValue) * granularityValue;
-      now.setUTCMinutes(minute, 0, 0);
-    } else if (granularityUnit === 'h') {
-      now.setUTCMinutes(0, 0, 0);
-    }
-    return now.toISOString().replace(/:\d\d\..+|-|T/g, '').replace(':','');
-  }
-
-  resolveGranularity(): string {
-    return this.config.stats?.granularity || '1h';
-  }
-
   async saveJobStats(multi?: RedisMulti): Promise<void> {
-    if (this.context.metadata.key) {
-      await this.pubsubdb.store.setJobStats(
-        this.context.metadata.key,
-        this.context.metadata.jid,
-        this.context.metadata.ts,
-        this.resolveStats(),
-        await this.pubsubdb.getAppConfig(),
+    const md = this.context.metadata;
+    if (md.key) {
+      const config = await this.engine.getVID();
+      const reporter = new ReporterService(config, this.store, this.logger);
+      await this.store.setJobStats(
+        md.key,
+        md.jid,
+        md.ts,
+        reporter.resolveTriggerStatistics(this.config, this.context),
+        config,
         multi
       );
     }

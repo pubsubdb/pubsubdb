@@ -191,12 +191,14 @@ By accessing global settings values in this manner, developers can promote maint
 
 A graph is a key component of the application model, representing a collection of activities and transitions that define a specific workflow or process within the application. Graphs allow developers to model complex processes, manage dependencies between activities, and handle various application events.
 
-The structure of a graph is as follows:
+The structure of a graph (aka `flow`) is as follows:
 
 1. `subscribes`: The event that the graph subscribes to in order to start its execution.
-2. `publishes`: The event that the graph publishes when it completes its execution.
-3. `activities`: An object containing the activities (nodes) that make up the graph. Each activity has a unique identifier and represents a specific task or operation within the workflow.
-4. `transitions`: An object containing the transitions (edges) between activities. Transitions define the order in which activities are executed and can include conditions that determine the execution path.
+2. `publishes` (optional): The event that the graph publishes when it completes its execution.
+3. `input` (optional): The schema for the data the graph expects on start.
+4. `output` (optional): The schema for the data the graph produces on completion.
+5. `activities`: An object containing the activities (nodes) that make up the graph. Each activity has a unique identifier and represents a specific task or operation within the workflow.
+6. `transitions`: An object containing the transitions (edges) between activities. Transitions define the order in which activities are executed and can include conditions that determine the execution path.
 
 Here's an example of a graph structure in YAML:
 
@@ -204,6 +206,13 @@ Here's an example of a graph structure in YAML:
 graphs:
   - subscribes: order.approval.requested
     publishes: order.approval.responded
+    input:
+      schema:
+        $ref: '../schemas/order.approval.requested.yaml#/input'
+    output:
+      schema:
+        $ref: '../schemas/order.approval.requested.yaml#/output'
+
     activities:
       a1:
         title: "Get Approval"
@@ -237,7 +246,7 @@ graphs:
                 actual: "{a2.output.data.approved}"
 ```
 
-In this example, the graph subscribes to the "order.approval.requested" event and publishes the "order.approval.responded" event. It includes four activities (a1, a2, a3, and a4) and defines transitions between them. The transitions object outlines the flow between activities, including conditional logic that determines the execution path based on the output data of previous activities.
+In this example, the graph subscribes to the `order.approval.requested` event and publishes the `order.approval.responded` event. It includes four activities (a1, a2, a3, and a4) and defines transitions between them. The transitions object outlines the flow between activities, including conditional logic that determines the execution path based on the output data of previous activities.
 
 By structuring graphs in this manner, developers can create flexible and efficient workflows that model various processes within their applications.
 

@@ -4,21 +4,22 @@
 //          RegisterTimeoutError, 
 //          ExecActivityError, 
 //          DuplicateActivityError} from '../../../modules/errors';
-import { PubSubDBService } from "..";
-import { CollatorService } from "../../collator";
-import { ILogger } from "../../logger";
-import { MapperService } from '../../mapper';
-import { StoreSignaler } from "../../signaler/store";
-import { SerializerService } from '../../store/serializer';
+import { CollatorService } from "../collator";
+import { ILogger } from "../logger";
+import { MapperService } from '../mapper';
+import { StoreSignaler } from "../signaler/store";
+import { SerializerService } from '../store/serializer';
 import { 
   ActivityType,
   ActivityData,
   ActivityMetadata,
   FlattenedDataObject, 
-  HookData} from "../../../typedefs/activity";
-import { JobActivityContext } from "../../../typedefs/job";
-import { TransitionRule, Transitions } from "../../../typedefs/transition";
-import { RedisMulti } from "../../../typedefs/redis";
+  HookData} from "../../typedefs/activity";
+import { JobActivityContext } from "../../typedefs/job";
+import { TransitionRule, Transitions } from "../../typedefs/transition";
+import { RedisClient, RedisMulti } from "../../typedefs/redis";
+import { EngineService } from "../engine";
+import { StoreService } from "../store";
 
 /**
  * The base class for all activities
@@ -27,9 +28,10 @@ class Activity {
   config: ActivityType;
   data: ActivityData;
   metadata: ActivityMetadata;
+  store: StoreService<RedisClient, RedisMulti>
   hook: HookData;
   context: JobActivityContext;
-  pubsubdb: PubSubDBService;
+  engine: EngineService;
   logger: ILogger;
 
   constructor(
@@ -37,15 +39,16 @@ class Activity {
     data: ActivityData,
     metadata: ActivityMetadata,
     hook: HookData | null,
-    pubsubdb: PubSubDBService,
+    engine: EngineService,
     context?: JobActivityContext) {
       this.config = config;
       this.data = data;
       this.metadata = metadata;
       this.hook = hook;
-      this.pubsubdb = pubsubdb;
-      this.logger = this.pubsubdb.logger;
+      this.engine = engine;
       this.context = context || { data: {}, metadata: {} } as JobActivityContext;
+      this.logger = engine.logger;
+      this.store = engine.store;
   }
 
   //********  INITIAL ENTRY POINT (A)  ********//
@@ -55,7 +58,7 @@ class Activity {
       this.mapJobData();
 
       /////// MULTI: START ///////
-      const multi = this.pubsubdb.store.getMulti();
+      const multi = this.store.getMulti();
       //await this.mapInputData();      //subclasses (exec) implement this
       //await this.registerResponse();  //subclasses implement this
       //await this.registerTimeout();   //subclasses implement this
@@ -99,14 +102,14 @@ class Activity {
   //********  SIGNALER ENTRY POINT (C)  ********//
   async registerExpectedHook(multi?: RedisMulti): Promise<string | void> {
     if (this.config.hook?.topic) {
-      const config = await this.pubsubdb.getAppConfig();
-      const signaler = new StoreSignaler(config, this.pubsubdb);
+      const config = await this.engine.getVID();
+      const signaler = new StoreSignaler(this.store, this.logger);
       return await signaler.registerHook(this.config.hook.topic, this.context, multi);
     }
   }
   async processHookSignal(): Promise<void> {
-    const config = await this.pubsubdb.getAppConfig();
-    const signaler = new StoreSignaler(config, this.pubsubdb);
+    const config = await this.engine.getVID();
+    const signaler = new StoreSignaler(this.store, this.logger);
     const jobId = await signaler.process(this.config.hook.topic, this.data);
     if (jobId) {
       await this.restoreJobContext(jobId);
@@ -117,7 +120,7 @@ class Activity {
       await this.serializeMappedData('hook');
 
       /////// MULTI: START ///////
-      const multi = this.pubsubdb.store.getMulti();
+      const multi = this.engine.store.getMulti();
       await this.saveActivity(multi);
       await this.saveJobData(multi);
       await this.saveActivityStatus(1, multi);
@@ -130,8 +133,8 @@ class Activity {
   }
 
   async restoreJobContext(jobId: string): Promise<void> {
-    const config = await this.pubsubdb.getAppConfig();
-    this.context = await this.pubsubdb.store.restoreContext(
+    const config = await this.engine.getVID();
+    this.context = await this.store.restoreContext(
       jobId,
       this.config.depends,
       config
@@ -191,11 +194,11 @@ class Activity {
   }
 
   async saveJobData(multi?: RedisMulti): Promise<void> {
-    await this.pubsubdb.store.setJob(
+    await this.store.setJob(
       this.context.metadata.jid,
       this.context.data || {},
       this.saveJobMetadata() ? this.context.metadata : {},
-      await this.pubsubdb.getAppConfig(),
+      await this.engine.getVID(),
       multi
     );
   }
@@ -203,29 +206,29 @@ class Activity {
   async saveActivity(multi?: RedisMulti): Promise<void> {
     const jobId = this.context.metadata.jid;
     const activityId = this.metadata.aid;
-    await this.pubsubdb.store.setActivity(
+    await this.store.setActivity(
       jobId,
       activityId,
       this.context[activityId]?.output?.data || {},
       { ...this.metadata, jid: this.context.metadata.jid, key: this.context.metadata.key },
       this.context[activityId]?.hook?.data || {},
-      await this.pubsubdb.getAppConfig(),
+      await this.engine.getVID(),
       multi,
     );
   }
 
   async saveActivityStatus(multiplier = 1, multi?: RedisMulti): Promise<void> {
-    await this.pubsubdb.store.updateJobStatus(
+    await this.store.updateJobStatus(
       this.context.metadata.jid,
       -this.config.collationInt * multiplier,
-      await this.pubsubdb.getAppConfig(),
+      await this.engine.getVID(),
       multi
     );
   }
 
   async skipDescendants(activityId: string, transitions: Transitions, toDecrement: number): Promise<number> {
-    const config = await this.pubsubdb.getAppConfig();
-    const schema = await this.pubsubdb.store.getSchema(activityId, config);
+    const config = await this.engine.getVID();
+    const schema = await this.store.getSchema(activityId, config);
     toDecrement = toDecrement - (schema.collationInt * 6); // 3 = 'skipped'
     const transition = transitions[`.${activityId}`];
     if (transition) {
@@ -242,24 +245,25 @@ class Activity {
     const toDecrement = await this.transitionActivity(isComplete);
     //this is an extra call to the db and is job-specific
     //todo: create a 'job' object/class for such methods (use pubsubdb for now)
-    this.pubsubdb.updateJobStatus(this.context, toDecrement);
+    this.engine.updateJobStatus(this.context, toDecrement);
   }
 
+  //todo: most efficient path is to count all skipped and decrement with self (just one call to db)
   async transitionActivity(isComplete: boolean): Promise<number> {
     if (isComplete) {
-      this.pubsubdb.runJobCompletionTasks(this.context);
+      this.engine.runJobCompletionTasks(this.context);
       return 0;
     } else {
       //transitions can cascade through the descendant activities
       //toDecrement (e.g. -600600) is the result of the cascade
       let toDecrement = 0;
-      const transitions = await this.pubsubdb.store.getTransitions(await this.pubsubdb.getAppConfig());
+      const transitions = await this.store.getTransitions(await this.engine.getVID());
       const transition = transitions[`.${this.metadata.aid}`];
       if (transition) {
         for (const toActivityId in transition) {
           const transitionRule: boolean|TransitionRule = transition[toActivityId];
           if (MapperService.evaluate(transitionRule, this.context)) {
-            await this.pubsubdb.pub(
+            await this.engine.pub(
               `.${toActivityId}`,
               {},
               this.context

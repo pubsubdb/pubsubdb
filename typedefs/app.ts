@@ -4,7 +4,7 @@ interface App {
   description: string;
 }
 
-type AppVersion = {
+type AppVID = {
   version: string;
   id: string;
 };
@@ -18,4 +18,4 @@ type AppSubscriptions = {
 };
 
 
-export { App, AppVersion, AppTransitions, AppSubscriptions };
+export { App, AppVID, AppTransitions, AppSubscriptions };

@@ -3,6 +3,9 @@
  * 
  * psdb ->                                            {hash}    pubsubdb config {version: "0.0.1", namespace: "psdb"}
  * psdb:a:<appid> ->                                  {hash}    app profile { "id": "appid", "version": "2", "versions/1": "GMT", "versions/2": "GMT"}
+ * psdb:<appid>::workitems ->                         {zset}    work items/tasks an engine must do like garbage collect or hook a set of matching records (hookAll)
+ * psdb:<appid>:q: ->                                 {hash}    quorum-wide messages
+ * psdb:<appid>:q:<ngnid> ->                          {hash}    engine-targeted messages (targeted quorum-oriented message)
  * psdb:<appid>:j:<jobid> ->                          {hash}    job data
  * psdb:<appid>:j:<jobid>:<activityId>  ->            {hash}    job activity data (a1)
  * psdb:<appid>:s:<jobkey>:<dateTime> ->              {hash}    job stats (general)
@@ -11,31 +14,32 @@
  * psdb:<appid>:v:<version>:activities ->             {hash}    schemas [cache]
  * psdb:<appid>:v:<version>:transitions ->            {hash}    transitions [cache]
  * psdb:<appid>:v:<version>:subscriptions ->          {hash}    subscriptions [cache]
+ * psdb:<appid>:x: ->                                 {xstream} when an engine is sent or reads a buffered task (engines read from their custom topic)
+ * psdb:<appid>:x:<topic> ->                          {xstream} when a worker is sent or reads a buffered task (workers read from their custom topic)
  * psdb:<appid>:hooks ->                              {hash}    hook patterns/rules; set at compile time
  * psdb:<appid>:signals ->                            {hash}    dynamic hook signals (hget/hdel) when resolving (always self-clean); added/removed at runtime
  */
 
-
 //default namespace for pubsubdb
 const PSNS = "psdb";
 
-//the key types are used to create a unique key per entity
+//these are the entity types that are stored in the key/value store
 enum KeyType {
-  PUBSUBDB,
   APP,
+  HOOKS,
   JOB_DATA,
   JOB_ACTIVITY_DATA,
   JOB_STATS_GENERAL,
   JOB_STATS_MEDIAN,
   JOB_STATS_INDEX,
+  PUBSUBDB,
+  QUORUM,
   SCHEMAS,
+  SIGNALS,
+  STREAMS,
   SUBSCRIPTIONS,
   SUBSCRIPTION_PATTERNS,
-  HOOKS,
-  SIGNALS,
-  CONDUCTOR,
   WORK_ITEMS,
-  STREAMS,
 }
 
 //when minting a key, the following parameters are used to create a unique key per entity
@@ -68,12 +72,12 @@ class KeyService {
     switch (keyType) {
       case KeyType.PUBSUBDB:
         return namespace;
-      case KeyType.CONDUCTOR:
-        return `${namespace}:${params.appId}::conductor:${params.engineId || ''}`;
       case KeyType.WORK_ITEMS:
-          return `${namespace}:${params.appId}::workitems`;
+        return `${namespace}:${params.appId}::workitems`;
       case KeyType.APP:
         return `${namespace}:a:${params.appId || ''}`;
+      case KeyType.QUORUM:
+        return `${namespace}:${params.appId}:q:${params.engineId || ''}`;
       case KeyType.JOB_DATA:
         return `${namespace}:${params.appId}:j:${params.jobId}`;
       case KeyType.JOB_ACTIVITY_DATA:

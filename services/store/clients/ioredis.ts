@@ -1,21 +1,37 @@
-import { KeyService, KeyStoreParams, KeyType, PSNS } from '../../../modules/key';
+import {
+  KeyService,
+  KeyStoreParams,
+  KeyType,
+  PSNS } from '../../../modules/key';
 import { Cache } from '../cache';
 import { StoreService } from '../index';
 import { SerializerService } from '../serializer';
 import { ILogger } from '../../logger';
 import { ActivityDataType, ActivityType } from '../../../typedefs/activity';
-import { AppVersion } from '../../../typedefs/app';
+import { AppVID } from '../../../typedefs/app';
 import { HookRule, HookSignal } from '../../../typedefs/hook';
 import { RedisClientType, RedisMultiType } from '../../../typedefs/ioredisclient';
-import { JobActivityContext, JobData, JobMetadata, JobOutput } from '../../../typedefs/job';
-import { PubSubDBApp, PubSubDBApps, PubSubDBSettings } from '../../../typedefs/pubsubdb';
-import { IdsData, JobStats, JobStatsRange, StatsType } from '../../../typedefs/stats';
+import {
+  JobActivityContext,
+  JobData,
+  JobMetadata,
+  JobOutput } from '../../../typedefs/job';
+import {
+  PubSubDBApp,
+  PubSubDBApps,
+  PubSubDBSettings } from '../../../typedefs/pubsubdb';
+import {
+  IdsData,
+  JobStats,
+  JobStatsRange,
+  StatsType } from '../../../typedefs/stats';
 import { Transitions } from '../../../typedefs/transition';
 
 class IORedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
   redisClient: RedisClientType;
   cache: Cache;
   namespace: string;
+  appId: string;
   logger: ILogger;
 
   constructor(redisClient: RedisClientType) {
@@ -24,6 +40,7 @@ class IORedisStoreService extends StoreService<RedisClientType, RedisMultiType> 
 
   async init(namespace = PSNS, appId: string, logger: ILogger): Promise<PubSubDBApps> {
     this.namespace = namespace;
+    this.appId = appId;
     this.logger = logger;
     const settings = await this.getSettings(true);
     this.cache = new Cache(appId, settings);
@@ -101,7 +118,7 @@ class IORedisStoreService extends StoreService<RedisClientType, RedisMultiType> 
     return payload;
   }
 
-  async activateAppVersion(id: string, version: string): Promise<any> {
+  async activateAppVersion(id: string, version: string): Promise<boolean> {
     const params: KeyStoreParams = { appId: id };
     const key = this.mintKey(KeyType.APP, params);
     const versionId = `versions/${version}`;
@@ -116,7 +133,8 @@ class IORedisStoreService extends StoreService<RedisClientType, RedisMultiType> 
       Object.entries(payload).forEach(([key, value]) => {
         payload[key] = JSON.stringify(value);
       });
-      return await this.redisClient.hmset(key, payload);
+      const status: string = await this.redisClient.hmset(key, payload);
+      return status === 'OK';
     }
     throw new Error(`Version ${version} does not exist for app ${id}`);
   }
@@ -132,7 +150,7 @@ class IORedisStoreService extends StoreService<RedisClientType, RedisMultiType> 
     return await this.redisClient.hmset(key, payload);
   }
 
-  async setJobStats(jobKey: string, jobId: string, dateTime: string, stats: StatsType, appVersion: AppVersion, multi? : RedisMultiType): Promise<any> {
+  async setJobStats(jobKey: string, jobId: string, dateTime: string, stats: StatsType, appVersion: AppVID, multi? : RedisMultiType): Promise<any> {
     const params: KeyStoreParams = { appId: appVersion.id, jobId, jobKey, dateTime };
     const privateMulti = multi || this.redisClient.multi();
     if (stats.general.length) {
@@ -156,7 +174,7 @@ class IORedisStoreService extends StoreService<RedisClientType, RedisMultiType> 
     }
   }
 
-  async getJobStats(jobKeys: string[], config: AppVersion): Promise<JobStatsRange> {
+  async getJobStats(jobKeys: string[]): Promise<JobStatsRange> {
     const multi = this.getMulti();
     for (const jobKey of jobKeys) {
       multi.hgetall(jobKey);
@@ -167,7 +185,7 @@ class IORedisStoreService extends StoreService<RedisClientType, RedisMultiType> 
       const key = jobKeys[index];
       const statsHash: unknown = result[1];
       if (statsHash && Object.keys(statsHash).length > 0) {
-        for (const [key, val] of Object.entries(statsHash as object)) {
+        for (const [key, val] of Object.entries({ ...statsHash as object })) {
           statsHash[key] = Number(val);
         }
         output[key] = statsHash as JobStats;
@@ -197,12 +215,12 @@ class IORedisStoreService extends StoreService<RedisClientType, RedisMultiType> 
     return output;
   }
 
-  async updateJobStatus(jobId: string, collationKeyStatus: number, appVersion: AppVersion, multi? : any): Promise<any> {
+  async updateJobStatus(jobId: string, collationKeyStatus: number, appVersion: AppVID, multi? : any): Promise<any> {
     const jobKey = this.mintKey(KeyType.JOB_DATA, { appId: appVersion.id, jobId });
     return await (multi || this.redisClient).hincrbyfloat(jobKey, 'm/js', collationKeyStatus);
   }
 
-  async setJob(jobId: string, data: Record<string, unknown>, metadata: Record<string, unknown>, appVersion: AppVersion, multi? : any): Promise<any|string> {
+  async setJob(jobId: string, data: Record<string, unknown>, metadata: Record<string, unknown>, appVersion: AppVID, multi? : any): Promise<any|string> {
     const hashKey = this.mintKey(KeyType.JOB_DATA, { appId: appVersion.id, jobId });
     const jobData = { }
     if (data && Object.keys(data).length > 0) {
@@ -220,7 +238,7 @@ class IORedisStoreService extends StoreService<RedisClientType, RedisMultiType> 
     }
   }
 
-  async getJobMetadata(jobId: string, appVersion: AppVersion): Promise<JobMetadata | undefined> {
+  async getJobMetadata(jobId: string, appVersion: AppVID): Promise<JobMetadata | undefined> {
     const metadataFields = ['m/ngn', 'm/pj', 'm/pa', 'm/aid', 'm/atp', 'm/stp', 'm/jc', 'm/ju', 'm/jid', 'm/key', 'm/ts', 'm/js'];
     const params: KeyStoreParams = { appId: appVersion.id, jobId };
     const key = this.mintKey(KeyType.JOB_DATA, params);
@@ -236,7 +254,7 @@ class IORedisStoreService extends StoreService<RedisClientType, RedisMultiType> 
     return metadata.m;
   }
 
-  async getJobOutput(jobId: string, appVersion: AppVersion): Promise<JobOutput | undefined> {
+  async getJobOutput(jobId: string, appVersion: AppVID): Promise<JobOutput | undefined> {
     const params: KeyStoreParams = { appId: appVersion.id, jobId };
     const key = this.mintKey(KeyType.JOB_DATA, params);
     const jobData = await this.redisClient.hgetall(key);
@@ -244,19 +262,19 @@ class IORedisStoreService extends StoreService<RedisClientType, RedisMultiType> 
     return data?.m ? { data: data.d, metadata: data.m} : undefined;
   }
 
-  async getJobData(jobId: string, appVersion: AppVersion): Promise<JobData | undefined> {
+  async getJobData(jobId: string, appVersion: AppVID): Promise<JobData | undefined> {
     const context = await this.getJobOutput(jobId, appVersion);
     return context?.data || undefined;
   }
 
-  async getJob(jobId: string, appVersion: AppVersion): Promise<JobData | undefined> {
+  async getJob(jobId: string, appVersion: AppVID): Promise<JobData | undefined> {
     return await this.getJobData(jobId, appVersion);
   }
 
   async restoreContext(
     jobId: string,
     dependsOn: Record<string, string[]>,
-    config: AppVersion
+    config: AppVID
   ): Promise<Partial<JobActivityContext>> {
     const multi = this.getMulti();
     const keysAndFields: { activityId: string; key: string; fields: string[] }[] = [];
@@ -313,20 +331,20 @@ class IORedisStoreService extends StoreService<RedisClientType, RedisMultiType> 
     return restoredData;
   }
   
-  async setActivity(jobId: string, activityId: string, data: Record<string, unknown>, metadata: Record<string, unknown>, hook: Record<string, unknown> | null, appVersion: AppVersion, multi? : RedisMultiType): Promise<RedisMultiType|string>  {
+  async setActivity(jobId: string, activityId: string, data: Record<string, unknown>, metadata: Record<string, unknown>, hook: Record<string, unknown> | null, appVersion: AppVID, multi? : RedisMultiType): Promise<RedisMultiType|string>  {
     const hashKey = this.mintKey(KeyType.JOB_ACTIVITY_DATA, { appId: appVersion.id, jobId, activityId });
     const hashData = SerializerService.flattenHierarchy({ m: metadata, d: data, h: hook && Object.keys(hook).length ? hook : undefined });
     await (multi || this.redisClient).hmset(hashKey, hashData);
     return multi || activityId;
   }
 
-  async setActivityNX(jobId: string, activityId: any, config: AppVersion): Promise<number> {
+  async setActivityNX(jobId: string, activityId: any, config: AppVID): Promise<number> {
     const hashKey = this.mintKey(KeyType.JOB_ACTIVITY_DATA, { appId: config.id, jobId, activityId });
     const response = await this.redisClient.hsetnx(hashKey, 'm/aid', activityId);
     return response as number;
   }
 
-  async getActivityMetadata(jobId: string, activityId: string, appVersion: AppVersion): Promise<any> {
+  async getActivityMetadata(jobId: string, activityId: string, appVersion: AppVID): Promise<any> {
     const metadataFields = ['m/aid', 'm/atp', 'm/stp', 'm/ac', 'm/au', 'm/jid', 'm/key'];
     const params: KeyStoreParams = { appId: appVersion.id, jobId, activityId };
     const key = this.mintKey(KeyType.JOB_ACTIVITY_DATA, params);
@@ -341,7 +359,7 @@ class IORedisStoreService extends StoreService<RedisClientType, RedisMultiType> 
     return metadata.m;
   }
 
-  async getActivityContext(jobId: string, activityId: string, appVersion: AppVersion): Promise<ActivityDataType> {
+  async getActivityContext(jobId: string, activityId: string, appVersion: AppVID): Promise<ActivityDataType> {
     const params: KeyStoreParams = { appId: appVersion.id, jobId, activityId };
     const key = this.mintKey(KeyType.JOB_ACTIVITY_DATA, params);
     const activityData = await this.redisClient.hgetall(key);
@@ -358,12 +376,12 @@ class IORedisStoreService extends StoreService<RedisClientType, RedisMultiType> 
     }
   }
 
-  async getActivity(jobId: string, activityId: string, appVersion: AppVersion): Promise<Record<string, unknown> | null | undefined> {
+  async getActivity(jobId: string, activityId: string, appVersion: AppVID): Promise<Record<string, unknown> | null | undefined> {
     const context = await this.getActivityContext(jobId, activityId, appVersion);
     return context?.data ? context.data : context?.metadata ? null : undefined;
   }
 
-  async getSchema(activityId: string, appVersion: AppVersion): Promise<ActivityType> {
+  async getSchema(activityId: string, appVersion: AppVID): Promise<ActivityType> {
     const schema = this.cache.getSchema(appVersion.id, appVersion.version, activityId);
     if (schema) {
       return schema
@@ -373,7 +391,7 @@ class IORedisStoreService extends StoreService<RedisClientType, RedisMultiType> 
     }
   }
 
-  async getSchemas(appVersion: AppVersion): Promise<Record<string, ActivityType>> {
+  async getSchemas(appVersion: AppVID): Promise<Record<string, ActivityType>> {
     let schemas = this.cache.getSchemas(appVersion.id, appVersion.version);
     if (schemas && Object.keys(schemas).length > 0) {
       return schemas;
@@ -390,7 +408,7 @@ class IORedisStoreService extends StoreService<RedisClientType, RedisMultiType> 
     }
   }
 
-  async setSchemas(schemas: Record<string, ActivityType>, appVersion: AppVersion): Promise<any> {
+  async setSchemas(schemas: Record<string, ActivityType>, appVersion: AppVID): Promise<any> {
     const params: KeyStoreParams = { appId: appVersion.id, appVersion: appVersion.version };
     const key = this.mintKey(KeyType.SCHEMAS, params);
     const _schemas = {...schemas} as Record<string, string>;
@@ -402,18 +420,19 @@ class IORedisStoreService extends StoreService<RedisClientType, RedisMultiType> 
     return response;
   }
 
-  async setSubscriptions(subscriptions: Record<string, any>, appVersion: AppVersion): Promise<void> {
+  async setSubscriptions(subscriptions: Record<string, any>, appVersion: AppVID): Promise<boolean> {
     const params: KeyStoreParams = { appId: appVersion.id, appVersion: appVersion.version };
     const key = this.mintKey(KeyType.SUBSCRIPTIONS, params);
-    const _subscriptions = {...subscriptions};
+    const _subscriptions = { ...subscriptions };
     Object.entries(_subscriptions).forEach(([key, value]) => {
       _subscriptions[key] = JSON.stringify(value);
     });
     const response = await this.redisClient.hmset(key, _subscriptions);
     this.cache.setSubscriptions(appVersion.id, appVersion.version, subscriptions);
+    return response === 'OK';
   }
 
-  async getSubscriptions(appVersion: AppVersion): Promise<Record<string, string>> {
+  async getSubscriptions(appVersion: AppVID): Promise<Record<string, string>> {
     let subscriptions = this.cache.getSubscriptions(appVersion.id, appVersion.version);
     if (subscriptions && Object.keys(subscriptions).length > 0) {
       return subscriptions;
@@ -429,12 +448,12 @@ class IORedisStoreService extends StoreService<RedisClientType, RedisMultiType> 
     }
   }
 
-  async getSubscription(topic: string, appVersion: AppVersion): Promise<string | undefined> {
+  async getSubscription(topic: string, appVersion: AppVID): Promise<string | undefined> {
     const subscriptions = await this.getSubscriptions(appVersion);
     return subscriptions[topic];
   }
 
-  async setTransitions(transitions: Record<string, any>, appVersion: AppVersion): Promise<any> {
+  async setTransitions(transitions: Record<string, any>, appVersion: AppVID): Promise<any> {
     const params: KeyStoreParams = { appId: appVersion.id, appVersion: appVersion.version };
     const key = this.mintKey(KeyType.SUBSCRIPTION_PATTERNS, params);
     const _subscriptions = {...transitions};
@@ -448,7 +467,7 @@ class IORedisStoreService extends StoreService<RedisClientType, RedisMultiType> 
     }
   }
 
-  async getTransitions(appVersion: AppVersion): Promise<Transitions> {
+  async getTransitions(appVersion: AppVID): Promise<Transitions> {
     let transitions = this.cache.getTransitions(appVersion.id, appVersion.version);
     if (transitions && Object.keys(transitions).length > 0) {
       return transitions;
@@ -465,43 +484,43 @@ class IORedisStoreService extends StoreService<RedisClientType, RedisMultiType> 
     }
   }
 
-  async setHookRules(hookRules: Record<string, HookRule[]>, appVersion: AppVersion): Promise<any> {
-    const key = this.mintKey(KeyType.HOOKS, { appId: appVersion.id });
+  async setHookRules(hookRules: Record<string, HookRule[]>): Promise<any> {
+    const key = this.mintKey(KeyType.HOOKS, { appId: this.appId });
     const _hooks = { };
     Object.entries(hookRules).forEach(([key, value]) => {
       _hooks[key.toString()] = JSON.stringify(value);
     });
     if (Object.keys(_hooks).length !== 0) {
       const response = await this.redisClient.hmset(key, _hooks);
-      this.cache.setHookRules(appVersion.id, hookRules);
+      this.cache.setHookRules(this.appId, hookRules);
       return response;
     }
   }
 
-  async getHookRules(appVersion: AppVersion): Promise<Record<string, HookRule[]>> {
-    let patterns = this.cache.getHookRules(appVersion.id);
+  async getHookRules(): Promise<Record<string, HookRule[]>> {
+    let patterns = this.cache.getHookRules(this.appId);
     if (patterns && Object.keys(patterns).length > 0) {
       return patterns;
     } else {
-      const key = this.mintKey(KeyType.HOOKS, { appId: appVersion.id });
+      const key = this.mintKey(KeyType.HOOKS, { appId: this.appId });
       const _hooks = await this.redisClient.hgetall(key);
       patterns = {};
       Object.entries(_hooks).forEach(([key, value]) => {
         patterns[key] = JSON.parse(value as string);
       });
-      this.cache.setHookRules(appVersion.id, patterns);
+      this.cache.setHookRules(this.appId, patterns);
       return patterns;
     }
   }
 
-  async setHookSignal(hook: HookSignal, appVersion: AppVersion, multi? : RedisMultiType): Promise<any> {
-    const key = this.mintKey(KeyType.SIGNALS, { appId: appVersion.id });
+  async setHookSignal(hook: HookSignal, multi? : RedisMultiType): Promise<any> {
+    const key = this.mintKey(KeyType.SIGNALS, { appId: this.appId });
     const { topic, resolved, jobId} = hook;
     return await (multi || this.redisClient).hset(key, `${topic}:${resolved}`, jobId);
   }
 
-  async getHookSignal(topic: string, resolved: string, appVersion: AppVersion): Promise<string | undefined> {
-    const key = this.mintKey(KeyType.SIGNALS, { appId: appVersion.id });
+  async getHookSignal(topic: string, resolved: string): Promise<string | undefined> {
+    const key = this.mintKey(KeyType.SIGNALS, { appId: this.appId });
     const multi = this.getMulti();
     multi.hget(key, `${topic}:${resolved}`);
     multi.hdel(key, `${topic}:${resolved}`);
@@ -509,36 +528,35 @@ class IORedisStoreService extends StoreService<RedisClientType, RedisMultiType> 
     return results[0][1] as unknown as string;
   }
 
-  async addTaskQueues(keys: string[], appVersion: AppVersion): Promise<void> {
+  async addTaskQueues(keys: string[]): Promise<void> {
     const multi = this.redisClient.multi();
-    const zsetKey = this.mintKey(KeyType.WORK_ITEMS, { appId: appVersion.id });
+    const zsetKey = this.mintKey(KeyType.WORK_ITEMS, { appId: this.appId });
     for (const key of keys) {
       multi.zadd(zsetKey, 'NX', Date.now(), key);
     }
     await multi.exec();
   }
 
-  async getActiveTaskQueue(appVersion: AppVersion): Promise<string | null> {
-    const { id: appId } = appVersion;
-    let workItemKey = this.cache.getActiveTaskQueue(appId) || null;
+  async getActiveTaskQueue(): Promise<string | null> {
+    let workItemKey = this.cache.getActiveTaskQueue(this.appId) || null;
     if (!workItemKey) {
-      const zsetKey = this.mintKey(KeyType.WORK_ITEMS, { appId });
+      const zsetKey = this.mintKey(KeyType.WORK_ITEMS, { appId: this.appId });
       const result = await this.redisClient.zrange(zsetKey, 0, 0);
       workItemKey = result.length > 0 ? result[0] : null;
       if (workItemKey) {
-        this.cache.setWorkItem(appId, workItemKey);
+        this.cache.setWorkItem(this.appId, workItemKey);
       }
     }
     return workItemKey;
   }
 
-  async deleteProcessedTaskQueue(workItemKey: string, key: string, processedKey: string, appVersion: AppVersion): Promise<void> {
-    const zsetKey = this.mintKey(KeyType.WORK_ITEMS, { appId: appVersion.id });
+  async deleteProcessedTaskQueue(workItemKey: string, key: string, processedKey: string): Promise<void> {
+    const zsetKey = this.mintKey(KeyType.WORK_ITEMS, { appId: this.appId });
     const didRemove = await this.redisClient.zrem(zsetKey, workItemKey);
     if (didRemove) {
       await this.redisClient.rename(processedKey, key);
     }
-    this.cache.removeWorkItem(appVersion.id);
+    this.cache.removeWorkItem(this.appId);
   }
 
   async processTaskQueue(sourceKey: string, destinationKey: string): Promise<any> {
@@ -554,9 +572,10 @@ class IORedisStoreService extends StoreService<RedisClientType, RedisMultiType> 
     }
   }
 
-  async publish(keyType: KeyType.CONDUCTOR, message: Record<string, any>, appId: string, engineId?: string): Promise<void> {
+  async publish(keyType: KeyType.QUORUM, message: Record<string, any>, appId: string, engineId?: string): Promise<boolean> {
     const topic = this.mintKey(keyType, { appId, engineId });
-    await this.redisClient.publish(topic, JSON.stringify(message));
+    const status: number = await this.redisClient.publish(topic, JSON.stringify(message));
+    return status === 1;
   }
 
   async xgroup(command: 'CREATE', key: string, groupName: string, id: string, mkStream?: 'MKSTREAM'): Promise<boolean> {

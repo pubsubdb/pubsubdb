@@ -305,4 +305,4 @@ Note that these examples are simplified, and real-world scenarios would involve 
 
 ## Conclusion
 
-The design and orchestration of multidimensional workflows in headless environments can be a complex task, but with the right approach and understanding of key principles, it can be made more manageable. By taking into consideration factors like asynchronous activities, ECA rules, action splitting, we can design robust and efficient workflows that handle complex business processes at stateless speeds.
+The design and orchestration of multidimensional workflows in headless environments can be a complex task, but with the right approach and understanding of key principles, it can be made more manageable. By taking into consideration factors like asynchronous activities, ECA rules and action splitting, we can design robust and efficient workflows that handle complex business processes at stateless speeds.

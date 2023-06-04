@@ -2,15 +2,15 @@ import { PSNS } from '../modules/key';
 import {
   PubSubDB,
   PubSubDBConfig,
-  IORedisStore,
-  IORedisStream,
-  IORedisSub } from '../index';
+  RedisStore,
+  RedisStream,
+  RedisSub } from '../index';
 import { JobStatsInput } from '../typedefs/stats';
 import {
   StreamData,
   StreamDataResponse,
   StreamStatus } from '../typedefs/stream';
-import { RedisConnection, RedisClientType } from './$setup/cache/ioredis';
+import { RedisConnection, RedisClientType } from './$setup/cache/redis';
 import { StreamSignaler } from '../services/signaler/stream';
 import { JobOutput } from '../typedefs/job';
 
@@ -32,10 +32,10 @@ describe('pubsubdb', () => {
   let redisEngineStreamer: RedisClientType;
   let redisWorkerStreamer: RedisClientType;
   //PubSubDB Redis wrappers
-  let redisStore: IORedisStore;
-  let redisEngineStream: IORedisStream;
-  let redisWorkerStream: IORedisStream;
-  let redisSub: IORedisSub;
+  let redisStore: RedisStore;
+  let redisEngineStream: RedisStream;
+  let redisWorkerStream: RedisStream;
+  let redisSub: RedisSub;
 
   beforeAll(async () => {
     //initialize redis connections
@@ -48,12 +48,12 @@ describe('pubsubdb', () => {
     redisEngineStreamer = await streamerEngineConnection.getClient();
     redisWorkerStreamer = await streamerWorkerConnection.getClient();
     redisSubscriber = await subscriberConnection.getClient();
-    await redisStorer.flushdb();
+    await redisStorer.flushDb();
     //initialize psdb wrappers (3 for engine, 1 for worker)
-    redisStore = new IORedisStore(redisStorer);
-    redisEngineStream = new IORedisStream(redisEngineStreamer);
-    redisWorkerStream = new IORedisStream(redisWorkerStreamer);
-    redisSub = new IORedisSub(redisSubscriber);
+    redisStore = new RedisStore(redisStorer);
+    redisEngineStream = new RedisStream(redisEngineStreamer);
+    redisWorkerStream = new RedisStream(redisWorkerStreamer);
+    redisSub = new RedisSub(redisSubscriber);
   });
 
   afterAll(async () => {
@@ -74,8 +74,9 @@ describe('pubsubdb', () => {
         workers: [
           {
             topic: 'order.bundle',
-            store: redisStore,
+            store: redisStore, //ok to reuse store
             stream: redisWorkerStream,
+            sub: redisSub, //ok to reuse sub
             callback: async (streamData: StreamData) => {
               const streamDataResponse: StreamDataResponse = {
                 status: StreamStatus.SUCCESS,

@@ -1,45 +1,127 @@
-import { ILogger } from '../logger';
-import { PubSubDBService } from '../pubsubdb';
-import { StoreService } from '../store';
-import { AppVersion } from '../../typedefs/app';
-import { RedisClient, RedisMulti } from '../../typedefs/redis';
+import { KeyType } from "../../modules/key";
+import { ILogger } from "../logger";
+import { StreamSignaler } from "../signaler/stream";
+import { StreamService } from "../stream";
+import { StoreService } from "../store";
+import { SubService } from "../sub";
+import { PubSubDBConfig, PubSubDBWorker } from "../../typedefs/pubsubdb";
+import {
+  QuorumMessage,
+  PresenceMessage,
+  SubscriptionCallback } from "../../typedefs/quorum";
+import { RedisClient, RedisMulti } from "../../typedefs/redis";
 
 class WorkerService {
-  appVersion: AppVersion;
-  pubsSubDB: PubSubDBService;
-  store: StoreService<RedisClient, RedisMulti>;
+  namespace: string;
+  appId: string;
+  guid: string;
+  topic: string;
+  config: PubSubDBConfig;
+  store: StoreService<RedisClient, RedisMulti> | null;
+  stream: StreamService<RedisClient, RedisMulti> | null;
+  subscribe: SubService<RedisClient, RedisMulti> | null;
+  streamSignaler: StreamSignaler | null;
   logger: ILogger;
 
-  constructor(appVersion: AppVersion,
-    pubSubDB: PubSubDBService,
-    store: StoreService<RedisClient, RedisMulti>,
-    logger: ILogger) {
-      this.appVersion = appVersion;
-      this.pubsSubDB = pubSubDB;
-      this.logger = logger;
-      this.store = store;
+  static async init(
+    namespace: string,
+    appId: string,
+    guid: string,
+    config: PubSubDBConfig,
+    logger: ILogger
+  ): Promise<WorkerService[]> {
+    const services: WorkerService[] = [];
+    if (Array.isArray(config.workers)) {
+      for (const worker of config.workers) {
+        //initialize and verify worker config
+        const service = new WorkerService();
+        service.verifyWorkerFields(worker);
+        service.namespace = namespace;
+        service.appId = appId;
+        service.guid = guid;
+        service.topic = worker.topic;
+        service.config = config;
+        service.logger = logger;
+        //init `store` interface (for publishing responses to the buffer)
+        service.store = worker.store;
+        await worker.store.init(
+          service.namespace,
+          service.appId,
+          logger
+        );
+        //initialize the `sub` client (only types in subscriptionHandler are reacted to)
+        service.subscribe = worker.sub;
+        await worker.sub.init(
+          service.namespace,
+          service.appId,
+          service.guid,
+          service.logger
+        );
+        //general quorum subscription (to receive all quorum messages)
+        await service.subscribe.subscribe(KeyType.QUORUM, service.subscriptionHandler(), appId);
+        //worker-specific targeting (for quorum messages targeting this worker's topic)
+        await service.subscribe.subscribe(KeyType.QUORUM, service.subscriptionHandler(), appId, service.topic);
+        //init `stream` interface (for consuming buffered messages)
+        service.stream = worker.stream;
+        await worker.stream.init(
+          service.namespace,
+          service.appId,
+          logger
+        );
+        //start consuming messages (this is a blocking call; never use worker.stream for anything else!)
+        const key = worker.stream.mintKey(KeyType.STREAMS, { appId: service.appId, topic: worker.topic });
+        service.streamSignaler = new StreamSignaler(
+          service.namespace,
+          service.appId,
+          service.guid,
+          worker.stream,
+          worker.store,
+          logger
+        );
+        await service.streamSignaler.consumeMessages(
+          key,
+          'WORKER',
+          service.guid,
+          worker.callback
+        );
+      }
+    }
+    return services;
   }
 
-  async processWorkItems(): Promise<void> {
-    const workItemKey = await this.store.getActiveTaskQueue(this.appVersion);
-    if (workItemKey) {
-      const [topic, sourceKey, ...sdata] = workItemKey.split('::');
-      const data = JSON.parse(sdata.join('::'));
-      const destinationKey = `${sourceKey}:processed`;
-      const jobId = await this.store.processTaskQueue(sourceKey, destinationKey);
-      if (jobId) {
-        await this.pubsSubDB.hook(topic, {...data, id: jobId });
-        //todo: do final checksum count (values are tracked in the stats hash)
-      } else {
-        await this.store.deleteProcessedTaskQueue(workItemKey, sourceKey, destinationKey, this.appVersion);
-      }
-      //call in next tick
-      setImmediate(() => this.processWorkItems());
+  verifyWorkerFields(worker: PubSubDBWorker) {
+    if (!(worker.store instanceof StoreService) || 
+      !(worker.stream instanceof StreamService) ||
+      !(worker.sub instanceof SubService) ||
+      !(worker.topic && worker.callback)) {
+      throw new Error('worker must include `store`, `stream`, and `sub` fields along with a callback function and topic.');
     }
   }
 
-  async enqueueWorkItems(keys: string[]): Promise<void> {
-    await this.store.addTaskQueues(keys, this.appVersion);
+  subscriptionHandler(): SubscriptionCallback {
+    const self = this;
+    return async (topic: string, message: QuorumMessage) => {
+      self.logger.debug(`subscriptionHandler: ${topic} ${JSON.stringify(message)}`);
+      if (message.type === 'rollcall') {
+        self.announce();
+      } else if (message.type === 'throttle') {
+        self.throttle(message.throttle);
+      } else if (message.type === 'presence') {
+        //noop -- this is just other engines/workers announcing themselves
+      }
+    };
+  }
+
+  async announce() {
+    const message: PresenceMessage = {
+      type: 'presence',
+      profile: this.streamSignaler.report(),
+    };
+    await this.store.publish(KeyType.QUORUM, message, this.appId);
+  }
+
+  async throttle(delayInMillis: number) {
+    this.streamSignaler.setThrottle(delayInMillis);
   }
 }
 

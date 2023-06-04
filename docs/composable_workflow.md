@@ -4,6 +4,9 @@ PubSubDB workflows are modeled as directed acyclic graphs (*rooted trees*). This
 <small>**PUBSUBDB WORKFLOW DEFINITION FILE**</small>
 
 ```yaml
+subscribes: approval.requested
+publishes: approval.responded
+
 activities:
   a1:
     title: Request Approval
@@ -21,10 +24,6 @@ transitions:
     - to: a2
   a2:
     - to: a3
-
-subscribes: approval.requested
-
-publishes: approval.responded
 ```
 
 ## Composition

@@ -1,3 +1,6 @@
+import { PipeItem } from "./pipe";
+import { MetricTypes } from "./stats";
+
 type ActivityExecutionType = 'trigger' | 'await' | 'exec' | 'activity' | 'request' | 'iterate';
 
 interface ActivityBase {
@@ -15,9 +18,21 @@ interface ActivityBase {
   publishes?: string; //set by compiler
 }
 
+interface Measure {
+  measure: MetricTypes;
+  target: string;
+}
+
+interface TriggerActivityStats {
+  granularity?: string; //5m is default
+  id?: { [key: string]: unknown } | string;
+  key?: { [key: string]: unknown } | string;
+  measures?: Measure[]; //what to capture
+}
+
 interface TriggerActivity extends ActivityBase {
   type: 'trigger';
-  stats?: Record<string, any>;
+  stats?: TriggerActivityStats;
   collationKey?: number;
 }
 
@@ -81,6 +96,7 @@ export {
   HookData,
   ActivityBase as BaseActivity,
   TriggerActivity,
+  TriggerActivityStats,
   AwaitActivity,
   ExecActivity,
   RequestActivity,

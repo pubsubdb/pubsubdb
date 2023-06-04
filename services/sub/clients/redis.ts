@@ -1,9 +1,8 @@
 import { KeyService, KeyStoreParams, KeyType, PSNS } from '../../../modules/key';
 import { ILogger } from '../../logger';
 import { SubService } from '../index';
-import { AppVersion } from '../../../typedefs/app';
-import { SubscriptionCallback } from '../../../typedefs/conductor';
 import { RedisClientType, RedisMultiType } from '../../../typedefs/redisclient';
+import { SubscriptionCallback } from '../../../typedefs/quorum';
 
 class RedisSubService extends SubService<RedisClientType, RedisMultiType> {
   redisClient: RedisClientType;
@@ -15,12 +14,10 @@ class RedisSubService extends SubService<RedisClientType, RedisMultiType> {
     super(redisClient);
   }
 
-  async init(namespace = PSNS, appId: string, engineId: string, logger: ILogger, callback: SubscriptionCallback): Promise<void> {
+  async init(namespace = PSNS, appId: string, engineId: string, logger: ILogger): Promise<void> {
     this.namespace = namespace;
     this.logger = logger;
     this.appId = appId;
-    await this.subscribe(KeyType.CONDUCTOR, callback, appId);
-    await this.subscribe(KeyType.CONDUCTOR, callback, appId, engineId);
   }
 
   getMulti(): RedisMultiType {
@@ -33,7 +30,7 @@ class RedisSubService extends SubService<RedisClientType, RedisMultiType> {
     return KeyService.mintKey(this.namespace, type, params);
   }
 
-  async subscribe(keyType: KeyType.CONDUCTOR, callback: SubscriptionCallback, appId: string, engineId?: string): Promise<void> {
+  async subscribe(keyType: KeyType.QUORUM, callback: SubscriptionCallback, appId: string, engineId?: string): Promise<void> {
     if (this.redisClient) {
       const self = this;
       const topic = this.mintKey(keyType, { appId, engineId });
@@ -48,12 +45,12 @@ class RedisSubService extends SubService<RedisClientType, RedisMultiType> {
     }
   }
 
-  async unsubscribe(keyType: KeyType.CONDUCTOR, appId: string, engineId?: string): Promise<void> {
+  async unsubscribe(keyType: KeyType.QUORUM, appId: string, engineId?: string): Promise<void> {
     const topic = this.mintKey(keyType, { appId, engineId });
     await this.redisClient.unsubscribe(topic);
   }
 
-  // async publish(keyType: KeyType.CONDUCTOR, message: Record<string, any>, appId: string, engineId?: string): Promise<void> {
+  // async publish(keyType: KeyType.QUORUM, message: Record<string, any>, appId: string, engineId?: string): Promise<void> {
   //   const topic = this.mintKey(keyType, { appId, engineId });
   //   this.redisClient.publish(topic, JSON.stringify(message));
   // }
