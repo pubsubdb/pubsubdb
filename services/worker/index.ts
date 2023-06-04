@@ -7,9 +7,11 @@ import { SubService } from "../sub";
 import { PubSubDBConfig, PubSubDBWorker } from "../../typedefs/pubsubdb";
 import {
   QuorumMessage,
-  PresenceMessage,
+  ReportMessage,
   SubscriptionCallback } from "../../typedefs/quorum";
 import { RedisClient, RedisMulti } from "../../typedefs/redis";
+
+const REPORT_INTERVAL = 10000;
 
 class WorkerService {
   namespace: string;
@@ -22,6 +24,7 @@ class WorkerService {
   subscribe: SubService<RedisClient, RedisMulti> | null;
   streamSignaler: StreamSignaler | null;
   logger: ILogger;
+  reporting = false;
 
   static async init(
     namespace: string,
@@ -84,6 +87,7 @@ class WorkerService {
           service.guid,
           worker.callback
         );
+        services.push(service);
       }
     }
     return services;
@@ -103,21 +107,38 @@ class WorkerService {
     return async (topic: string, message: QuorumMessage) => {
       self.logger.debug(`subscriptionHandler: ${topic} ${JSON.stringify(message)}`);
       if (message.type === 'rollcall') {
-        self.announce();
+        self.report();
       } else if (message.type === 'throttle') {
         self.throttle(message.throttle);
-      } else if (message.type === 'presence') {
-        //noop -- this is just other engines/workers announcing themselves
       }
     };
   }
 
-  async announce() {
-    const message: PresenceMessage = {
-      type: 'presence',
+  async report() {
+    const message: ReportMessage = {
+      type: 'report',
       profile: this.streamSignaler.report(),
     };
     await this.store.publish(KeyType.QUORUM, message, this.appId);
+    if (!this.reporting) {
+      this.reporting = true;
+      setTimeout(this.reportNow.bind(this), REPORT_INTERVAL);
+    }
+  }
+
+  async reportNow(once: boolean = false) {
+    try {
+      const message: ReportMessage = {
+        type: 'report',
+        profile: this.streamSignaler.reportNow(),
+      };
+      await this.store.publish(KeyType.QUORUM, message, this.appId);
+      if (!once) {
+        setTimeout(this.reportNow.bind(this), REPORT_INTERVAL);
+      }
+    } catch (err) {
+      this.logger.error('engine.reportNow.error', err);
+    }
   }
 
   async throttle(delayInMillis: number) {

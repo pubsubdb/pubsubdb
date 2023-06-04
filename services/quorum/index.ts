@@ -94,7 +94,7 @@ class QuorumService {
       } else if (message.type === 'pong' && self.guid === message.originator) {
         self.quorum = self.quorum + 1;
       } else if (message.type === 'rollcall') {
-        self.engine.announce();
+        self.engine.report();
       } else if (message.type === 'throttle') {
         self.engine.throttle(message.throttle);
       } else if (message.type === 'work') {
@@ -135,12 +135,12 @@ class QuorumService {
   async pub(quorumMessage: ThrottleMessage | RollCallMessage) {
     return await this.store.publish(KeyType.QUORUM, quorumMessage, this.appId, quorumMessage.topic || quorumMessage.guid);
   }
-  //subscribe to all quorum messages
+  //subscribe user to quorum messages
   async sub(callback: QuorumMessageCallback): Promise<void> {
     //the quorum is always subscribed to the `quorum` topic; just register the fn
     this.callbacks.push(callback);
   }
-  //unsubscribe to all quorum messages
+  //unsubscribe user from quorum messages
   async unsub(callback: QuorumMessageCallback): Promise<void> {
     //the quorum is always subscribed to the `quorum` topic; just unregister the fn
     this.callbacks = this.callbacks.filter(cb => cb !== callback);

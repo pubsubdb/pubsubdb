@@ -18,6 +18,7 @@ import {
 
 describe('StreamSignaler', () => {
   const appConfig = { id: 'calc', version: '1' };
+  const REPORT_INTERVAL = 10000;
   //Redis connection ids (this test uses 4 separate Redis connections)
   const CONNECTION_KEY = 'manual-test-connection';
   const SUBSCRIPTION_KEY = 'manual-test-subscription';
@@ -203,7 +204,7 @@ describe('StreamSignaler', () => {
   });
 
   describe('audit', () => {
-    it('should correctly aggregate data for the same 5s slot', () => {
+    it('should correctly aggregate data for the same 10s slot', () => {
       if (pubSubDB.engine?.streamSignaler?.currentBucket) {
         pubSubDB.engine.streamSignaler.currentBucket = null;
         pubSubDB.engine.streamSignaler.auditData.length = 0;
@@ -211,7 +212,7 @@ describe('StreamSignaler', () => {
       }
       pubSubDB.engine?.streamSignaler?.audit(10, 20, true);
       pubSubDB.engine?.streamSignaler?.audit(20, 30, false);
-      timestampAfterAudit = Math.floor(Date.now() / 5000) * 5000; // floor to nearest 5s
+      timestampAfterAudit = Math.floor(Date.now() / REPORT_INTERVAL) * REPORT_INTERVAL; // floor to nearest 10s
       const auditData = pubSubDB.engine?.streamSignaler?.auditData;
       const auditDataForCurrentSlot = auditData?.find(data => data.t === timestampAfterAudit);
       expect(auditDataForCurrentSlot?.i).toBe(30);

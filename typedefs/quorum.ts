@@ -6,7 +6,7 @@ import { JobOutput } from "./job";
  * These messages serve to coordinate the cache invalidation and switch-over
  * to the new version without any downtime and a coordinating parent server.
  */
-export type QuorumMessage = PingMessage | PongMessage | ActivateMessage | WorkMessage | JobMessage | RollCallMessage | PresenceMessage | ThrottleMessage;
+export type QuorumMessage = PingMessage | PongMessage | ActivateMessage | WorkMessage | JobMessage | RollCallMessage | ReportMessage | ThrottleMessage;
 
 //used for coordination like version activation
 export interface PingMessage {
@@ -38,17 +38,17 @@ export interface JobMessage {
   job: JobOutput
 }
 
-//ask all workers and engines to announce themselves
+//ask all workers and engines to report themselves
 export interface RollCallMessage {
   type: 'rollcall';
   topic?: string; //filter by worker (only these workers will respond)
-  guid?: string; //filter by engine ()
+  guid?: string;  //filter by engine ()
   duration?: '5s' | '10s' | '30s' | '1m' | '5m' | '10m' | '30m' | '1h'; //how far back in time for network status
 }
 
-//talk about yourself (processed counts, rate, bytes, etc)
-export interface PresenceMessage {
-  type: 'presence';
+//report on yourself (processed counts, rate, bytes in/out, etc)
+export interface ReportMessage {
+  type: 'report';
   profile: QuorumProfile;
 }
 

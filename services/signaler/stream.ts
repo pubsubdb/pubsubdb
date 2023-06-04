@@ -16,6 +16,8 @@ const BLOCK_DURATION = 15000;
 const TEST_BLOCK_DURATION = 1000;
 const BLOCK_TIME_MS = process.env.NODE_ENV === 'test' ? TEST_BLOCK_DURATION : BLOCK_DURATION;
 
+const REPORT_INTERVAL = 10000;
+
 class StreamSignaler {
   namespace: string;
   appId: string;
@@ -140,9 +142,9 @@ class StreamSignaler {
 
   audit(bytesIn: number, bytesOut: number, success: boolean) {
     const currentTimestamp = Date.now();
-    const currentSlot = Math.floor(currentTimestamp / 5000);
+    const currentSlot = Math.floor(currentTimestamp / REPORT_INTERVAL);
     if (this.currentSlot === currentSlot) {
-      this.currentBucket.t = currentSlot * 5000;
+      this.currentBucket.t = currentSlot * REPORT_INTERVAL;
       this.currentBucket.i += bytesIn;
       this.currentBucket.o += bytesOut;
       this.currentBucket.p += 1;
@@ -151,7 +153,7 @@ class StreamSignaler {
     } else {
       this.currentSlot = currentSlot;
       this.currentBucket = {
-        t: currentSlot * 5000,
+        t: currentSlot * REPORT_INTERVAL,
         i: bytesIn,
         o: bytesOut,
         p: 1,
@@ -179,6 +181,22 @@ class StreamSignaler {
       d: this.auditData
     };
     return report;
+  }
+
+  reportNow(): QuorumProfile {
+    const currentTimestamp = Date.now();
+    const fiveSecondsAgo = currentTimestamp - REPORT_INTERVAL;
+      const currentWindowData = this.auditData.filter((data) => {
+      return data.t >= fiveSecondsAgo && data.t <= currentTimestamp;
+    });
+    return {
+      namespace: this.namespace,
+      appId: this.appId,
+      guid: this.guid,
+      status: 'active',
+      throttle: this.throttle,
+      d: currentWindowData
+    };
   }
 
   setThrottle(delayInMillis: number) {

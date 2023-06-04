@@ -15,13 +15,13 @@ import {
   StreamDataResponse,
   StreamStatus } from '../../../typedefs/stream';
 import {
-  PresenceMessage,
+  ReportMessage,
   QuorumMessage,
   RollCallMessage,
   ThrottleMessage } from '../../../typedefs/quorum';
 import { QuorumService } from '../../../services/quorum';
 
-describe('StreamSignaler', () => {
+describe('QuorumService', () => {
   const appConfig = { id: 'calc', version: '1' };
   //Redis connection ids (this test uses 4 separate Redis connections)
   const CONNECTION_KEY = 'manual-test-connection';
@@ -148,9 +148,9 @@ describe('StreamSignaler', () => {
     it('sends a `rollcall` message targeting an engine (guid)', async () => {
       const callback = (topic: string, message: QuorumMessage) => {
         //will see both messages (the call and response)
-        expect(['presence', 'rollcall'].includes(message.type)).toBeTruthy();
-        if (message.type === 'presence') {
-          expect((message as PresenceMessage).profile?.d).not.toBeUndefined();
+        expect(['report', 'rollcall'].includes(message.type)).toBeTruthy();
+        if (message.type === 'report') {
+          expect((message as ReportMessage).profile?.d).not.toBeUndefined();
         } else {
           expect(message.type).toBe('rollcall');
           expect((message as RollCallMessage).guid).toBe(pubSubDB.quorum?.guid);

@@ -66,7 +66,7 @@ export {
   JobMessageCallback,
   PingMessage,
   PongMessage,
-  PresenceMessage,
+  ReportMessage,
   QuorumProfile,
   QuorumProcessed,
   QuorumStatus,

@@ -31,7 +31,7 @@ import {
 import { 
   JobMessage,
   JobMessageCallback,
-  PresenceMessage,
+  ReportMessage,
   SubscriptionCallback } from '../../typedefs/quorum';
 import { RedisClient, RedisMulti } from '../../typedefs/redis';
 import {
@@ -44,6 +44,8 @@ import { StreamDataResponse } from '../../typedefs/stream';
 
 //wait time to see if a job is complete
 const OTT_WAIT_TIME = 1000;
+
+const REPORT_INTERVAL = 10000;
 
 class EngineService {
   namespace: string;
@@ -59,6 +61,7 @@ class EngineService {
   cacheMode: CacheMode = 'cache';
   untilVersion: string | null = null;
   jobCallbacks: Record<string, JobMessageCallback> = {};
+  reporting = false;
 
   static async init(namespace: string, appId: string, guid: string, config: PubSubDBConfig, logger: ILogger): Promise<EngineService> {
     if (config.engine) {
@@ -161,12 +164,31 @@ class EngineService {
     taskService.processWorkItems((this.hook).bind(this));
   }
 
-  async announce() {
-    const message: PresenceMessage = {
-      type: 'presence',
+  async report() {
+    const message: ReportMessage = {
+      type: 'report',
       profile: this.streamSignaler.report(),
     };
     await this.store.publish(KeyType.QUORUM, message, this.appId);
+    if (!this.reporting) {
+      this.reporting = true;
+      setTimeout(this.reportNow.bind(this), REPORT_INTERVAL);
+    }
+  }
+
+  async reportNow(once: boolean = false) {
+    try {
+      const message: ReportMessage = {
+        type: 'report',
+        profile: this.streamSignaler.reportNow(),
+      };
+      await this.store.publish(KeyType.QUORUM, message, this.appId);
+      if (!once) {
+        setTimeout(this.reportNow.bind(this), REPORT_INTERVAL);
+      }
+    } catch (err) {
+      this.logger.error('engine.reportNow.error', err);
+    }
   }
 
   async throttle(delayInMillis: number) {
