@@ -36,7 +36,6 @@ abstract class StoreService<T, U> {
   abstract getJobMetadata(jobId: string, appVersion: AppVID): Promise<JobMetadata | undefined>;
   abstract getJobOutput(jobId: string, appVersion: AppVID): Promise<JobOutput | undefined>;
   abstract getJobData(jobId: string, appVersion: AppVID): Promise<JobData | undefined>;
-  abstract getJob(jobId: string, appVersion: AppVID): Promise<JobData | undefined>;
   abstract setActivity(jobId: string, activityId: any, data: Record<string, unknown>, metadata: Record<string, unknown>, hook: null | Record<string, unknown>, appVID: AppVID, multi? : U): Promise<any|string>
   abstract setActivityNX(jobId: string, activityId: any, appVID: AppVID): Promise<number>
   abstract restoreContext(jobId: string, dependsOn: Record<string, string[]>, appVID: AppVID): Promise<Partial<JobActivityContext>>;

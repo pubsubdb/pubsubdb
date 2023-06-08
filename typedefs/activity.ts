@@ -1,5 +1,5 @@
-import { PipeItem } from "./pipe";
 import { MetricTypes } from "./stats";
+import { StreamRetryPolicy } from "./stream";
 
 type ActivityExecutionType = 'trigger' | 'await' | 'exec' | 'activity' | 'request' | 'iterate';
 
@@ -16,6 +16,7 @@ interface ActivityBase {
   collationInt?: number;
   job?: Record<string, any>;
   publishes?: string; //set by compiler
+  retry?: StreamRetryPolicy
 }
 
 interface Measure {
@@ -24,7 +25,6 @@ interface Measure {
 }
 
 interface TriggerActivityStats {
-  granularity?: string; //5m is default
   id?: { [key: string]: unknown } | string;
   key?: { [key: string]: unknown } | string;
   measures?: Measure[]; //what to capture
@@ -67,6 +67,7 @@ type ActivityMetadata = {
   key?: string; //job_key
   ac: string;   //GMT created //activity_created
   au: string;   //GMT updated //activity_updated
+  err?: string;  //stringified error json: {message: string, code: number, error?}
 };
 
 type HookData = Record<string, any>;

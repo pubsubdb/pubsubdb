@@ -5,9 +5,11 @@
 //          ExecActivityError, 
 //          DuplicateActivityError} from '../../../modules/errors';
 import { CollatorService } from "../collator";
+import { EngineService } from "../engine";
 import { ILogger } from "../logger";
 import { MapperService } from '../mapper';
 import { StoreSignaler } from "../signaler/store";
+import { StoreService } from "../store";
 import { SerializerService } from '../store/serializer';
 import { 
   ActivityType,
@@ -15,11 +17,13 @@ import {
   ActivityMetadata,
   FlattenedDataObject, 
   HookData} from "../../typedefs/activity";
-import { JobActivityContext } from "../../typedefs/job";
+import { JobActivityContext, JobMetadata } from "../../typedefs/job";
+import {
+  MultiResponseFlags,
+  RedisClient,
+  RedisMulti } from "../../typedefs/redis";
+import { StreamCode, StreamStatus } from "../../typedefs/stream";
 import { TransitionRule, Transitions } from "../../typedefs/transition";
-import { RedisClient, RedisMulti } from "../../typedefs/redis";
-import { EngineService } from "../engine";
-import { StoreService } from "../store";
 
 /**
  * The base class for all activities
@@ -33,6 +37,8 @@ class Activity {
   context: JobActivityContext;
   engine: EngineService;
   logger: ILogger;
+  status: StreamStatus = StreamStatus.SUCCESS;
+  code: StreamCode = 200;
 
   constructor(
     config: ActivityType,
@@ -59,15 +65,13 @@ class Activity {
 
       /////// MULTI: START ///////
       const multi = this.store.getMulti();
-      //await this.mapInputData();      //subclasses (exec) implement this
-      //await this.registerResponse();  //subclasses implement this
-      //await this.registerTimeout();   //subclasses implement this
-      await this.saveJobData(multi);
+      //await this.registerTimeout();   //subclasses MUST implement
+      await this.saveJob(multi);
       await this.saveActivity(multi);
       const shouldSleep = await this.registerExpectedHook(multi);
       const decrementBy = shouldSleep ? 4 : 3;
       await this.saveActivityStatus(decrementBy, multi);
-      const multiResponse = await multi.exec();
+      const multiResponse = await multi.exec() as MultiResponseFlags;
       /////// MULTI: END ///////
 
       const activityStatus = multiResponse[multiResponse.length - 1];
@@ -87,44 +91,27 @@ class Activity {
     //}
   }
 
-  //********  RESPONDER ENTRY POINT (B)  ********//
-  async registerResponse(): Promise<void> {
-    //register to receive eventual async/open-api call response (duplex by default)
-  }
-  async processResponse(): Promise<void> {
-    //persist those output data fields mapped by downstream activities
-    //await this.serializeMappedData('output');
-    //note: response payloads have a status field (pending, success, error)
-    //      pending responses can be persisted to the job as necessary
-    //      the job will stay in state '8' until a status of error or success is recieved
-  }
-
-  //********  SIGNALER ENTRY POINT (C)  ********//
+  //********  SIGNALER RE-ENTRY POINT (B)  ********//
   async registerExpectedHook(multi?: RedisMulti): Promise<string | void> {
     if (this.config.hook?.topic) {
-      const config = await this.engine.getVID();
       const signaler = new StoreSignaler(this.store, this.logger);
       return await signaler.registerHook(this.config.hook.topic, this.context, multi);
     }
   }
   async processHookSignal(): Promise<void> {
-    const config = await this.engine.getVID();
     const signaler = new StoreSignaler(this.store, this.logger);
     const jobId = await signaler.process(this.config.hook.topic, this.data);
     if (jobId) {
       await this.restoreJobContext(jobId);
-      //when this activity is initialized via the constructor,
-      // `this.data` represents signal data
-      this.context[this.metadata.aid].hook.data = this.data;
-      await this.mapJobData();
-      await this.serializeMappedData('hook');
-
+      this.bindActivityData('hook');
+      this.mapJobData();
+      this.mapActivityData('hook');
       /////// MULTI: START ///////
       const multi = this.engine.store.getMulti();
       await this.saveActivity(multi);
-      await this.saveJobData(multi);
+      await this.saveJob(multi);
       await this.saveActivityStatus(1, multi);
-      const multiResponse = await multi.exec();
+      const multiResponse = await multi.exec() as MultiResponseFlags;
       const activityStatus = multiResponse[multiResponse.length - 1];
       const isComplete = CollatorService.isJobComplete(activityStatus as number);
       this.transition(isComplete);
@@ -146,7 +133,7 @@ class Activity {
     this.context['$self'] = this.context[this.metadata.aid];
   }
 
-  async serializeMappedData(target: string): Promise<void> {
+  mapActivityData(target: string) {
     const aid = this.metadata.aid;
     const filteredData: FlattenedDataObject = {};
     const toFlatten = { [aid]: { [target]: { data: this.data } } };
@@ -177,30 +164,60 @@ class Activity {
     }
   }
 
-  async subscribeToResponse(): Promise<void> {
-    //base `activity` type doesn't execute anything
-  }
-
   async registerTimeout(): Promise<void> {
-    //base `activity` type doesn't execute anything
+    //base `activity` doesn't duplex
+    //but possible to set timeout if a hook is registered
   }
 
-  async execActivity(): Promise<void> {
-    //base `activity` type doesn't execute anything
+  toSaveJobMetadata(): Partial<JobMetadata> {
+    const metadata: Partial<JobMetadata> = {
+      ju: new Date().toISOString()
+    }
+    this.mapAndBindJobError(metadata);
+    return metadata;
   }
 
-  saveJobMetadata(): boolean {
-    return false;
+  mapAndBindJobError(metadata) {
+    if (this.status === StreamStatus.ERROR) {
+      metadata.err = this.context.metadata.err;
+      //todo: map job status via: (500: [3**, 4**, 5**], 202: [$pending])
+    }
   }
 
-  async saveJobData(multi?: RedisMulti): Promise<void> {
+  bindActivityError(data: Record<string, unknown>): void {
+    //todo: map activity error data into the job error (if defined)
+    //      map job status via: (500: [3**, 4**, 5**], 202: [$pending])
+    this.context.metadata.err = JSON.stringify(data);
+  }
+
+  async saveJob(multi?: RedisMulti): Promise<void> {
     await this.store.setJob(
       this.context.metadata.jid,
       this.context.data || {},
-      this.saveJobMetadata() ? this.context.metadata : {},
+      this.toSaveJobMetadata(),
       await this.engine.getVID(),
       multi
     );
+  }
+
+  toSaveActivityMetadata(): Partial<JobMetadata> {
+    const metadata: ActivityMetadata = { 
+      ...this.metadata,
+      jid: this.context.metadata.jid,
+      key: this.context.metadata.key,
+    };
+    if (this.status === StreamStatus.ERROR) {
+      metadata.err = JSON.stringify(this.data);
+    }
+    return metadata;
+  }
+
+  bindActivityData(type: 'output' | 'hook'): void {
+    if (type === 'output') {
+      this.context[this.metadata.aid].output.data = this.data;
+    } else {
+      this.context[this.metadata.aid].hook.data = this.data;
+    }
   }
 
   async saveActivity(multi?: RedisMulti): Promise<void> {
@@ -210,7 +227,7 @@ class Activity {
       jobId,
       activityId,
       this.context[activityId]?.output?.data || {},
-      { ...this.metadata, jid: this.context.metadata.jid, key: this.context.metadata.key },
+      this.toSaveActivityMetadata(),
       this.context[activityId]?.hook?.data || {},
       await this.engine.getVID(),
       multi,

@@ -12,6 +12,15 @@ export async function sleepFor(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+export function XSleepFor(ms: number): { promise: Promise<unknown>, timerId: NodeJS.Timeout } {
+  //can be interrupted with `clearTimeout`
+  let timerId;
+  let promise = new Promise((resolve) => {
+      timerId = setTimeout(resolve, ms);
+  });
+  return { promise, timerId };
+}
+
 export function findTopKey(obj: AppTransitions, input: string): string | null {
   for (const [key, value] of Object.entries(obj)) {
     if (value.hasOwnProperty(input)) {

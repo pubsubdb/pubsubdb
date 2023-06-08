@@ -18,6 +18,9 @@ activities:
     title: Execute Calculation
     type: exec
     subtype: calculation.execute
+    retry: 
+      '404': [2]
+      '500': [3]
     input:
       schema:
         $ref: '../schemas/calculate.yaml#/input'

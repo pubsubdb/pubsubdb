@@ -125,7 +125,7 @@ describe('QuorumService', () => {
       ]);
       expect(divide?.data.result).toBe(10);
       expect(multiply?.data.result).toBe(1000);
-    });
+    }, 2500);
   });
 
   describe('Pub Sub', () => {
