@@ -139,9 +139,12 @@ class PubSubDBService {
     return await this.engine?.hookAll(hookTopic, data, query, queryFacets);
   }
 
-  // ****** GET A JOB/METADATA BY ID *********
-  async get(key: string) {
-    return this.engine?.get(key);
+  // ****** GET JOB/METADATA BY ID *********
+  async getJobOutput(key: string) {
+    return this.engine?.getJobOutput(key);
+  }
+  async getJobData(key: string) {
+    return this.engine?.getJobData(key);
   }
   async getJobMetadata(key: string) {
     return this.engine?.getJobMetadata(key);

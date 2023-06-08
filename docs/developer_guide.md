@@ -13,9 +13,9 @@ This guide defines the recommended development process for deploying a PubSubDB 
 8. [Define Statistics](#define-statistics)
 9. [Plan](#plan)
 10. [Deploy and Activate](#deploy-and-activate)
-11. [Pub (Trigger Workflow Job)](#pub-trigger-job)
-12. [Sub (Listen for Job Results)](#sub-listen-for-job-results)
-13. [PubSub (One-Time Subscriptions)](#pubsub-one-time-subscriptions)
+11. [Pub](#pub)
+12. [Sub](#sub)
+13. [PubSub](#pubsub)
 14. [Get Job Data](#get-job-data)
 15. [Get Job Metadata](#get-job-metadata)
 16. [Get Aggregate Job Statistics](#get-job-statistics)
@@ -367,7 +367,6 @@ activities:
     stats:
       key: "{a5.input.data.object_type}"
       id: "{a5.input.data.id}"
-      granularity: 5m
       measures:
         - measure: avg
           target: "{a5.input.data.price}"
@@ -386,7 +385,6 @@ The following table lists the key statistics fields and their purpose. Note that
 | ----------------- | ------------------------------------------------------------------ |
 | stats/key         | The key used to group statistics by a specific field/value.        |
 | stats/id          | The unique identifier for the data point being measured.           |
-| stats/granularity | The minimum time slice for which metrics are tracked (1m limit)    |
 | stats/measures    | A list of measures that define the statistical aggregations.       |
 
 ### Measure | Avg
@@ -399,7 +397,7 @@ The `sum` measure should only be used to target `number` fields. It returns the 
 When the `count` measure is collected, *all cardinal values* will be grouped when providing the value. If there are two unique values for `object_type` across all workflows that run (e.g, widgetA, widgetB), then the system will provide counts for each individually. This is true for boolean fields as well where both `true` and `false` counts are tracked.
 
 ### Measure | Mdn
-When the `mdn` (median) measure is collected, all values must be collected and retained for the time period. If 1,000 jobs are run, there will be exactly 1,000 values retained. The approach uses a sorted set for values with one set for slice of time per the `granularity` setting for the flow's `stats`.
+When the `mdn` (median) measure is collected, all values must be collected and retained for the time period. If 1,000 jobs are run, there will be exactly 1,000 values retained.
 
 ### Measure | Index
 When the `index` measure is collected, the value of the `id` field will be stored in a sub-index organized *by cardinal field values*. For example, if a string field ("object_type") is targeted for indexing, two indexes will be created: `object_type:widgetA`, `object_type:widgetB` (assuming these are the enumerated values for this field). 
@@ -455,40 +453,43 @@ const deploymentStatus = await pubSubDB.deploy('./pubsubdb.yaml');
 const activationStatus = await pubSubDB.activate('1');
 ```
 
-## Pub (Trigger Job)
+## Pub
 Suppose you need to kick off a workflow but the answer isn't relevant at this time. You can optionally await the response (the job ID) to confirm that the request was received, but otherwise, this is a simple fire-and-forget call.
 
 ```javascript
-const payload = { id: 'order_123', price: 47.99 };
-const topic = 'order.approval.requested';
-const jobId = await pubSubDB.pub(topic, payload);
-//jobId is `order_123`
+const payload = { id: 'ord123', price: 55.99 };
+const jobId = await pubSubDB.pub('discount.requested', payload);
+//jobId will be `ord123`
 ```
 
-## Sub (Listen for Job Results)
+Fetch the job data at any time (even after the job has completed) using the `getJobData` method.
+
+```javascript
+const job = await pubSubDB.getJobData('ord123');
+```   
+
+## Sub
 Suppose you need to listen in on the results of all computations on a particular topic, not just the ones you initiated. In that case, you can use the `sub` method.
 
 This is useful in scenarios where you're interested in monitoring global computation results, performing some action based on them, or even just logging them for auditing purposes.
 
 ```javascript
-await pubSubDB.sub('order.approval.responded', (topic: string, jobOutput: JobOutput) => {
-  // `jobOutput.data:` { id: 'order_123', price: 47.99, approved: true }
+await pubSubDB.sub('discount.responded', (topic: string, jobOutput: JobOutput) => {
+  //jobOutput.data.discount is `5.00`
 });
 
-//publish one event
-const payload = { id: 'order_123', price: 47.99 };
-const topic = 'order.approval.requested';
-pubSubDB.pub(topic, payload);
+//publish one test event
+const payload = { id: 'ord123', price: 55.99 };
+const jobId = await pubSubDB.pub('discount.requested', payload);
 ```
 
-## PubSub (One-Time Subscriptions)
+## PubSub
 If you need to kick off a workflow and await the response, use the `pubsub` method. PubSubDB will create a one-time subscription, making it simple to model the request using a standard `await`. The benefit, of course, is that this is a fully duplexed call that adheres to the principles of CQRS, thereby avoiding the overhead of a typical HTTP request/response exchange.
 
 ```javascript
-const payload = { id: 'order_123', price: 47.99 };
-const topic = 'order.approval.requested';
-const jobOutput = await pubSubDB.pubsub(topic, payload);
-//jobOutput is `{ id: 'order_123', price: 47.99, approved: true }`
+const payload = { id: 'ord123', price: 55.99 };
+const jobOutput: JobOutput = await pubSubDB.pubsub('discount.requested', payload);
+//jobOutput.data.discount is `5.00`
 ```
 
 No matter where in the network the calculation is performed (no matter the microservice that is subscribed as the official "handler" to perform the calculation...or even if multiple microservices are invoked during the workflow execution), the answer will always be published back to the originating caller the moment it's ready. It's a one-time subscription handled automatically by the engine, enabling traditional request/response semantics but without network back-pressure risk.
@@ -497,7 +498,7 @@ No matter where in the network the calculation is performed (no matter the micro
 Retrieve the data for a single workflow using the job ID.
 
 ```javascript
-const job = await pubSubDB.get('order_123');
+const jobData = await pubSubDB.getJobData('order_123');
 ```
 
 ## Get Job Metadata
@@ -530,8 +531,6 @@ stats:
   id: "{a5.input.data.id}"
   measures:
     - measure: avg
-      target: "{a5.input.data.price}"
-    - measure: mdn
       target: "{a5.input.data.price}"
     - measure: count
       target: "{a5.input.data.object_type}"

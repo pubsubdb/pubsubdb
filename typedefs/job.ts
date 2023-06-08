@@ -23,6 +23,7 @@ type JobMetadata = {
   aid: string;  //activity_id for trigger the spawned the job
   atp: string;  //activity_type
   stp: string;  //activity_subtype
+  err?: string; //stringified job error json: {message: string, code: number, error?}
 };
 
 type AbbreviatedJobMetadata = {

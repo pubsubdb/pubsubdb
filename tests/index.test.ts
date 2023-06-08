@@ -123,7 +123,7 @@ describe('pubsubdb', () => {
       expect(job?.data?.price).toBe(payload.price);
       //values under 100 are approved
       expect((job?.data?.approvals as { price: boolean }).price).toBe(true);
-      const spawnedJob = await pubSubDB.get(payload.id);
+      const spawnedJob = await pubSubDB.getJobData(payload.id);
       expect(spawnedJob?.id).toBe(payload.id);
     });
 
@@ -139,7 +139,7 @@ describe('pubsubdb', () => {
       expect(job?.data?.price).toBe(payload.price);
       //values over 100 are rejected
       expect((job?.data?.approvals as { price: boolean }).price).toBe(false);
-      const spawnedJob = await pubSubDB.get(payload.id);
+      const spawnedJob = await pubSubDB.getJobData(payload.id);
       expect(spawnedJob?.id).toBe(payload.id);
     });
 
@@ -243,7 +243,7 @@ describe('pubsubdb', () => {
       const jobId = await pubSubDB.pub('order.finalize', payload);
       expect(jobId).not.toBeNull();
       //note: jobResponse is undefined, because there is no job data per the YAML spec
-      //const jobResponse = await pubSubDB.get(payload.id);
+      //const jobResponse = await pubSubDB.getJobData(payload.id);
     });
   });
 

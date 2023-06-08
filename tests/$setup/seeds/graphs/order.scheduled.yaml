@@ -16,7 +16,6 @@ activities:
       maps:
         $ref: '../maps/order.scheduled.yaml#/schedule/job'
     stats:
-      granularity: 5m
       id: "{schedule.input.data.id}"
       key:
         "@pipe":

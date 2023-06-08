@@ -12,16 +12,16 @@ export {
   IterateActivity,
   RequestActivity,
   TriggerActivity,
-  TriggerActivityStats } from './activity';
+  TriggerActivityStats } from './typedefs/activity';
 export {
   App,
   AppVID,
   AppTransitions,
   AppSubscriptions
-} from './app';
-export { AsyncSignal } from './async';
-export { CacheMode } from './cache';
-export { CollationKey } from './collator';
+} from './typedefs/app';
+export { AsyncSignal } from './typedefs/async';
+export { CacheMode } from './typedefs/cache';
+export { CollationKey } from './typedefs/collator';
 export {
   Condition,
   Gate,
@@ -30,10 +30,10 @@ export {
   HookInterface,
   Hooks,
   HookSignal
-} from './hook';
+} from './typedefs/hook';
 export {
   RedisClientType as IORedisClientType,
-  RedisMultiType as IORedisMultiType } from './ioredisclient';
+  RedisMultiType as IORedisMultiType } from './typedefs/ioredisclient';
 export {
   AbbreviatedJobMetadata,
   JobActivityContext,
@@ -41,12 +41,12 @@ export {
   JobsData,
   JobMetadata,
   PartialJobContext,
-  JobOutput } from './job';
-export { MappingStatements } from './map';
+  JobOutput } from './typedefs/job';
+export { MappingStatements } from './typedefs/map';
 export {
   Pipe,
   PipeItem,
-  PipeItems } from './pipe';
+  PipeItems } from './typedefs/pipe';
 export {
   PubSubDB,
   PubSubDBApp,
@@ -58,7 +58,7 @@ export {
   PubSubDBSettings,
   PubSubDBWorker,
   StoreService
-} from './pubsubdb';
+} from './typedefs/pubsubdb';
 export {
   ActivateMessage,
   QuorumMessage,
@@ -73,13 +73,14 @@ export {
   RollCallMessage,
   SubscriptionCallback,
   ThrottleMessage,
-  WorkMessage } from './quorum';
+  WorkMessage } from './typedefs/quorum';
 export {
+  MultiResponseFlags,
   RedisClient,
-  RedisMulti } from './redis'; //common redis types
+  RedisMulti } from './typedefs/redis'; //common redis types
 export {
   RedisClientType,
-  RedisMultiType } from './redisclient';
+  RedisMultiType } from './typedefs/redisclient';
 export {
   AbbreviationMap,
   AbbreviationMaps,
@@ -87,7 +88,7 @@ export {
   FlatDocument,
   FlatObject,
   JSONSchema,
-  MultiDimensionalDocument } from './serializer';
+  MultiDimensionalDocument } from './typedefs/serializer';
 export {
   AggregatedData,
   CountByFacet,
@@ -104,12 +105,15 @@ export {
   JobStatsRange,
   StatsResponse,
   Segment,
-  TimeSegment } from './stats';
+  TimeSegment } from './typedefs/stats';
 export {
   StreamData,
   StreamDataResponse,
-  StreamStatus } from './stream';
+  StreamRetryPolicy,
+  StreamCode,
+  StreamError,
+  StreamStatus } from './typedefs/stream';
 export {
   Match,
   TransitionRule,
-  Transitions } from './transition';
+  Transitions } from './typedefs/transition';

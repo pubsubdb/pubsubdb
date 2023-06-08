@@ -19,6 +19,12 @@ import {
 describe('StreamSignaler', () => {
   const appConfig = { id: 'calc', version: '1' };
   const REPORT_INTERVAL = 10000;
+  const UNRECOVERABLE_ERROR = {
+    message: 'unrecoverable error',
+    code: 403,
+  };
+  let simulateOneTimeError = true;
+  let simulateUnrecoverableError = false;
   //Redis connection ids (this test uses 4 separate Redis connections)
   const CONNECTION_KEY = 'manual-test-connection';
   const SUBSCRIPTION_KEY = 'manual-test-subscription';
@@ -80,11 +86,35 @@ describe('StreamSignaler', () => {
             const values = JSON.parse(streamData.data.values as string) as number[];
             const operation = streamData.data.operation as 'add'|'subtract'|'multiply'|'divide';
             const result = new NumberHandler()[operation](values);
-            return {
-              status: StreamStatus.SUCCESS,
-              metadata: { ...streamData.metadata },
-              data: { result },
-            } as StreamDataResponse;
+
+            if (simulateUnrecoverableError) {
+              simulateUnrecoverableError = false;
+              //simulate an error for which there is no retry policy
+              return {
+                status: StreamStatus.ERROR,
+                code: UNRECOVERABLE_ERROR.code,
+                metadata: { ...streamData.metadata },
+                data: { code: UNRECOVERABLE_ERROR.code, message: UNRECOVERABLE_ERROR.message },
+              } as StreamDataResponse;
+
+            } else if (simulateOneTimeError) {
+              simulateOneTimeError = false;
+              //simulate a system error and retry
+              //YAML config says to retry 500 3x
+              return {
+                status: StreamStatus.ERROR,
+                code: 500,
+                metadata: { ...streamData.metadata },
+                data: { error: 'recoverable error' },
+              } as StreamDataResponse;
+
+            } else {
+              return {
+                status: StreamStatus.SUCCESS,
+                metadata: { ...streamData.metadata },
+                data: { result },
+              } as StreamDataResponse;
+            }
           }
         }
       ]
@@ -109,7 +139,7 @@ describe('StreamSignaler', () => {
         operation: 'add',
         values: JSON.stringify([1, 2, 3, 4, 5]),
       };
-      const jobResponse = await pubSubDB.pubsub('calculate', payload, 1500);
+      const jobResponse = await pubSubDB.pubsub('calculate', payload, 2500);
       expect(jobResponse?.metadata.jid).not.toBeNull();
       expect(jobResponse?.data.result).toBe(15);
     });
@@ -119,7 +149,7 @@ describe('StreamSignaler', () => {
         operation: 'subtract',
         values: JSON.stringify([5, 4, 3, 2, 1]),
       };
-      const jobResponse = await pubSubDB.pubsub('calculate', payload);
+      const jobResponse = await pubSubDB.pubsub('calculate', payload, 2500);
       expect(jobResponse?.metadata.jid).not.toBeNull();
       expect(jobResponse?.data.result).toBe(-5);
     });
@@ -129,7 +159,7 @@ describe('StreamSignaler', () => {
         operation: 'multiply',
         values: JSON.stringify([5, 4, 3, 2, 1]),
       };
-      const jobResponse = await pubSubDB.pubsub('calculate', payload);
+      const jobResponse = await pubSubDB.pubsub('calculate', payload, 2500);
       expect(jobResponse?.metadata.jid).not.toBeNull();
       expect(jobResponse?.data.result).toBe(120);
     });
@@ -154,12 +184,11 @@ describe('StreamSignaler', () => {
         await pubSubDB.pubsub('calculate', payload, 0);
       } catch (error) {
         //just because we got an error doesn't mean the job didn't keep running
-        expect(error.type).toBe('timeout');
-        const jobId = error.id;
-        expect(jobId).not.toBeNull();
+        expect(error.message).toBe('timeout');
+        expect(error.job_id).not.toBeNull();
         //wait for a bit to make sure it completes then make assertions
         await sleepFor(1000);
-        const jobData = await pubSubDB.get(jobId);
+        const jobData = await pubSubDB.getJobData(error.job_id);
         expect(jobData?.result).toBe(5);
       }
     });
@@ -200,6 +229,25 @@ describe('StreamSignaler', () => {
       //publish a job (sleep for 500, so the test doesn't exit tooo soon)
       jobId = await pubSubDB.pub('calculate', payload) as string;
       await sleepFor(500); //don't exit before event is received
+      await pubSubDB.unsub('calculated');
+    });
+
+    it('should return an error if the job throws an error', async () => {
+      //set flag that will cause our test worker to return an unrecoverable error
+      simulateUnrecoverableError = true;
+      const payload = {
+        operation: 'divide',
+        values: JSON.stringify([100, 4, 5]),
+      };
+      try {
+        await pubSubDB.pubsub('calculate', payload);
+      } catch (error) {
+        expect(error.message).toBe(UNRECOVERABLE_ERROR.message);
+        expect(error.code).toBe(UNRECOVERABLE_ERROR.code);
+        expect(error.job_id).not.toBeNull();
+        const jobMetaData = await pubSubDB.getJobMetadata(error.job_id);
+        expect(jobMetaData).not.toBeNull();
+      }
     });
   });
 
@@ -210,8 +258,8 @@ describe('StreamSignaler', () => {
         pubSubDB.engine.streamSignaler.auditData.length = 0;
         pubSubDB.engine.streamSignaler.currentSlot = null;
       }
-      pubSubDB.engine?.streamSignaler?.audit(10, 20, true);
-      pubSubDB.engine?.streamSignaler?.audit(20, 30, false);
+      pubSubDB.engine?.streamSignaler?.audit('1111111111', '22222222222222222222', true);
+      pubSubDB.engine?.streamSignaler?.audit('22222222222222222222', '333333333333333333333333333333', false);
       timestampAfterAudit = Math.floor(Date.now() / REPORT_INTERVAL) * REPORT_INTERVAL; // floor to nearest 10s
       const auditData = pubSubDB.engine?.streamSignaler?.auditData;
       const auditDataForCurrentSlot = auditData?.find(data => data.t === timestampAfterAudit);
@@ -223,7 +271,7 @@ describe('StreamSignaler', () => {
     });
   });
 
-  describe('cleanOldData', () => {
+  describe('cleanStaleData', () => {
     it('should correctly remove items older than one hour', () => {
       if (pubSubDB.engine?.streamSignaler?.currentBucket) {
         const twoHoursAgo = Date.now() - 7200000;  // timestamp for two hours ago
@@ -237,7 +285,7 @@ describe('StreamSignaler', () => {
         };
         pubSubDB.engine.streamSignaler.auditData = [pubSubDB.engine.streamSignaler.currentBucket];
       }
-      pubSubDB.engine?.streamSignaler?.cleanOldData();
+      pubSubDB.engine?.streamSignaler?.cleanStaleData();
       expect(pubSubDB.engine?.streamSignaler?.auditData.length).toBe(0);
     });
   });
@@ -249,8 +297,8 @@ describe('StreamSignaler', () => {
         pubSubDB.engine.streamSignaler.auditData.length = 0;
         pubSubDB.engine.streamSignaler.currentSlot = null;
       }
-      pubSubDB.engine?.streamSignaler?.audit(10, 20, true);
-      pubSubDB.engine?.streamSignaler?.audit(20, 30, false);
+      pubSubDB.engine?.streamSignaler?.audit('1111111111', '22222222222222222222', true);
+      pubSubDB.engine?.streamSignaler?.audit('22222222222222222222', '333333333333333333333333333333', false);
       const report = pubSubDB.engine?.streamSignaler?.report();
       expect(report?.namespace).toBe(pubSubDB.engine?.streamSignaler?.namespace);
       expect(report?.appId).toBe(pubSubDB.engine?.streamSignaler?.appId);

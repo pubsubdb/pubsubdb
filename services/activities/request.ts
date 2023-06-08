@@ -21,14 +21,6 @@ class Request extends Activity {
   async mapInputData(): Promise<void> {
     this.logger.info('Request mapInputData - Do nothing; No input data');
   }
-
-  async subscribeToResponse(): Promise<void> {
-    this.logger.info('Request subscribeToResponse - Do nothing; No response');
-  }
-
-  async execActivity(): Promise<void> {
-    this.logger.info('Request execActivity - Do nothing; No execution');
-  }
 }
 
 export { Request };

@@ -78,13 +78,13 @@ describe('RedisStoreService', () => {
     });
   });
 
-  describe('getJob', () => {
+  describe('getJobData', () => {
     it('should get the data for the given job ID', async () => {
       const jobId = 'JOB_ID';
       const data = { data: 'DATA' };
       const metadata = { jid: jobId };
       await redisStoreService.setJob(jobId, data, metadata, appConfig);
-      const result = await redisStoreService.getJob(jobId, appConfig);
+      const result = await redisStoreService.getJobData(jobId, appConfig);
       expect(result).toEqual(data);
     });
   });

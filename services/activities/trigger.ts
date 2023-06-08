@@ -1,7 +1,3 @@
-import { Pipe } from "../pipe";
-import { KeyType } from '../../modules/key';
-import { SerializerService } from '../store/serializer';
-import { Activity } from "./activity";
 // import {
 //   RestoreJobContextError, 
 //   MapInputDataError, 
@@ -9,6 +5,14 @@ import { Activity } from "./activity";
 //   RegisterTimeoutError, 
 //   ExecActivityError, 
 //   DuplicateActivityError} from '../../../modules/errors';
+import { KeyType } from '../../modules/key';
+import { getGuid, getTimeSeriesStamp } from '../../modules/utils';
+import { Activity } from "./activity";
+import { CollatorService } from '../collator';
+import { EngineService } from '../engine';
+import { Pipe } from "../pipe";
+import { ReporterService } from '../reporter';
+import { SerializerService } from '../store/serializer';
 import {
   ActivityData,
   ActivityMetadata,
@@ -16,12 +20,8 @@ import {
   TriggerActivity,
   FlattenedDataObject, 
   HookData} from "../../typedefs/activity";
-import { JobActivityContext } from '../../typedefs/job';
-import { CollatorService } from '../collator';
+import { JobActivityContext, JobMetadata } from '../../typedefs/job';
 import { RedisMulti } from '../../typedefs/redis';
-import { getGuid, getTimeSeriesStamp } from '../../modules/utils';
-import { EngineService } from '../engine';
-import { ReporterService } from '../reporter';
 
 class Trigger extends Activity {
   config: TriggerActivity;
@@ -47,7 +47,7 @@ class Trigger extends Activity {
       /////// MULTI:START ///////
       const multi = this.store.getMulti();
       await this.saveActivity(multi);
-      await this.saveJobData(multi);
+      await this.saveJob(multi);
       await this.saveJobStats(multi);
       await multi.exec();
       /////// MULTI:END ///////
@@ -125,7 +125,7 @@ class Trigger extends Activity {
   }
 
   resolveGranularity(): string {
-    return this.config.stats?.granularity || ReporterService.DEFAULT_GRANULARITY;
+    return ReporterService.DEFAULT_GRANULARITY;
   }
 
   getJobStatus(): number {
@@ -171,8 +171,8 @@ class Trigger extends Activity {
     }
   }
 
-  saveJobMetadata(): boolean {
-    return true;
+  toSaveJobMetadata(): Partial<JobMetadata> {
+    return this.context.metadata;
   }
 
   async saveActivityNX(): Promise<void> {

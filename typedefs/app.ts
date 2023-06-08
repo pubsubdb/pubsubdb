@@ -17,5 +17,4 @@ type AppSubscriptions = {
   [key: string]: string;
 };
 
-
 export { App, AppVID, AppTransitions, AppSubscriptions };

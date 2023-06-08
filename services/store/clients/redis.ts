@@ -244,7 +244,7 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
   }
 
   async getJobMetadata(jobId: string, appVersion: AppVID): Promise<JobMetadata> {
-    const metadataFields = ['m/ngn', 'm/pj', 'm/pa', 'm/aid', 'm/atp', 'm/stp', 'm/jc', 'm/ju', 'm/jid', 'm/key', 'm/ts', 'm/js'];
+    const metadataFields = ['m/ngn', 'm/pj', 'm/pa', 'm/aid', 'm/atp', 'm/stp', 'm/jc', 'm/ju', 'm/jid', 'm/key', 'm/ts', 'm/js', 'm/err'];
     const params: KeyStoreParams = { appId: appVersion.id, jobId };
     const key = this.mintKey(KeyType.JOB_DATA, params);
     const arrMetadata = await this.redisClient.HMGET(key, metadataFields);
@@ -270,10 +270,6 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
     return context?.data || undefined;
   }
 
-  async getJob(jobId: string, appVersion: AppVID): Promise<JobData | undefined> {
-    return await this.getJobData(jobId, appVersion);
-  }
-
   async restoreContext(
     jobId: string,
     dependsOn: Record<string, string[]>,
@@ -284,7 +280,7 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
 
     // 1) get the job metadata
     const jobKey = this.mintKey(KeyType.JOB_DATA, { appId: config.id, jobId });
-    const jobMetdataIds = ['m/ngn', 'm/pj', 'm/pa', 'm/jid', 'm/aid', 'm/key', 'm/ts', 'm/js', 'm/jc', 'm/ju'];
+    const jobMetdataIds = ['m/ngn', 'm/pj', 'm/pa', 'm/jid', 'm/aid', 'm/key', 'm/ts', 'm/js', 'm/jc', 'm/ju', 'm/err'];
     multi.HMGET(jobKey, jobMetdataIds);
     keysAndFields.push({ activityId: '$JOB', key: jobKey, fields: jobMetdataIds });
 

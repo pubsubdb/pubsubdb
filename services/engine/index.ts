@@ -21,6 +21,7 @@ import { CacheMode } from '../../typedefs/cache';
 import {
   JobActivityContext,
   JobData,
+  JobMetadata,
   JobOutput,
   PartialJobContext } from '../../typedefs/job';
 import {
@@ -40,12 +41,13 @@ import {
   JobStatsInput,
   StatsResponse
 } from '../../typedefs/stats';
-import { StreamDataResponse } from '../../typedefs/stream';
+import { StreamDataResponse, StreamError, StreamStatus } from '../../typedefs/stream';
 
 //wait time to see if a job is complete
 const OTT_WAIT_TIME = 1000;
-
 const REPORT_INTERVAL = 10000;
+const STATUS_CODE_SUCCESS = 200;
+const STATUS_CODE_TIMEOUT = 504;
 
 class EngineService {
   namespace: string;
@@ -220,23 +222,23 @@ class EngineService {
   }
   async getActivity(topic: string): Promise<[activityId: string, activity: ActivityType]> {
     const app = await this.store.getApp(this.appId);
-    if (app) {
-      if (this.isPrivate(topic)) {
-        //private subscriptions use the activity id (.activityId)
-        const activityId = topic.substring(1)
+    if (!app) {
+      throw new Error(`no app found for id ${this.appId}`);
+    }
+    if (this.isPrivate(topic)) {
+      //private subscriptions use the activity id (.activityId)
+      const activityId = topic.substring(1)
+      const activity = await this.store.getSchema(activityId, await this.getVID());
+      return [activityId, activity];
+    } else {
+      //public subscriptions use a topic (a.b.c) that is associated with an activity id
+      const activityId = await this.store.getSubscription(topic, await this.getVID());
+      if (activityId) {
         const activity = await this.store.getSchema(activityId, await this.getVID());
         return [activityId, activity];
-      } else {
-        //public subscriptions use a topic (a.b.c) that is associated with an activity id
-        const activityId = await this.store.getSubscription(topic, await this.getVID());
-        if (activityId) {
-          const activity = await this.store.getSchema(activityId, await this.getVID());
-          return [activityId, activity];
-        }
       }
-      throw new Error(`no subscription found for topic ${topic} in app ${this.appId} for app version ${app.version}`);
     }
-    throw new Error(`no app found for id ${this.appId}`);
+    throw new Error(`no subscription found for topic ${topic} in app ${this.appId} for app version ${app.version}`);
   }
   async getSettings(): Promise<PubSubDBSettings> {
     return await this.store.getSettings();
@@ -294,7 +296,7 @@ class EngineService {
     };
     const activityHandler = await this.initActivity(`.${streamData.metadata.aid}`, context.data, context as JobActivityContext) as Exec;
     //return void; it is a signal to the
-    await activityHandler.processWorkerResponse(streamData.status);
+    await activityHandler.processWorkerResponse(streamData.status, streamData.code);
   }
 
 
@@ -305,10 +307,12 @@ class EngineService {
   async resolveAwait(context: JobActivityContext) {
     if (this.hasParentJob(context)) {
       const completedJobId = context.metadata.jid;
-      const config = await this.getVID();
+      const appVID = await this.getVID();
+      const output = await this.store.getJobOutput(completedJobId, appVID);
+      const error = await this.resolveError(output.metadata);
       const parentContext: Partial<JobActivityContext> = {
-        data: await this.store.getJob(completedJobId, config),
-        metadata: { 
+        data: error || output.data || {},
+        metadata: {
           ...context.metadata,
           jid: context.metadata.pj,
           aid: context.metadata.pa,
@@ -317,7 +321,14 @@ class EngineService {
         }
       };
       const activityHandler = await this.initActivity(`.${parentContext.metadata.aid}`, parentContext.data, parentContext as JobActivityContext) as Await;
-      return await activityHandler.resolveAwait();
+      const status = error ? StreamStatus.ERROR : StreamStatus.SUCCESS;
+      const code = error ? error.code : STATUS_CODE_SUCCESS;
+      return await activityHandler.resolveAwait(status, code);
+    }
+  }
+  resolveError(metadata: JobMetadata): StreamError | undefined {
+    if (metadata && metadata.err) {
+      return JSON.parse(metadata.err) as StreamError;
     }
   }
 
@@ -385,15 +396,23 @@ class EngineService {
     const jobId = await this.pub(topic, data, context);
     return new Promise((resolve, reject) => {
       this.registerJobCallback(jobId, (topic: string, output: JobOutput) => {
-        resolve(output);
+        if (output.metadata.err) {
+          const error = JSON.parse(output.metadata.err) as StreamError;
+          reject({
+            ...error,
+            job_id: output.metadata.jid,
+          });
+        } else {
+          resolve(output);
+        }
       });
       setTimeout(() => {
         this.delistJobCallback(jobId);
         reject({
-          status: 'error',
-          type: 'timeout',
-          id: jobId,
-        });
+          code: STATUS_CODE_TIMEOUT,
+          message: 'timeout',
+          job_id: jobId
+        } as StreamError);
       }, timeout);
     });
   }
@@ -457,8 +476,11 @@ class EngineService {
 
 
   // ****** GET A JOB/METADATA BY ID *********
-  async get(key: string) {
-    return this.store.getJob(key, await this.getVID());
+  async getJobOutput(key: string) {
+    return this.store.getJobOutput(key, await this.getVID());
+  }
+  async getJobData(key: string) {
+    return this.store.getJobData(key, await this.getVID());
   }
   async getJobMetadata(key: string) {
     return this.store.getJobMetadata(key, await this.getVID());

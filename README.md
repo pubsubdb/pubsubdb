@@ -70,16 +70,13 @@ PubSubDB apps are modeled using YAML. These are the *execution instructions* for
 4. **Activity Properties**: Each activity contains various properties:
    - `title`: Describes the activity's purpose.
    - `type`: Defines the type of activity, for example, a 'trigger'.
-   - `stats`: This section is used to track statistical data related to the activity. The `key`, `id`, `granularity`, and `measures` properties are used to define how and what data will be measured.
+   - `subtype`: For activities like `exec` the subtype is used to identify the specific [worker function](#workers) to execute in job context.
    
-5. **Data Mapping**: You'll notice syntax like `{a5.input.data.object_type}` throughout the YAML file. This is a way to dynamically map data between activities. The mapping syntax, referred to as [@pipes](./docs/data_mapping.md), allows you to navigate the JSON objects that the workflow is processing.
+5. **Data Mapping**: You'll notice syntax like `{$self.input.data.id}`. This is a way to dynamically map data between activities. The mapping syntax, referred to as [@pipes](./docs/data_mapping.md), allows you to navigate the JSON objects that the workflow is processing.
 
-6. **Aggregate Statistics**: Under the `measures` section, we have `avg` and `index` as types of measurements. `avg` will calculate the average of a specific target over the specified granularity, and `index` will create an index of the specified target.
-
-This model provides a clear, straightforward way to define complex workflows, track statistics, and handle dynamic data, all within a single, human-readable YAML file.
+6. **Conditional Transitions**: Design flows with sophisticated and/or conditions that branch using upstream activity data.
 
 ```yaml
-# ./src/graphs/discount.requested.yaml
 subscribes: discount.requested
 publishes: discount.responded
 
@@ -95,15 +92,19 @@ activities:
     title: Get Price Discount
     type: trigger
     stats:
-      key: "{$self.input.data.object_type}"
       id: "{$self.input.data.id}"
-      granularity: 5m
-      measures:
-        - measure: avg
-          target: "{$self.input.data.price}"
-        - measure: index
-          target: "{$self.input.data.object_type}"
-  ...
+
+  get_available:
+    title: Check Available Discounts
+    type: exec
+    subtype: discounts.enumerate
+    ...
+
+transitions:
+  get_discount:
+    get_available:
+      conditions:
+        ...
 ```
 
 ## Invoking Your Application's Endpoints
@@ -117,10 +118,16 @@ Once your application is deployed and activated, you'll be able to kick off work
 Suppose you need to kick off a workflow but the answer isn't relevant at this time. You can optionally await the response (the job ID) to confirm that the request was received, but otherwise, this is a simple fire-and-forget call.
 
 ```javascript
-const payload = { operation: 'add', values: [1, 2, 3] };
-const jobId = await pubSubDB.pub('calculate', payload);
-//jobId is system-assigned in this context (e.g., `af45e56.235af0`)
+const payload = { id: 'ord123', price: 55.99 };
+const jobId = await pubSubDB.pub('discount.requested', payload);
+//jobId will be `ord123`
 ```
+
+Fetch the job data at any time (even after the job has completed) using the `getJobData` method.
+
+```javascript
+const job = await pubSubDB.getJobData('ord123');
+```   
 
 ### Sub
 Suppose you need to listen in on the results of all computations on a particular topic, not just the ones you initiated. In that case, you can use the `sub` method.
@@ -128,23 +135,22 @@ Suppose you need to listen in on the results of all computations on a particular
 This is useful in scenarios where you're interested in monitoring global computation results, performing some action based on them, or even just logging them for auditing purposes.
 
 ```javascript
-await pubSubDB.sub('calculated', (topic: string, jobOutput: JobOutput) => {
-  console.log(jobOutput.data.result);
-  // Output will be: `5`
+await pubSubDB.sub('discount.responded', (topic: string, jobOutput: JobOutput) => {
+  //jobOutput.data.discount is `5.00`
 });
 
 //publish one test event
-const payload = { operation: 'divide', values: [100, 4, 5] };
-const jobId = await pubSubDB.pub('calculate', payload);
+const payload = { id: 'ord123', price: 55.99 };
+const jobId = await pubSubDB.pub('discount.requested', payload);
 ```
 
 ### PubSub
 If you need to kick off a workflow and await the response, use the `pubsub` method. PubSubDB will create a one-time subscription, making it simple to model the request using a standard `await`. The benefit, of course, is that this is a fully duplexed call that adheres to the principles of CQRS, thereby avoiding the overhead of a typical HTTP request/response exchange.
 
 ```javascript
-const payload = { operation: 'add', values: [1, 2, 3] };
-const jobOutput: JobOutput = await pubSubDB.pubsub('calculate', payload);
-//jobOutput.data.result is `6`
+const payload = { id: 'ord123', price: 55.99 };
+const jobOutput: JobOutput = await pubSubDB.pubsub('discount.requested', payload);
+//jobOutput.data.discount is `5.00`
 ```
 
 No matter where in the network the calculation is performed (no matter the microservice that is subscribed as the official "handler" to perform the calculation...or even if multiple microservices are invoked during the workflow execution), the answer will always be published back to the originating caller the moment it's ready. It's a one-time subscription handled automatically by the engine, enabling traditional request/response semantics but without network back-pressure risk.
@@ -152,7 +158,7 @@ No matter where in the network the calculation is performed (no matter the micro
 ## Workers
 Any microservice running an instance of PubSubDB can register a function with a named topic. Thereafter, any time that PubSubDB runs a workflow with an `exec` activity ,that matches this topic, it will call the function in *job* context, passing all job data described by the schema. 
 
-In the following example, PubSubDB is registering a worker to run a function when the `calculation.execute` topic is encountered in a flow. The function will execute in buffered job context, isolated from network back-pressure risk. And even if you deploy more workers than engines (even if you introduce asymmetry into the network), PubSubDB will automatically balance network pressure to only run as fast as the slowest endpoint.
+In the following example, PubSubDB is registering a worker to run a function when the `discounts.enumerate` topic is encountered in a flow. The function will execute in buffered job context, isolated from network back-pressure risk. And even if you deploy more workers than engines (even if you introduce asymmetry into the network), PubSubDB will automatically balance network pressure to only run as fast as the slowest endpoint.
 
 ```javascript
 import {
@@ -168,21 +174,19 @@ const redisClient2 = getMyRedisClient();
 const redisClient3 = getMyRedisClient();
 
 const pubSubDB = await PubSubDB.init({
-  appId: "my-app",
+  appId: "myapp",
   workers: [
     { 
-      topic: 'calculation.execute',
+      topic: 'discounts.enumerate',
       store: new RedisStore(redisClient1),
       stream: new RedisStream(redisClient2),
       sub: new RedisSub(redisClient3),
       callback: async (data: StreamData) => {
-        //add numbers and return result
-        const jobData = data.data;
-        const result = jobData.values.reduce((a, b) => a + b, 0);
+        //do the work...and return
         return {
           status: 'success',
           metadata: { ...data.metadata },
-          data: { result }
+          data: { discounts }
         };
       }
     }
