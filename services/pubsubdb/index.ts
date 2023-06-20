@@ -49,10 +49,10 @@ class PubSubDBService {
 
   static async init(config: PubSubDBConfig) {
     const instance = new PubSubDBService();
-    instance.logger = new LoggerService(config.logger);
+    instance.guid = getGuid();
     instance.verifyAndSetNamespace(config.namespace);
     instance.verifyAndSetAppId(config.appId);
-    instance.guid = getGuid();
+    instance.logger = new LoggerService(config.appId, instance.guid, config.name || '', config.logLevel);
     await instance.initEngine(config, instance.logger);
     await instance.initQuorum(config, instance.engine, instance.logger);
     await instance.initWorkers(config, instance.logger);
@@ -124,6 +124,12 @@ class PubSubDBService {
   async getStats(topic: string, query: JobStatsInput): Promise<StatsResponse> {
     return await this.engine?.getStats(topic, query);
   }
+  async getStatus(jobId: string) {
+    return this.engine?.getStatus(jobId);
+  }
+  async getState(topic: string, jobId: string) {
+    return this.engine?.getState(topic, jobId);
+  }
   async getIds(topic: string, query: JobStatsInput, queryFacets = []): Promise<IdsResponse> {
     return await this.engine?.getIds(topic, query, queryFacets);
   }
@@ -132,22 +138,12 @@ class PubSubDBService {
   }
 
   // ****** `HOOK` ACTIVITY RE-ENTRY POINT ******
-  async hook(topic: string, data: JobData) {
+  async hook(topic: string, data: JobData): Promise<number> {
+    //return collation int
     return await this.engine?.hook(topic, data);
   }
   async hookAll(hookTopic: string, data: JobData, query: JobStatsInput, queryFacets: string[] = []): Promise<string[]> {
     return await this.engine?.hookAll(hookTopic, data, query, queryFacets);
-  }
-
-  // ****** GET JOB/METADATA BY ID *********
-  async getJobOutput(key: string) {
-    return this.engine?.getJobOutput(key);
-  }
-  async getJobData(key: string) {
-    return this.engine?.getJobData(key);
-  }
-  async getJobMetadata(key: string) {
-    return this.engine?.getJobMetadata(key);
   }
 }
 

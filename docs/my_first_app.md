@@ -375,8 +375,7 @@ Here's how it might look:
 
 ```javascript
 await pubSubDB.sub('calculated', (topic: string, message: JobOutput) => {
-  console.log(`Received: ${message.data.result} for: ${message.metadata.jid}`);
-  // Output will be: `Received: 5 for: <assigned_job_id>`
+  // `message.data.result` will be `5`
 });
 
 const payload = { operation: 'divide', values: [100, 4, 5] };

@@ -26,7 +26,9 @@ type PubSubDBWorker = {
 type PubSubDBConfig = {
   appId: string;
   namespace?: string;
+  name?: string;
   logger?: ILogger;
+  logLevel?: 'silly' | 'debug' | 'info' | 'warn' | 'error' | 'silent';
   engine?: PubSubDBEngine;
   workers?: PubSubDBWorker[];
 }

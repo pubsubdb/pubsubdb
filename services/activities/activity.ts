@@ -8,22 +8,24 @@ import { CollatorService } from "../collator";
 import { EngineService } from "../engine";
 import { ILogger } from "../logger";
 import { MapperService } from '../mapper';
+import { MDATA_SYMBOLS } from '../serializer';
 import { StoreSignaler } from "../signaler/store";
 import { StoreService } from "../store";
-import { SerializerService } from '../store/serializer';
 import { 
   ActivityType,
   ActivityData,
   ActivityMetadata,
-  FlattenedDataObject, 
-  HookData} from "../../typedefs/activity";
-import { JobActivityContext, JobMetadata } from "../../typedefs/job";
+  HookData,
+  Consumes } from "../../typedefs/activity";
+import { JobActivityContext } from "../../typedefs/job";
 import {
   MultiResponseFlags,
   RedisClient,
   RedisMulti } from "../../typedefs/redis";
+import { MultiDimensionalDocument } from "../../typedefs/serializer";
 import { StreamCode, StreamStatus } from "../../typedefs/stream";
 import { TransitionRule, Transitions } from "../../typedefs/transition";
+import { getValueByPath, restoreHierarchy } from "../../modules/utils";
 
 /**
  * The base class for all activities
@@ -39,6 +41,7 @@ class Activity {
   logger: ILogger;
   status: StreamStatus = StreamStatus.SUCCESS;
   code: StreamCode = 200;
+  leg: number = 0;
 
   constructor(
     config: ActivityType,
@@ -60,26 +63,24 @@ class Activity {
   //********  INITIAL ENTRY POINT (A)  ********//
   async process(): Promise<string> {
     //try {
-      await this.restoreJobContext(this.context.metadata.jid);
+      this.setDuplexLeg(1);
+      await this.getState();
       this.mapJobData();
-
       /////// MULTI: START ///////
       const multi = this.store.getMulti();
-      //await this.registerTimeout();   //subclasses MUST implement
-      await this.saveJob(multi);
-      await this.saveActivity(multi);
+      //await this.registerTimeout();
+      await this.setState(multi);
       const shouldSleep = await this.registerExpectedHook(multi);
       const decrementBy = shouldSleep ? 4 : 3;
-      await this.saveActivityStatus(decrementBy, multi);
+      await this.setStatus(decrementBy, multi);
       const multiResponse = await multi.exec() as MultiResponseFlags;
       /////// MULTI: END ///////
-
       const activityStatus = multiResponse[multiResponse.length - 1];
       const isComplete = CollatorService.isJobComplete(activityStatus as number);
       !shouldSleep && this.transition(isComplete);
       return this.context.metadata.aid;
     //} catch (error) {
-      //this.logger.error('activity.process:error', error);
+      //this.logger.error('activity-process-failed', error);
       // if (error instanceof DuplicateActivityError) {
       // } else if (error instanceof RestoreJobContextError) {
       // } else if (error instanceof MapInputDataError) {
@@ -91,6 +92,10 @@ class Activity {
     //}
   }
 
+  setDuplexLeg(leg: number): void {
+    this.leg = leg;
+  }
+
   //********  SIGNALER RE-ENTRY POINT (B)  ********//
   async registerExpectedHook(multi?: RedisMulti): Promise<string | void> {
     if (this.config.hook?.topic) {
@@ -98,55 +103,23 @@ class Activity {
       return await signaler.registerHook(this.config.hook.topic, this.context, multi);
     }
   }
-  async processHookSignal(): Promise<void> {
+  async processHookSignal(): Promise<number> {
     const signaler = new StoreSignaler(this.store, this.logger);
     const jobId = await signaler.process(this.config.hook.topic, this.data);
     if (jobId) {
-      await this.restoreJobContext(jobId);
+      await this.getState(jobId);
       this.bindActivityData('hook');
       this.mapJobData();
-      this.mapActivityData('hook');
       /////// MULTI: START ///////
       const multi = this.engine.store.getMulti();
-      await this.saveActivity(multi);
-      await this.saveJob(multi);
-      await this.saveActivityStatus(1, multi);
+      await this.setState(multi);
+      await this.setStatus(1, multi);
       const multiResponse = await multi.exec() as MultiResponseFlags;
       const activityStatus = multiResponse[multiResponse.length - 1];
       const isComplete = CollatorService.isJobComplete(activityStatus as number);
       this.transition(isComplete);
+      return Number(activityStatus);
       /////// MULTI: END ///////
-    }
-  }
-
-  async restoreJobContext(jobId: string): Promise<void> {
-    const config = await this.engine.getVID();
-    this.context = await this.store.restoreContext(
-      jobId,
-      this.config.depends,
-      config
-    ) as JobActivityContext;
-    if (!this.context[this.metadata.aid]) {
-      this.context[this.metadata.aid] = { input: {}, output: {}, hook: {} };
-    }
-    //alias '$self' to the activity id
-    this.context['$self'] = this.context[this.metadata.aid];
-  }
-
-  mapActivityData(target: string) {
-    const aid = this.metadata.aid;
-    const filteredData: FlattenedDataObject = {};
-    const toFlatten = { [aid]: { [target]: { data: this.data } } };
-    const rulesSet = new Set(this.config.dependents.map(rule => rule.slice(1, -1).replace(/\./g, '/')));
-    const flattenedData = SerializerService.flattenHierarchy(toFlatten);
-    for (const [key, value] of Object.entries(flattenedData)) {
-      if (rulesSet.has(key)) {
-        filteredData[key as string] = value as string;
-      }
-    }
-    const restoredData = SerializerService.restoreHierarchy(filteredData);
-    if (restoredData[aid]) {
-      this.context[aid][target].data = restoredData[aid][target].data;
     }
   }
 
@@ -165,23 +138,7 @@ class Activity {
   }
 
   async registerTimeout(): Promise<void> {
-    //base `activity` doesn't duplex
-    //but possible to set timeout if a hook is registered
-  }
-
-  toSaveJobMetadata(): Partial<JobMetadata> {
-    const metadata: Partial<JobMetadata> = {
-      ju: new Date().toISOString()
-    }
-    this.mapAndBindJobError(metadata);
-    return metadata;
-  }
-
-  mapAndBindJobError(metadata) {
-    if (this.status === StreamStatus.ERROR) {
-      metadata.err = this.context.metadata.err;
-      //todo: map job status via: (500: [3**, 4**, 5**], 202: [$pending])
-    }
+    //set timeout in support of hook and/or duplex
   }
 
   bindActivityError(data: Record<string, unknown>): void {
@@ -190,26 +147,138 @@ class Activity {
     this.context.metadata.err = JSON.stringify(data);
   }
 
-  async saveJob(multi?: RedisMulti): Promise<void> {
-    await this.store.setJob(
+  async getTriggerConfig(): Promise<ActivityType> {
+    return await this.store.getSchema(
+      this.config.trigger,
+      await this.engine.getVID()
+    );
+  }
+
+  getJobStatus(): null | number {
+    return null;
+  }
+
+  async setStatus(multiplier = 1, multi?: RedisMulti): Promise<void> {
+    const { id: appId } = await this.engine.getVID();
+    await this.store.setStatus(
+      -this.config.collationInt * multiplier,
       this.context.metadata.jid,
-      this.context.data || {},
-      this.toSaveJobMetadata(),
-      await this.engine.getVID(),
+      appId,
       multi
     );
   }
 
-  toSaveActivityMetadata(): Partial<JobMetadata> {
-    const metadata: ActivityMetadata = { 
-      ...this.metadata,
-      jid: this.context.metadata.jid,
-      key: this.context.metadata.key,
-    };
-    if (this.status === StreamStatus.ERROR) {
-      metadata.err = JSON.stringify(this.data);
+  async setState(multi?: RedisMulti): Promise<string> {
+    const { id: appId } = await this.engine.getVID();
+    const jobId = this.context.metadata.jid;
+    this.bindJobMetadata();
+    this.bindActivityMetadata();
+    let state: MultiDimensionalDocument = {};
+    await this.bindJobState(state);
+    await this.bindActivityState(state);
+    const symbolNames = [`$${this.config.subscribes}`, this.metadata.aid];
+    return await this.store.setState(state, this.getJobStatus(), jobId, appId, symbolNames, multi);
+  }
+
+  bindJobMetadata(): void {
+    //both legs of the most recently run activity (1 and 2) modify ju (job_updated)
+    this.context.metadata.ju = new Date().toISOString();
+  }
+
+  bindActivityMetadata(): void {
+    const self: MultiDimensionalDocument = this.context['$self'];
+    if (!self.output.metadata) {
+      self.output.metadata = {};
     }
-    return metadata;
+    if (this.status === StreamStatus.ERROR) {
+      self.output.metadata.err = JSON.stringify(this.data);
+    }
+    //todo: only bind ju and err if an activity update
+    self.output.metadata.ac = 
+      self.output.metadata.au = new Date().toISOString();
+    self.output.metadata.atp = this.config.type;
+    if (this.config.subtype) {
+      self.output.metadata.stp = this.config.subtype;
+    }
+    self.output.metadata.aid = this.metadata.aid;
+  }
+
+  async bindJobState(state: MultiDimensionalDocument): Promise<void> {
+    const triggerConfig = await this.getTriggerConfig();
+    const PRODUCES = [
+      ...(triggerConfig.PRODUCES || []),
+      ...this.bindJobMetadataPaths()
+    ];
+    for (const path of PRODUCES) {
+      const value = getValueByPath(this.context, path);
+      if (value !== undefined) {
+        state[path] = value;
+      }
+    }
+  }
+
+  async bindActivityState(state: MultiDimensionalDocument,): Promise<void> {
+    const produces = [
+      ...this.config.produces,
+      ...this.bindActivityMetadataPaths()
+    ];
+    for (const path of produces) {
+      const prefixedPath = `${this.metadata.aid}/${path}`;
+      const value = getValueByPath(this.context, prefixedPath);
+      if (value !== undefined) {
+        state[prefixedPath] = value;
+      } 
+    }
+  }
+
+  bindJobMetadataPaths(): string[] {
+    const keys_to_save = this.config.type === 'trigger' ? 'JOB': 'JOB_UPDATE';
+    return MDATA_SYMBOLS[keys_to_save].KEYS.map((key) => `metadata/${key}`);
+  }
+
+  bindActivityMetadataPaths(): string[] {
+    const isFirstLegToRun = this.leg === 1 || this.config.type === 'trigger';
+    const keys_to_save = isFirstLegToRun ? 'ACTIVITY': 'ACTIVITY_UPDATE'
+    return MDATA_SYMBOLS[keys_to_save].KEYS.map((key) => `output/metadata/${key}`);
+  }
+
+  async getState(jobId?: string) {
+    //assemble list of paths to consume (data and metadata)
+    const consumes: Consumes = {};
+    for (const [activityId, paths] of Object.entries(this.config.consumes)) {
+      consumes[activityId] = [];
+      for (const path of paths) {
+        consumes[activityId].push(`${activityId}/${path}`);
+      }
+    }
+    consumes[`$${this.config.subscribes}`] = MDATA_SYMBOLS.JOB.KEYS.map((key) => `metadata/${key}`);
+    //todo: bind job data using mapping statements
+    jobId = jobId || this.context.metadata.jid;
+    const { id: appId } = await this.engine.getVID();
+    //todo: use status to check if the job is in a terminal state and throw error
+
+    const [state, status] = await this.store.getState(jobId, appId, consumes);
+    const context = restoreHierarchy(state);
+    this.initSelf(context);
+    this.context = context as JobActivityContext;
+  }
+
+  initSelf(context: MultiDimensionalDocument) {
+    const activityId = this.metadata.aid;
+    if (!context[activityId]) {
+      context[activityId] = { };
+    }
+    const self = context[activityId];
+    if (!self.output) {
+      self.output = { };
+    }
+    if (!self.input) {
+      self.input = { };
+    }
+    if (!self.hook) {
+      self.hook = { };
+    }
+    context['$self'] = self;
   }
 
   bindActivityData(type: 'output' | 'hook'): void {
@@ -218,29 +287,6 @@ class Activity {
     } else {
       this.context[this.metadata.aid].hook.data = this.data;
     }
-  }
-
-  async saveActivity(multi?: RedisMulti): Promise<void> {
-    const jobId = this.context.metadata.jid;
-    const activityId = this.metadata.aid;
-    await this.store.setActivity(
-      jobId,
-      activityId,
-      this.context[activityId]?.output?.data || {},
-      this.toSaveActivityMetadata(),
-      this.context[activityId]?.hook?.data || {},
-      await this.engine.getVID(),
-      multi,
-    );
-  }
-
-  async saveActivityStatus(multiplier = 1, multi?: RedisMulti): Promise<void> {
-    await this.store.updateJobStatus(
-      this.context.metadata.jid,
-      -this.config.collationInt * multiplier,
-      await this.engine.getVID(),
-      multi
-    );
   }
 
   async skipDescendants(activityId: string, transitions: Transitions, toDecrement: number): Promise<number> {
@@ -257,12 +303,10 @@ class Activity {
   }
 
   async transition(isComplete: boolean): Promise<void> {
-    //if any descendant activity is skipped, toDecrement will
-    //be a negative number that can be used to update job status
+    //if any descendant activity is skipped, toDecrement will be negative
     const toDecrement = await this.transitionActivity(isComplete);
     //this is an extra call to the db and is job-specific
-    //todo: create a 'job' object/class for such methods (use pubsubdb for now)
-    this.engine.updateJobStatus(this.context, toDecrement);
+    this.engine.setStatus(this.context, toDecrement);
   }
 
   //todo: most efficient path is to count all skipped and decrement with self (just one call to db)
@@ -272,7 +316,6 @@ class Activity {
       return 0;
     } else {
       //transitions can cascade through the descendant activities
-      //toDecrement (e.g. -600600) is the result of the cascade
       let toDecrement = 0;
       const transitions = await this.store.getTransitions(await this.engine.getVID());
       const transition = transitions[`.${this.metadata.aid}`];

@@ -10,6 +10,7 @@ import {
   ReportMessage,
   SubscriptionCallback } from "../../typedefs/quorum";
 import { RedisClient, RedisMulti } from "../../typedefs/redis";
+import { StreamRole } from "../../typedefs/stream";
 
 const REPORT_INTERVAL = 10000;
 
@@ -64,6 +65,8 @@ class WorkerService {
         await service.subscribe.subscribe(KeyType.QUORUM, service.subscriptionHandler(), appId);
         //worker-specific targeting (for quorum messages targeting this worker's topic)
         await service.subscribe.subscribe(KeyType.QUORUM, service.subscriptionHandler(), appId, service.topic);
+        //app-specific quorum subscription (used for pubsub one-time request/response)
+        await service.subscribe.subscribe(KeyType.QUORUM, service.subscriptionHandler(), appId, service.guid);
         //init `stream` interface (for consuming buffered messages)
         service.stream = worker.stream;
         await worker.stream.init(
@@ -74,9 +77,13 @@ class WorkerService {
         //start consuming messages (this is a blocking call; never use worker.stream for anything else!)
         const key = worker.stream.mintKey(KeyType.STREAMS, { appId: service.appId, topic: worker.topic });
         service.streamSignaler = new StreamSignaler(
-          service.namespace,
-          service.appId,
-          service.guid,
+          {
+            namespace: service.namespace,
+            appId: service.appId,
+            guid: service.guid,
+            role: StreamRole.WORKER,
+            topic: worker.topic,
+          },
           worker.stream,
           worker.store,
           logger
@@ -105,7 +112,7 @@ class WorkerService {
   subscriptionHandler(): SubscriptionCallback {
     const self = this;
     return async (topic: string, message: QuorumMessage) => {
-      self.logger.debug(`subscriptionHandler: ${topic} ${JSON.stringify(message)}`);
+      self.logger.debug('worker-event-received', { topic, type: message.type });
       if (message.type === 'rollcall') {
         self.report();
       } else if (message.type === 'throttle') {
@@ -137,7 +144,7 @@ class WorkerService {
         setTimeout(this.reportNow.bind(this), REPORT_INTERVAL);
       }
     } catch (err) {
-      this.logger.error('engine.reportNow.error', err);
+      this.logger.error('worker-report-now-failed', err);
     }
   }
 

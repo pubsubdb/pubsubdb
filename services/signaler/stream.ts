@@ -6,9 +6,11 @@ import { StreamService } from '../stream';
 import { QuorumProcessed, QuorumProfile } from '../../typedefs/quorum';
 import { RedisClient, RedisMulti } from '../../typedefs/redis';
 import {
+  StreamConfig,
   StreamData,
   StreamDataResponse,
   StreamError,
+  StreamRole,
   StreamStatus
 } from '../../typedefs/stream';
 
@@ -27,6 +29,8 @@ class StreamSignaler {
   namespace: string;
   appId: string;
   guid: string;
+  role: StreamRole;
+  topic: string | undefined;
   store: StoreService<RedisClient, RedisMulti>;
   stream: StreamService<RedisClient, RedisMulti>;
   logger: ILogger;
@@ -38,10 +42,12 @@ class StreamSignaler {
   currentTimerId: NodeJS.Timeout | null = null;
   shouldConsume: boolean;
 
-  constructor(namespace: string, appId: string, guid: string, stream: StreamService<RedisClient, RedisMulti>, store: StoreService<RedisClient, RedisMulti>, logger: ILogger) {
-    this.namespace = namespace;
-    this.appId = appId;
-    this.guid = guid;
+  constructor(config: StreamConfig, stream: StreamService<RedisClient, RedisMulti>, store: StoreService<RedisClient, RedisMulti>, logger: ILogger) {
+    this.namespace = config.namespace;
+    this.appId = config.appId;
+    this.guid = config.guid;
+    this.role = config.role;
+    this.topic = config.topic;
     this.stream = stream;
     this.store = store;
     this.logger = logger;
@@ -51,7 +57,7 @@ class StreamSignaler {
     try {
       await this.store.xgroup('CREATE', stream, group, '$', 'MKSTREAM');
     } catch (err) {
-      this.logger.info('Consumer Group name exists', { stream, group });
+      this.logger.info('consumer-group-exists', { stream, group });
     }
   }
 
@@ -60,7 +66,7 @@ class StreamSignaler {
   }
 
   async consumeMessages(stream: string, group: string, consumer: string, callback: (streamData: StreamData) => Promise<StreamDataResponse|void>): Promise<void> {
-    this.logger.info(`Stream Consumer Starting: ${stream} ${group} ${consumer}`);
+    this.logger.info(`stream-consume-message-starting`, { group, consumer, stream });
     StreamSignaler.signalers.add(this);
     this.shouldConsume = true;
     await this.createGroup(stream, group);
@@ -70,7 +76,7 @@ class StreamSignaler {
       this.currentTimerId = sleep.timerId;
       await sleep.promise;
       if (!this.shouldConsume) {
-        this.logger.info(`Stream Consumer Stopping: ${group} ${consumer} ${stream}`);
+        this.logger.info(`stream-consumer-stopping`, { group, consumer, stream });
         return;
       }
 
@@ -85,7 +91,7 @@ class StreamSignaler {
         setImmediate(consume.bind(this));
       } catch (err) {
         if (this.shouldConsume && process.env.NODE_ENV !== 'test') {
-        this.logger.error(`Error reading from stream: ${stream}`, err);
+        this.logger.error(`stream-consume-message-failed`, { err, stream, group, consumer });
           this.errorCount++;
           const timeout = Math.min(GRADUATED_INTERVAL_MS * (2 ** this.errorCount), MAX_TIMEOUT_MS);
           setTimeout(consume.bind(this), timeout);
@@ -100,14 +106,14 @@ class StreamSignaler {
   }
 
   async consumeOne(stream: string, group: string, id: string, message: string[], callback: (streamData: StreamData) => Promise<StreamDataResponse|void>) {
-    this.logger.info(`${group} received message ${id}`);
+    this.logger.debug(`stream-consume-one-message-starting`, { id, stream, group });
     const input: StreamData = JSON.parse(message[1]);
     let output: StreamDataResponse | void;
     try {
       output = await this.execStreamLeg(input, stream, id, callback.bind(this));
       this.errorCount = 0;
     } catch (err) {
-      this.logger.error(`Error processing message: ${id} in stream: ${stream}`, err);
+      this.logger.error(`stream-consume-one-message-failed`, { err, id, stream, group });
     }
     await this.publishResponse(input, output);
     await this.ackAndDelete(stream, group, id);
@@ -119,7 +125,7 @@ class StreamSignaler {
     try {
       output = await callback(input);
     } catch (err) {
-      this.logger.error(`Error processing message ${id} in stream: ${stream} for job ${input.metadata.jid}`, err);
+      this.logger.error(`stream-exec-function-failed`, { err, id, stream });
       output = this.structureUnhandledError(input, err);
     }
     return output as StreamDataResponse;
@@ -211,7 +217,7 @@ class StreamSignaler {
   
   async stopConsuming() {
     this.shouldConsume = false;
-    this.logger.info('Stopping Stream Consumer');
+    this.logger.info(`stream-consumer-starting`, this.topic ? { topic: this.topic } : undefined);
     this.cancelThrottle();
     await sleepFor(BLOCK_TIME_MS);
   }
@@ -226,28 +232,23 @@ class StreamSignaler {
   audit(input: string, output: string, success: boolean) {
     const bytesIn = Buffer.byteLength(input, 'utf8');
     const bytesOut = Buffer.byteLength(output, 'utf8');
-    const currentTimestamp = Date.now();
-    const currentSlot = Math.floor(currentTimestamp / REPORT_INTERVAL);
-    if (this.currentSlot === currentSlot) {
-      this.currentBucket.t = currentSlot * REPORT_INTERVAL;
-      this.currentBucket.i += bytesIn;
-      this.currentBucket.o += bytesOut;
-      this.currentBucket.p += 1;
-      this.currentBucket.f += success ? 0 : 1;
-      this.currentBucket.s += success ? 1 : 0;
-    } else {
+    const currentSlot = Math.floor(Date.now() / REPORT_INTERVAL);
+    if (this.currentSlot !== currentSlot) {
       this.currentSlot = currentSlot;
-      this.currentBucket = {
-        t: currentSlot * REPORT_INTERVAL,
-        i: bytesIn,
-        o: bytesOut,
-        p: 1,
-        f: success ? 0 : 1,
-        s: success ? 1 : 0
-      };
+      this.currentBucket = { t: 0, i: 0, o: 0, p: 0, f: 0, s: 0 };
       this.auditData.push(this.currentBucket);
     }
+    this.updateCurrentBucket(currentSlot, bytesIn, bytesOut, success);
     this.cleanStaleData();
+  }
+  
+  updateCurrentBucket(currentSlot: number, bytesIn: number, bytesOut: number, success: boolean) {
+    this.currentBucket.t = currentSlot * REPORT_INTERVAL;
+    this.currentBucket.i += bytesIn;
+    this.currentBucket.o += bytesOut;
+    this.currentBucket.p += 1;
+    this.currentBucket.f += success ? 0 : 1;
+    this.currentBucket.s += success ? 1 : 0;
   }
 
   cleanStaleData() {
@@ -257,15 +258,7 @@ class StreamSignaler {
 
   report(): QuorumProfile {
     this.cleanStaleData();
-    const report: QuorumProfile = {
-      namespace: this.namespace,
-      appId: this.appId,
-      guid: this.guid,
-      status: 'active',
-      throttle: this.throttle,
-      d: this.auditData
-    };
-    return report;
+    return { ...this.getReportHeader(), d: this.auditData };
   }
 
   reportNow(): QuorumProfile {
@@ -274,14 +267,19 @@ class StreamSignaler {
       const currentWindowData = this.auditData.filter((data) => {
       return data.t >= fiveSecondsAgo && data.t <= currentTimestamp;
     });
+    return { ...this.getReportHeader(), d: currentWindowData };
+  }
+
+  getReportHeader(): QuorumProfile {
     return {
+      status: this.shouldConsume ? 'active' : 'inactive',
       namespace: this.namespace,
       appId: this.appId,
       guid: this.guid,
-      status: 'active',
+      topic: this.topic,
+      role: this.role,
       throttle: this.throttle,
-      d: currentWindowData
-    };
+    } as QuorumProfile;
   }
 
   setThrottle(delayInMillis: number) {
@@ -289,7 +287,7 @@ class StreamSignaler {
       throw new Error('Throttle must be a non-negative integer');
     }
     this.throttle = delayInMillis;
-    this.logger.info(`Throttle set to ${delayInMillis}ms`);
+    this.logger.info(`stream-throttle-reset`, { delay: this.throttle, topic: this.topic });
   }
 
   async claimUnacknowledgedMessages(stream: string, group: string, newConsumerName: string, idleTimeMs: number) {
@@ -301,7 +299,7 @@ class StreamSignaler {
           if (Array.isArray(pendingMessage)) {
             const [id, consumer, elapsedTimeMs] = pendingMessage;
             if (elapsedTimeMs > idleTimeMs) {
-              this.logger.info(`Reclaiming message ${id} from ${consumer}`);
+              this.logger.info(`stream-reclaim-message`, { id, consumer, elapsedTimeMs, topic: this.topic });
               await this.store.xclaim(stream, group, newConsumerName, idleTimeMs, id);
             }
           }

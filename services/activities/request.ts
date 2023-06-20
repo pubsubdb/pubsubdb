@@ -14,12 +14,8 @@ class Request extends Activity {
     super(config, data, metadata, hook, engine);
   }
 
-  async restoreJobContext(): Promise<void> {
-    this.logger.info('Request restoreJobContext - Do nothing; No context');
-  }
-
   async mapInputData(): Promise<void> {
-    this.logger.info('Request mapInputData - Do nothing; No input data');
+    this.logger.info('request-map-input-data');
   }
 }
 

@@ -66,6 +66,7 @@ describe('QuorumService', () => {
     const config: PubSubDBConfig = {
       appId: appConfig.id,
       namespace: PSNS,
+      logLevel: 'debug',
       engine: {
         store: redisStore,
         stream: redisEngineStream,
@@ -129,7 +130,23 @@ describe('QuorumService', () => {
   });
 
   describe('Pub Sub', () => {
-    it('sends a `throttle` message targeting the engine (guid)', async () => {
+    it('sends a `throttle` message targeting a worker (topic)', async () => {
+      const callback = (topic: string, message: QuorumMessage) => {
+        expect(['throttle', 'job'].includes(message.type)).toBeTruthy();
+        expect((message as ThrottleMessage).topic).toBe('calculation.execute');
+      };
+      pubSubDB.quorum?.sub(callback);
+      const throttleMessage: ThrottleMessage = {
+        type: 'throttle',
+        topic: 'calculation.execute',
+        throttle: 1000,
+      };
+      await pubSubDB.quorum?.pub(throttleMessage);
+      await sleepFor(1000);
+      pubSubDB.quorum?.unsub(callback);
+    });
+
+    it('sends a `throttle` message targeting an engine (guid)', async () => {
       const callback = (topic: string, message: QuorumMessage) => {
         expect(['throttle', 'job'].includes(message.type)).toBeTruthy();
         expect((message as ThrottleMessage).guid).toBe(pubSubDB.quorum?.guid);
@@ -142,6 +159,23 @@ describe('QuorumService', () => {
       };
       await pubSubDB.quorum?.pub(throttleMessage);
       await sleepFor(1000);
+      pubSubDB.quorum?.unsub(callback);
+    });
+
+    it('sends a `throttle` message targeting everyone', async () => {
+      const callback = (topic: string, message: QuorumMessage) => {
+        expect(['throttle', 'job'].includes(message.type)).toBeTruthy();
+        expect((message as ThrottleMessage).guid).toBeUndefined();
+        expect((message as ThrottleMessage).topic).toBeUndefined();
+        expect((message as ThrottleMessage).throttle).toBe(500);
+      };
+      pubSubDB.quorum?.sub(callback);
+      const throttleMessage: ThrottleMessage = {
+        type: 'throttle',
+        throttle: 500,
+      };
+      await pubSubDB.quorum?.pub(throttleMessage);
+      await sleepFor(500);
       pubSubDB.quorum?.unsub(callback);
     });
 
@@ -162,7 +196,48 @@ describe('QuorumService', () => {
         guid: pubSubDB.quorum?.guid,
       };
       await pubSubDB.quorum?.pub(rollcallMessage);
-      await sleepFor(1000);
+      await sleepFor(250);
+      pubSubDB.quorum?.unsub(callback);
+    });
+
+    it('sends a `rollcall` message targeting a worker (topic)', async () => {
+      const callback = (topic: string, message: QuorumMessage) => {
+        //will see both messages (the call and response)
+        expect(['report', 'rollcall'].includes(message.type)).toBeTruthy();
+        if (message.type === 'report') {
+          expect((message as ReportMessage).profile?.d).not.toBeUndefined();
+        } else {
+          expect(message.type).toBe('rollcall');
+          expect((message as RollCallMessage).topic).toBe('calculation.execute');
+        }
+      };
+      pubSubDB.quorum?.sub(callback);
+      const rollcallMessage: RollCallMessage = {
+        type: 'rollcall',
+        topic: 'calculation.execute',
+      };
+      await pubSubDB.quorum?.pub(rollcallMessage);
+      await sleepFor(250);
+      pubSubDB.quorum?.unsub(callback);
+    });
+
+    it('sends a `rollcall` message targeting everyone', async () => {
+      const callback = (topic: string, message: QuorumMessage) => {
+        //will see both messages (the call and response)
+        expect(['report', 'rollcall'].includes(message.type)).toBeTruthy();
+        if (message.type === 'report') {
+          expect((message as ReportMessage).profile?.d).not.toBeUndefined();
+        } else {
+          expect(message.type).toBe('rollcall');
+          expect((message as RollCallMessage).guid).toBeUndefined();
+        }
+      };
+      pubSubDB.quorum?.sub(callback);
+      const rollcallMessage: RollCallMessage = {
+        type: 'rollcall',
+      };
+      await pubSubDB.quorum?.pub(rollcallMessage);
+      await sleepFor(250);
       pubSubDB.quorum?.unsub(callback);
     });
 

@@ -532,7 +532,9 @@
               "maps": {
                 "id": "{a1.output.data.id}",
                 "price": "{a1.output.data.price}",
-                "approvals/price": "{a2.output.data.approved}",
+                "approvals": {
+                  "price": "{a2.output.data.approved}"
+                },
                 "approved": true
               }
             }
@@ -544,7 +546,9 @@
               "maps": {
                 "id": "{a1.output.data.id}",
                 "price": "{a1.output.data.price}",
-                "approvals/price": "{a2.output.data.approved}",
+                "approvals": {
+                  "price": "{a2.output.data.approved}"
+                },
                 "approved": false
               }
             }

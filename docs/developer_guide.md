@@ -457,16 +457,11 @@ const activationStatus = await pubSubDB.activate('1');
 Suppose you need to kick off a workflow but the answer isn't relevant at this time. You can optionally await the response (the job ID) to confirm that the request was received, but otherwise, this is a simple fire-and-forget call.
 
 ```javascript
+const topic = 'discount.requested';
 const payload = { id: 'ord123', price: 55.99 };
-const jobId = await pubSubDB.pub('discount.requested', payload);
+const jobId = await pubSubDB.pub(topic, payload);
 //jobId will be `ord123`
 ```
-
-Fetch the job data at any time (even after the job has completed) using the `getJobData` method.
-
-```javascript
-const job = await pubSubDB.getJobData('ord123');
-```   
 
 ## Sub
 Suppose you need to listen in on the results of all computations on a particular topic, not just the ones you initiated. In that case, you can use the `sub` method.
@@ -487,25 +482,28 @@ const jobId = await pubSubDB.pub('discount.requested', payload);
 If you need to kick off a workflow and await the response, use the `pubsub` method. PubSubDB will create a one-time subscription, making it simple to model the request using a standard `await`. The benefit, of course, is that this is a fully duplexed call that adheres to the principles of CQRS, thereby avoiding the overhead of a typical HTTP request/response exchange.
 
 ```javascript
+const topic = 'discount.requested';
 const payload = { id: 'ord123', price: 55.99 };
-const jobOutput: JobOutput = await pubSubDB.pubsub('discount.requested', payload);
+const jobOutput: JobOutput = await pubSubDB.pubsub(topic, payload);
 //jobOutput.data.discount is `5.00`
 ```
 
 No matter where in the network the calculation is performed (no matter the microservice that is subscribed as the official "handler" to perform the calculation...or even if multiple microservices are invoked during the workflow execution), the answer will always be published back to the originating caller the moment it's ready. It's a one-time subscription handled automatically by the engine, enabling traditional request/response semantics but without network back-pressure risk.
 
-## Get Job Data
-Retrieve the data for a single workflow using the job ID.
+## Get Job State
+Fetch the job data at any time (even after the job has completed) using the `getState` method.
 
 ```javascript
-const jobData = await pubSubDB.getJobData('order_123');
+const job = await pubSubDB.getState(topic, 'ord123');
+//{ data: { id: 'ord123', price: 55.99 }, metadata: { ... }}
 ```
 
-## Get Job Metadata
-Query the status of a single workflow using the job ID. (*This query desccribes all state transitions for the job and the rate at which each activity was processed.*)
+## Get Job Status
+Query the job status for all activities in a workflow.
 
 ```javascript
-const jobMetadata = await pubSubDB.getJobMetadata('order_123');
+const job = await pubSubDB.getStatus('ord123');
+//660000000000000
 ```
 
 ## Get Job Statistics

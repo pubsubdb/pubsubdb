@@ -33,7 +33,7 @@ class ReporterService {
   }
 
   async getStats(options: GetStatsOptions): Promise<StatsResponse> {
-    this.logger.debug('get_stats', options);
+    this.logger.debug('reporter-getstats-started', options);
     const { key, granularity, range, end, start } = options;
     this.validateOptions(options);
     const dateTimeSets = this.generateDateTimeSets(granularity, range, end, start);

@@ -4,7 +4,12 @@ import { ActivityType } from "../../typedefs/activity";
 import { HookRule } from "../../typedefs/hook";
 import { PubSubDBGraph, PubSubDBManifest } from "../../typedefs/pubsubdb";
 import { RedisClient, RedisMulti } from "../../typedefs/redis";
-import { MultiDimensionalDocument } from "../../typedefs/serializer";
+import { MultiDimensionalDocument, Symbols } from "../../typedefs/serializer";
+import { numberToSequence } from "../../modules/utils";
+
+const DEFAULT_METADATA_RANGE_SIZE = 26; //metadata is 26 slots ([a-z] * 1)
+const DEFAULT_DATA_RANGE_SIZE = 260; //data is 260 slots ([a-zA-Z] * 5)
+const DEFAULT_RANGE_SIZE = DEFAULT_METADATA_RANGE_SIZE + DEFAULT_DATA_RANGE_SIZE;
 
 class Deployer {
   manifest: PubSubDBManifest | null = null;
@@ -16,28 +21,67 @@ class Deployer {
 
   async deploy(store: StoreService<RedisClient, RedisMulti>) {
     this.store = store;
-    //external compilation services (collator, etc)
     CollatorService.compile(this.manifest.app.graphs);
-
-    //local compilation services
     this.copyJobSchemas();
-    this.copyPublishTopics();
-    this.resolveMappingDependencies();
+    this.bindBackRefs();
+    this.resolveMappingDependencies(); //legacy (activity data maps)
+    this.resolveJobMapsPaths();        //new (job data maps)
+    this.resolveDataDependencies();    //new (activity data maps)
+    await this.generateSymbols();      //new (map paths => symbols)
     await this.deployHookPatterns();
     await this.deployActivitySchemas();
     await this.deploySubscriptions(); 
     await this.deployTransitions();
-    await this.deployPublications();
-    await this.publishNewVersionToSubscribers();
-    await this.updateActiveVersionInRedis();
-    await this.publishActivateCommandToInstances();
   }
 
   getVID() {
     return {
       id: this.manifest.app.id,
       version: this.manifest.app.version,
-    };
+    }
+  }
+
+  async generateSymbols() {
+    //note: symbol ranges are additive (per version); path assignments are immutable
+    const appId = this.manifest.app.id;
+    for (const graph of this.manifest.app.graphs) {
+      //generate JOB symbols
+      const [,trigger] = this.findTrigger(graph);
+      const topic = trigger.subscribes;
+      const [lower, upper, symbols] = await this.store.reserveSymbolRange(`$${topic}`, appId, DEFAULT_RANGE_SIZE, 'JOB');
+      const prefix = ''; //job meta/data is NOT namespaced
+      const newSymbols = this.bindSymbols(lower, upper, symbols, prefix, trigger.PRODUCES);
+      if (Object.keys(newSymbols).length) {
+        await this.store.addSymbols(`$${topic}`, appId, newSymbols);
+      }
+      //generate ACTIVITY symbols
+      for (const [activityId, activity] of Object.entries(graph.activities)) {
+        const [lower, upper, symbols] = await this.store.reserveSymbolRange(activityId, appId, DEFAULT_RANGE_SIZE, 'ACTIVITY');
+        const prefix = `${activityId}/`; //activity meta/data is namespaced
+        const newSymbols = this.bindSymbols(lower, upper, symbols, prefix, activity.produces);
+        if (Object.keys(newSymbols).length) {
+          await this.store.addSymbols(activityId, appId, newSymbols);
+        }
+      }
+    }
+  }
+
+  bindSymbols(startIndex: number, maxIndex: number, existingSymbols: Symbols, prefix: string, produces: string[]): Symbols {
+    let newSymbols: Symbols = {};
+    let currentSymbols: Symbols = {...existingSymbols};
+    for (let path of produces) {
+      const fullPath = `${prefix}${path}`;
+      if (!currentSymbols[fullPath]) {
+        if (startIndex > maxIndex) {
+          throw new Error('Symbol index out of bounds');
+        }
+        const symbol = numberToSequence(startIndex);
+        startIndex++
+        newSymbols[fullPath] = symbol;
+        currentSymbols[fullPath] = symbol; // update the currentSymbols to include this new symbol
+      }
+    }
+    return newSymbols;
   }
 
   /**
@@ -71,11 +115,13 @@ class Deployer {
     }
   }
 
-  //makes runtime subscription lookups faster by copying the schemas
-  copyPublishTopics() {
+  bindBackRefs() {
     for (const graph of this.manifest!.app.graphs) {
       const activities = graph.activities;
+      const triggerId = this.findTrigger(graph)[0];
       for (const activityKey in activities) {
+        activities[activityKey].trigger = triggerId;
+        activities[activityKey].subscribes = graph.subscribes;
         if (graph.publishes) {
           activities[activityKey].publishes = graph.publishes;
         }
@@ -83,6 +129,39 @@ class Deployer {
     }
   }
 
+  resolveJobMapsPaths() {
+    function parsePaths(obj: MultiDimensionalDocument): string[] {
+      let result = [];
+      function traverse(obj: MultiDimensionalDocument, path = []) {
+        for (let key in obj) {
+          if (typeof obj[key] === 'object' && obj[key] !== null) {
+            let newPath = [...path, key];
+            traverse(obj[key], newPath);
+          } else {
+            const finalPath = `data/${[...path, key].join('/')}`;
+            if (!result.includes(finalPath)) {
+              result.push(finalPath);
+            }
+          }
+        }
+      }
+      if (obj) {
+        traverse(obj);
+      }
+      return result;
+    }
+  
+    for (const graph of this.manifest.app.graphs) {
+      let results: string[] = [];
+      const [, trigger] = this.findTrigger(graph);
+      for (const activityKey in graph.activities) {
+        const activity = graph.activities[activityKey];
+        results = results.concat(parsePaths(activity.job?.maps));
+      }
+      trigger.PRODUCES = results;
+    }
+  }
+  
   resolveMappingDependencies() {
     const dynamicMappingRules: string[] = [];
     //recursive function to descend into the object and find all dynamic mapping rules
@@ -91,9 +170,7 @@ class Deployer {
         if (typeof obj[key] === 'string') {
           const stringValue = obj[key] as string;
           const dynamicMappingRuleMatch = stringValue.match(/^\{[^@].*}$/);
-          if (dynamicMappingRuleMatch) {
-            //For now...do not map `input` rules (e.g., {a5.input.data.cat})
-            //however, this is likely an unnecessary constraint 
+          if (dynamicMappingRuleMatch) { 
             if (stringValue.split('.')[1] !== 'input') {
               dynamicMappingRules.push(stringValue);
               depends.push(stringValue);
@@ -111,10 +188,10 @@ class Deployer {
         const activity = activities[activityId];
         activity.depends = [];
         traverse(activity, activity.depends);
-        activity.depends = this.groupMappingRules(graphs, activity.depends);
+        activity.depends = this.groupMappingRules(activity.depends);
       }
     }
-    const groupedRules = this.groupMappingRules(graphs, dynamicMappingRules);
+    const groupedRules = this.groupMappingRules(dynamicMappingRules);
     // Iterate through the graph and add 'dependents' field to each activity
     for (const graph of graphs) {
       const activities = graph.activities;
@@ -125,7 +202,7 @@ class Deployer {
     }
   }
 
-  groupMappingRules(graphs, rules: string[]): Record<string, string[]> {
+  groupMappingRules(rules: string[]): Record<string, string[]> {
     rules = Array.from(new Set(rules)).sort();
     // Group by the first symbol before the period (this is the activity name)
     const groupedRules: { [key: string]: string[] } = {};
@@ -162,6 +239,42 @@ class Deployer {
     return [group, `${prefix}/${path.join('/')}`];
   }
 
+  //single-file unified data format
+  resolveDataDependencies() {
+    for (const graph of this.manifest!.app.graphs) {
+      for (const activity of Object.values(graph.activities)) {
+        this.transformObject(activity);
+      }
+    }
+  }
+
+  transformObject(activity: ActivityType): void {
+    const replacements = { 'd/': 'output/data/', 'm/': 'input/metadata/', 'h/': 'hook/data/', 'i/': 'input/data/' };
+    function replaceInArray(array: string[]): string[] {
+      return array.map(item => {
+        for (const key in replacements) {
+          if (item.startsWith(key)) {
+            return item.replace(key, replacements[key]);
+          }
+        }
+        return item;
+      });
+    }
+    function transformEntry(entry: Record<string, string[]>): any {
+      let result: any = {};
+      for (const key in entry) {
+        result[key] = replaceInArray(entry[key]);
+      }
+      return result;
+    }
+    if (activity.depends) {
+      activity.consumes = transformEntry(activity.depends);
+    }
+    if (activity.dependents) {
+      activity.produces = replaceInArray(activity.dependents);
+    }
+  }
+
   async deployActivitySchemas() {
     const graphs = this.manifest!.app.graphs;
     const activitySchemas: Record<string, ActivityType> = {};
@@ -191,7 +304,7 @@ class Deployer {
     await this.store.setSubscriptions(publicSubscriptions, this.getVID());
   }
 
-  findTrigger(graph: PubSubDBGraph): [string, any] | null {
+  findTrigger(graph: PubSubDBGraph): [string, Record<string, any>] | null {
     for (const activityKey in graph.activities) {
       const activity = graph.activities[activityKey];
       if (activity.type === 'trigger') {
@@ -252,26 +365,6 @@ class Deployer {
       }
     }
     await this.store.setHookRules(hookRules);
-  }
-
-  // 2.3) Compile the list of publications; used for dynamic subscriptions (block if nonexistent)
-  async deployPublications() {
-    // Implement the method content
-  }
-
-  // 2.4) Publish to all subscribers the new version (and to pause for 5ms)
-  async publishNewVersionToSubscribers() {
-    // Implement the method content
-  }
-
-  // 2.5) Update the version number in Redis for the active version
-  async updateActiveVersionInRedis() {
-    // Implement the method content
-  }
-
-  // 2.6) Publish activate command to all instances to clear local caches and start processing the new version
-  async publishActivateCommandToInstances() {
-    // Implement the method content
   }
 }
 

@@ -38,19 +38,20 @@ class Exec extends Activity {
   //********  INITIAL ENTRY POINT (A)  ********//
   async process(): Promise<string> {
     //try {
-      await this.restoreJobContext(this.context.metadata.jid);
+      this.setDuplexLeg(1);
+      await this.getState();
       this.mapInputData();
       /////// MULTI: START ///////
       const multi = this.store.getMulti();
       //todo: await this.registerTimeout();
-      await this.saveActivity(multi);
-      await this.saveActivityStatus(1, multi);
+      await this.setState(multi);
+      await this.setStatus(1, multi);
       await multi.exec();
       /////// MULTI: END ///////
       await this.execActivity(); //todo: store a backref to the spawned stream id?
       return this.context.metadata.aid;
     //} catch (error) {
-      //this.logger.error('activity.process:error', error);
+      //this.logger.error('exec-process-failed', error);
       // if (error instanceof DuplicateActivityError) {
       // } else if (error instanceof RestoreJobContextError) {
       // } else if (error instanceof MapInputDataError) {
@@ -83,10 +84,12 @@ class Exec extends Activity {
 
   //********  `WORKER RESPONSE` RE-ENTRY POINT (B)  ********//
   async processWorkerResponse(status: StreamStatus = StreamStatus.SUCCESS, code: StreamCode = 200): Promise<void> {
-    this.logger.info(`process exec response`, { status, code });
+    const jid = this.context.metadata.jid;
+    const aid = this.metadata.aid;
+    this.logger.debug('exec-onresponse-started', { jid, aid, status, code });
     this.status = status;
     this.code = code;
-    await this.restoreJobContext(this.context.metadata.jid);
+    await this.getState();
     let multiResponse: MultiResponseFlags = [];
     if (status === StreamStatus.PENDING) {
       await this.processPending();
@@ -103,11 +106,9 @@ class Exec extends Activity {
   async processPending(): Promise<MultiResponseFlags> {
     this.bindActivityData('output');
     this.mapJobData();
-    this.mapActivityData('output');
     //******      MULTI: START      ******//
     const multi = this.store.getMulti();
-    await this.saveActivity(multi);
-    await this.saveJob(multi);
+    await this.setState(multi);
     return await multi.exec() as MultiResponseFlags;
     //******       MULTI: END       ******//
   }
@@ -115,12 +116,10 @@ class Exec extends Activity {
   async processSuccess(): Promise<MultiResponseFlags> {
     this.bindActivityData('output');
     this.mapJobData();
-    this.mapActivityData('output');
     //******      MULTI: START      ******//
     const multi = this.store.getMulti();
-    await this.saveActivity(multi);
-    await this.saveJob(multi);
-    await this.saveActivityStatus(2, multi); //(8-2=6)
+    await this.setState(multi);
+    await this.setStatus(2, multi);
     return await multi.exec() as MultiResponseFlags;
     //******       MULTI: END       ******//
   }
@@ -129,9 +128,8 @@ class Exec extends Activity {
     this.bindActivityError(this.data);
     //******      MULTI: START      ******//
     const multi = this.store.getMulti();
-    await this.saveActivity(multi);
-    await this.saveJob(multi);
-    await this.saveActivityStatus(1, multi); //(8-1=7)
+    await this.setState(multi);
+    await this.setStatus(1, multi);
     return await multi.exec() as MultiResponseFlags;
     //******       MULTI: END       ******//
   }

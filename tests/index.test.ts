@@ -13,6 +13,7 @@ import {
 import { RedisConnection, RedisClientType } from './$setup/cache/redis';
 import { StreamSignaler } from '../services/signaler/stream';
 import { JobOutput } from '../typedefs/job';
+import { sleepFor } from '../modules/utils';
 
 describe('pubsubdb', () => {
   const appConfig = { id: 'test-app', version: '1' };
@@ -66,6 +67,7 @@ describe('pubsubdb', () => {
       const config: PubSubDBConfig = {
         appId: appConfig.id,
         namespace: PSNS,
+        logLevel: 'debug',
         engine: {
           store: redisStore,
           stream: redisEngineStream,
@@ -117,14 +119,16 @@ describe('pubsubdb', () => {
         price: 49.99, 
         object_type: 'widgetA'
       }
-      const job: JobOutput = await pubSubDB.pubsub('order.approval.requested', payload);
+      const topic = 'order.approval.requested';
+      const spawned_topic = 'order.approval.price.requested';
+      const job: JobOutput = await pubSubDB.pubsub(topic, payload);
       const jobId = job?.metadata.jid;
       expect(jobId).not.toBeNull();
       expect(job?.data?.price).toBe(payload.price);
       //values under 100 are approved
       expect((job?.data?.approvals as { price: boolean }).price).toBe(true);
-      const spawnedJob = await pubSubDB.getJobData(payload.id);
-      expect(spawnedJob?.id).toBe(payload.id);
+      const spawnedJob = await pubSubDB.getState(spawned_topic, payload.id);
+      expect(spawnedJob?.data.id).toBe(payload.id);
     });
 
     it('executes an `await` activity that resolves to false', async () => {
@@ -133,14 +137,16 @@ describe('pubsubdb', () => {
         price: 149.99, 
         object_type: 'widgetA'
       }
-      const job: JobOutput = await pubSubDB.pubsub('order.approval.requested', payload);
+      const topic = 'order.approval.requested';
+      const spawned_topic = 'order.approval.price.requested';
+      const job: JobOutput = await pubSubDB.pubsub(topic, payload);
       const jobId = job?.metadata.jid;
       expect(jobId).not.toBeNull();
       expect(job?.data?.price).toBe(payload.price);
       //values over 100 are rejected
       expect((job?.data?.approvals as { price: boolean }).price).toBe(false);
-      const spawnedJob = await pubSubDB.getJobData(payload.id);
-      expect(spawnedJob?.id).toBe(payload.id);
+      const spawnedJob = await pubSubDB.getState(spawned_topic, payload.id);
+      expect(spawnedJob?.data.id).toBe(payload.id);
     });
 
     it('should publish a message to Flow B', async () => {
@@ -242,8 +248,6 @@ describe('pubsubdb', () => {
       };
       const jobId = await pubSubDB.pub('order.finalize', payload);
       expect(jobId).not.toBeNull();
-      //note: jobResponse is undefined, because there is no job data per the YAML spec
-      //const jobResponse = await pubSubDB.getJobData(payload.id);
     });
   });
 
@@ -287,7 +291,10 @@ describe('pubsubdb', () => {
         actual_release_series: '202304110015',
       };
       const response = await pubSubDB.hook('order.routed', payload);
-      expect(response).not.toBeNull();
+      expect(response).toBe(946000000000000); //fulfill (last activity still pending at this stage)
+      await sleepFor(250);
+      const status = await pubSubDB.getStatus(payload.id);
+      expect(status).toBe(646000000000000); //fulfill should be done by now
     });
   });
 

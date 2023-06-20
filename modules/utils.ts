@@ -1,9 +1,9 @@
 import { StoreService } from "../services/store";
 import { AppSubscriptions, AppTransitions, AppVID } from "../typedefs/app";
 import { RedisClient, RedisMulti } from "../typedefs/redis";
+import { FlatObject, MultiDimensionalDocument } from "../typedefs/serializer";
 
 export function getGuid() {
-  //prefer guids with a GMT time aspect
   const randomTenDigitNumber = Math.floor(Math.random() * 1e10);
   return `${Date.now().toString(16)}.${randomTenDigitNumber.toString(16)}`;
 }
@@ -14,9 +14,9 @@ export async function sleepFor(ms: number) {
 
 export function XSleepFor(ms: number): { promise: Promise<unknown>, timerId: NodeJS.Timeout } {
   //can be interrupted with `clearTimeout`
-  let timerId;
+  let timerId: NodeJS.Timeout;
   let promise = new Promise((resolve) => {
-      timerId = setTimeout(resolve, ms);
+    timerId = setTimeout(resolve, ms);
   });
   return { promise, timerId };
 }
@@ -33,9 +33,9 @@ export function findTopKey(obj: AppTransitions, input: string): string | null {
 
 export function findSubscriptionForTrigger(obj: AppSubscriptions, value: string): string | null {
   for (const [key, itemValue] of Object.entries(obj)) {
-      if (itemValue === value) {
-          return key;
-      }
+    if (itemValue === value) {
+      return key;
+    }
   }
   return null;
 }
@@ -55,7 +55,7 @@ export async function getSubscriptionTopic(activityId: string, store: StoreServi
 /**
  * returns the 12-digit format of the iso timestamp (e.g, 202101010000)
  */
-export function getTimeSeriesStamp(granularity: string): string {
+export function getTimeSeries(granularity: string): string {
   const now = new Date();
   const granularityUnit = granularity.slice(-1);
   const granularityValue = parseInt(granularity.slice(0, -1), 10);
@@ -66,4 +66,59 @@ export function getTimeSeriesStamp(granularity: string): string {
     now.setUTCMinutes(0, 0, 0);
   }
   return now.toISOString().replace(/:\d\d\..+|-|T/g, '').replace(':','');
+}
+
+export function numberToSequence(number: number): string {
+  const alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const base = alphabet.length;
+  if (number < 0 || number >= Math.pow(base, 3)) {
+    throw new Error('Number out of range');
+  }
+  let [q1, r1] = divmod(number, base);
+  let [q2, r2] = divmod(q1, base);
+  return alphabet[q2] + alphabet[r1] + alphabet[r2];
+}
+
+function divmod(m: number, n: number): number[] {
+  return [Math.floor(m / n), m % n];
+}
+
+export function getIndexedHash<T>(hash: T, target: string): [number, T] {
+  const index = hash[target] as number || 0;
+  const newHash = { ...hash };
+  delete newHash[target];
+  return [index, newHash as T];
+}
+
+export function getValueByPath(obj: { [key: string]: any }, path: string): any {
+  const pathParts = path.split('/');
+  let currentValue = obj;
+  for (const part of pathParts) {
+    if (currentValue[part] !== undefined) {
+      currentValue = currentValue[part];
+    } else {
+      return undefined;
+    }
+  }
+  return currentValue;
+}
+
+export function restoreHierarchy(obj: MultiDimensionalDocument): MultiDimensionalDocument {
+  //TODO: input document is additive (journaled)
+  //      sort/process keys in reverse order and then resolve
+  //      clobber existing values with more-deeply nested values
+  const result: MultiDimensionalDocument = {};
+  for (const key in obj) {
+    const keys = key.split('/');
+    let current = result;
+    for (let i = 0; i < keys.length; i++) {
+      if (i === keys.length - 1) {
+        current[keys[i]] = obj[key];
+      } else {
+        current[keys[i]] = current[keys[i]] || {};
+        current = current[keys[i]];
+      }
+    }
+  }
+  return result;
 }
