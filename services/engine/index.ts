@@ -1,5 +1,5 @@
 import { KeyType } from '../../modules/key';
-import { getSubscriptionTopic } from '../../modules/utils';
+import { getSubscriptionTopic, restoreHierarchy } from '../../modules/utils';
 import Activities from '../activities';
 import { Activity } from '../activities/activity';
 import { Await } from '../activities/await';
@@ -16,7 +16,7 @@ import { StreamService } from '../stream';
 import { SubService } from '../sub';
 import { TaskService } from '../task';
 import { AppVID } from '../../typedefs/app';
-import { ActivityMetadata, ActivityType } from '../../typedefs/activity';
+import { ActivityMetadata, ActivityType, Consumes } from '../../typedefs/activity';
 import { CacheMode } from '../../typedefs/cache';
 import {
   JobActivityContext,
@@ -41,7 +41,11 @@ import {
   JobStatsInput,
   StatsResponse
 } from '../../typedefs/stats';
-import { StreamDataResponse, StreamError, StreamStatus } from '../../typedefs/stream';
+import {
+  StreamDataResponse,
+  StreamError,
+  StreamRole,
+  StreamStatus } from '../../typedefs/stream';
 
 //wait time to see if a job is complete
 const OTT_WAIT_TIME = 1000;
@@ -104,9 +108,12 @@ class EngineService {
         { appId: instance.appId },
       );
       instance.streamSignaler = new StreamSignaler(
-        instance.namespace,
-        instance.appId,
-        instance.guid,
+        {
+          namespace: instance.namespace,
+          appId: instance.appId,
+          guid: instance.guid,
+          role: StreamRole.ENGINE
+        },
         instance.stream,
         instance.store,
         instance.logger,
@@ -148,7 +155,7 @@ class EngineService {
   }
 
   setCacheMode(cacheMode: CacheMode, untilVersion: string) {
-    this.logger.info(`setting mode to ${cacheMode}`);
+    this.logger.info(`engine-rule-cache-updated`, { mode: cacheMode, until: untilVersion });
     this.cacheMode = cacheMode;
     this.untilVersion = untilVersion;
   }
@@ -189,7 +196,7 @@ class EngineService {
         setTimeout(this.reportNow.bind(this), REPORT_INTERVAL);
       }
     } catch (err) {
-      this.logger.error('engine.reportNow.error', err);
+      this.logger.error('engine-report-now-failed', err);
     }
   }
 
@@ -203,39 +210,39 @@ class EngineService {
     if (!data) {
       throw new Error(`payload data is required and must be an object`);
     }
-    const [activityId, activity] = await this.getActivity(topic);
-    const ActivityHandler = Activities[activity.type];
+    const [activityId, schema] = await this.getSchema(topic);
+    const ActivityHandler = Activities[schema.type];
     if (ActivityHandler) {
       const utc = new Date().toISOString();
       const metadata: ActivityMetadata = {
         aid: activityId,
-        atp: activity.type,
-        stp: activity.subtype,
+        atp: schema.type,
+        stp: schema.subtype,
         ac: utc,
         au: utc
       };
       const hook = null;
-      return new ActivityHandler(activity, data, metadata, hook, this, context);
+      return new ActivityHandler(schema, data, metadata, hook, this, context);
     } else {
-      throw new Error(`activity type ${activity.type} not found`);
+      throw new Error(`activity type ${schema.type} not found`);
     }
   }
-  async getActivity(topic: string): Promise<[activityId: string, activity: ActivityType]> {
+  async getSchema(topic: string): Promise<[activityId: string, schema: ActivityType]> {
     const app = await this.store.getApp(this.appId);
     if (!app) {
       throw new Error(`no app found for id ${this.appId}`);
     }
     if (this.isPrivate(topic)) {
-      //private subscriptions use the activity id (.activityId)
+      //private subscriptions use the schema id (.activityId)
       const activityId = topic.substring(1)
-      const activity = await this.store.getSchema(activityId, await this.getVID());
-      return [activityId, activity];
+      const schema = await this.store.getSchema(activityId, await this.getVID());
+      return [activityId, schema];
     } else {
-      //public subscriptions use a topic (a.b.c) that is associated with an activity id
+      //public subscriptions use a topic (a.b.c) that is associated with a schema id
       const activityId = await this.store.getSubscription(topic, await this.getVID());
       if (activityId) {
-        const activity = await this.store.getSchema(activityId, await this.getVID());
-        return [activityId, activity];
+        const schema = await this.store.getSchema(activityId, await this.getVID());
+        return [activityId, schema];
       }
     }
     throw new Error(`no subscription found for topic ${topic} in app ${this.appId} for app version ${app.version}`);
@@ -307,9 +314,9 @@ class EngineService {
   async resolveAwait(context: JobActivityContext) {
     if (this.hasParentJob(context)) {
       const completedJobId = context.metadata.jid;
-      const appVID = await this.getVID();
-      const output = await this.store.getJobOutput(completedJobId, appVID);
-      const error = await this.resolveError(output.metadata);
+      const topic = context.metadata.tpc;
+      const output = await this.getState(topic, completedJobId);
+      const error = this.resolveError(output.metadata);
       const parentContext: Partial<JobActivityContext> = {
         data: error || output.data || {},
         metadata: {
@@ -418,26 +425,26 @@ class EngineService {
   }
   async resolveOneTimeSubscription(context: JobActivityContext) {
     if (this.hasOneTimeSubscription(context)) {
-      const config = await this.getVID();
-      const jobOutput = await this.store.getJobOutput(context.metadata.jid, config);
+      const jobOutput = await this.getState(context.metadata.tpc, context.metadata.jid);
       const message: JobMessage = {
         type: 'job',
         topic: context.metadata.jid,
-        job: jobOutput,
+        job: restoreHierarchy(jobOutput) as JobOutput,
       };
       this.store.publish(KeyType.QUORUM, message, this.appId, context.metadata.ngn);
     }
   }
   async resolvePersistentSubscriptions(context: JobActivityContext) {
     const config = await this.getVID();
-    const schema = await this.store.getSchema(context.metadata.aid, config);
+    const activityId = context.metadata.aid || context['$self']?.output?.metadata?.aid;
+    const schema = await this.store.getSchema(activityId, config);
     const topic = schema.publishes;
     if (topic) {
-      const jobOutput = await this.store.getJobOutput(context.metadata.jid, config);
+      const jobOutput = await this.getState(context.metadata.tpc, context.metadata.jid);
       const message: JobMessage = {
         type: 'job',
         topic,
-        job: jobOutput,
+        job: restoreHierarchy(jobOutput) as JobOutput,
       };
       this.store.publish(KeyType.QUORUM, message, this.appId, topic);
     }
@@ -454,12 +461,13 @@ class EngineService {
 
 
   // ***************** JOB COMPLETION/CLEANUP *****************
-  async updateJobStatus(context: JobActivityContext, toDecrement: number): Promise<void> {
+  async setStatus(context: JobActivityContext, toDecrement: number): Promise<void> {
     if (toDecrement) {
-      const activityStatus = await this.store.updateJobStatus(
-        context.metadata.jid,
+      const { id: appId } = await this.getVID();
+      const activityStatus = await this.store.setStatus(
         toDecrement,
-        await this.getVID()
+        context.metadata.jid,
+        appId
       );
       if (CollatorService.isJobComplete(activityStatus)) {
         this.runJobCompletionTasks(context);
@@ -475,15 +483,19 @@ class EngineService {
   }
 
 
-  // ****** GET A JOB/METADATA BY ID *********
-  async getJobOutput(key: string) {
-    return this.store.getJobOutput(key, await this.getVID());
+  // ****** GET JOB STATE/COLLATION STATUS BY ID *********
+  async getStatus(jobId: string): Promise<number> {
+    const { id: appId } = await this.getVID();
+    return this.store.getStatus(jobId, appId);
   }
-  async getJobData(key: string) {
-    return this.store.getJobData(key, await this.getVID());
-  }
-  async getJobMetadata(key: string) {
-    return this.store.getJobMetadata(key, await this.getVID());
+  async getState(topic: string, jobId: string): Promise<JobOutput> {
+    const { id: appId } = await this.getVID();
+    const jobSymbols = await this.store.getSymbols(`$${topic}`, appId);
+    const consumes: Consumes = {
+      [`$${topic}`]: Object.keys(jobSymbols)
+    }
+    const [state] = await this.store.getState(jobId, appId, consumes);
+    return restoreHierarchy(state) as JobOutput;
   }
 }
 

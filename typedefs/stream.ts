@@ -1,3 +1,5 @@
+import { Stream } from "..";
+
 export interface StreamRetryPolicy {
   [key: string]: [number, 'x']; //key is err code, val is the retry profile [(max retry count),(type (x:exponential (default)) (only 10, 100, 1000, 10000 allowed))
 }
@@ -35,3 +37,16 @@ export interface StreamData {
 }
 
 export interface StreamDataResponse extends StreamData {}
+
+export enum StreamRole {
+  WORKER = 'worker',
+  ENGINE = 'engine',
+}
+
+export type StreamConfig = {
+  namespace: string;
+  appId: string;
+  guid: string;
+  role: StreamRole;
+  topic?: string;
+}

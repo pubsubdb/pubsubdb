@@ -3,11 +3,11 @@
  * 
  * psdb ->                                            {hash}    pubsubdb config {version: "0.0.1", namespace: "psdb"}
  * psdb:a:<appid> ->                                  {hash}    app profile { "id": "appid", "version": "2", "versions/1": "GMT", "versions/2": "GMT"}
- * psdb:<appid>::workitems ->                         {zset}    work items/tasks an engine must do like garbage collect or hook a set of matching records (hookAll)
+ * psdb:<appid>:w: ->                                 {zset}    work items/tasks an engine must do like garbage collect or hook a set of matching records (hookAll)
  * psdb:<appid>:q: ->                                 {hash}    quorum-wide messages
  * psdb:<appid>:q:<ngnid> ->                          {hash}    engine-targeted messages (targeted quorum-oriented message)
  * psdb:<appid>:j:<jobid> ->                          {hash}    job data
- * psdb:<appid>:j:<jobid>:<activityId>  ->            {hash}    job activity data (a1)
+ * psdb:<appid>:j:<jobid>:<activityid>  ->            {hash}    job activity data (a1)
  * psdb:<appid>:s:<jobkey>:<dateTime> ->              {hash}    job stats (general)
  * psdb:<appid>:s:<jobkey>:<dateTime>:mdn:<field/path>:<fieldvalue> ->      {zset}    job stats (median)
  * psdb:<appid>:s:<jobkey>:<dateTime>:index:<field/path>:<fieldvalue> ->    {list}    job stats (index of jobid[])
@@ -18,6 +18,10 @@
  * psdb:<appid>:x:<topic> ->                          {xstream} when a worker is sent or reads a buffered task (workers read from their custom topic)
  * psdb:<appid>:hooks ->                              {hash}    hook patterns/rules; set at compile time
  * psdb:<appid>:signals ->                            {hash}    dynamic hook signals (hget/hdel) when resolving (always self-clean); added/removed at runtime
+ * psdb:<appid>:sym:keys: ->                          {hash}    list of symbol ranges and :cursor assigned at version deploy time for job keys
+ * psdb:<appid>:sym:keys:<activityid|$subscribes> ->  {hash}    list of symbols based upon schema enums (initially) and adaptively optimized (later) during runtime; if '$subscribes' is used as the activityid, it is a top-level `job` symbol set (for job keys)
+ * psdb:<appid>:sym:vals: ->                          {hash}    list of symbol ranges and :cursor assigned at version deploy time for job vals
+ * psdb:<appid>:sym:vals:<activityid|$subscribes> ->  {hash}    list of symbols based upon schema enums (initially) and adaptively optimized (later) during runtime; if '$subscribes' is used as the activityid, it is a top-level `job` symbol set (for job vals)
  */
 
 //default namespace for pubsubdb
@@ -27,8 +31,7 @@ const PSNS = "psdb";
 enum KeyType {
   APP,
   HOOKS,
-  JOB_DATA,
-  JOB_ACTIVITY_DATA,
+  JOB_STATE,
   JOB_STATS_GENERAL,
   JOB_STATS_MEDIAN,
   JOB_STATS_INDEX,
@@ -39,6 +42,8 @@ enum KeyType {
   STREAMS,
   SUBSCRIPTIONS,
   SUBSCRIPTION_PATTERNS,
+  SYMKEYS,
+  SYMVALS,
   WORK_ITEMS,
 }
 
@@ -73,15 +78,13 @@ class KeyService {
       case KeyType.PUBSUBDB:
         return namespace;
       case KeyType.WORK_ITEMS:
-        return `${namespace}:${params.appId}::workitems`;
+        return `${namespace}:${params.appId}:w:`;
       case KeyType.APP:
         return `${namespace}:a:${params.appId || ''}`;
       case KeyType.QUORUM:
         return `${namespace}:${params.appId}:q:${params.engineId || ''}`;
-      case KeyType.JOB_DATA:
+      case KeyType.JOB_STATE:
         return `${namespace}:${params.appId}:j:${params.jobId}`;
-      case KeyType.JOB_ACTIVITY_DATA:
-        return `${namespace}:${params.appId}:j:${params.jobId}:${params.activityId}`;
       case KeyType.JOB_STATS_GENERAL:
         return `${namespace}:${params.appId}:s:${params.jobKey}:${params.dateTime}`;
       case KeyType.JOB_STATS_MEDIAN:
@@ -100,6 +103,12 @@ class KeyService {
       case KeyType.SIGNALS:
         //`signals` provide the registry of resolved values that link back to paused jobs
         return `${namespace}:${params.appId}:signals`;
+      case KeyType.SYMKEYS:
+        //`symbol keys` provide the registry of replacement values for job keys
+        return `${namespace}:${params.appId}:sym:keys:${params.activityId || ''}`;
+      case KeyType.SYMVALS:
+        //`symbol values` provide the registry of replacement values for job values
+        return `${namespace}:${params.appId}:sym:vals:${params.activityId || ''}`;
       case KeyType.STREAMS:
         return `${namespace}:${params.appId || ''}:x:${params.topic || ''}`;
       default:

@@ -71,6 +71,7 @@ describe('StreamSignaler', () => {
     const config: PubSubDBConfig = {
       appId: appConfig.id,
       namespace: PSNS,
+      logLevel: 'debug',
       engine: {
         store: redisStore, //ALWAYS OK to reuse a store connection
         stream: redisEngineStream, //NEVER OK to reuse a stream connection
@@ -188,8 +189,11 @@ describe('StreamSignaler', () => {
         expect(error.job_id).not.toBeNull();
         //wait for a bit to make sure it completes then make assertions
         await sleepFor(1000);
-        const jobData = await pubSubDB.getJobData(error.job_id);
-        expect(jobData?.result).toBe(5);
+        const state = await pubSubDB.getState('calculate', error.job_id);
+        expect(state?.data?.result).toBe(5);
+        const status = await pubSubDB.getStatus(error.job_id);
+        //this is a two-activity flow. successful termination is '6' for each
+        expect(status).toBe(660000000000000);
       }
     });
 
@@ -245,8 +249,8 @@ describe('StreamSignaler', () => {
         expect(error.message).toBe(UNRECOVERABLE_ERROR.message);
         expect(error.code).toBe(UNRECOVERABLE_ERROR.code);
         expect(error.job_id).not.toBeNull();
-        const jobMetaData = await pubSubDB.getJobMetadata(error.job_id);
-        expect(jobMetaData).not.toBeNull();
+        const jobMetaData = await pubSubDB.getState('calculate', error.job_id);
+        expect(jobMetaData?.metadata).not.toBeNull();
       }
     });
   });

@@ -10,6 +10,7 @@ type ActivityData = {
 
 type JobMetadata = {
   ngn?: string; //engine guid (one time subscriptions)
+  tpc: string;  //subscription topic
   pj?: string;  //parent_job_id
   pa?: string;  //parent_activity_id
   key?: string; //job_key

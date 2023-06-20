@@ -6,48 +6,39 @@ import {
   FlatDocument,
   MultiDimensionalDocument } from '../../typedefs/serializer';
 
+const dateReg = /^"\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z)?"$/;
+
+export const MDATA_SYMBOLS = {
+  SLOTS: 26,
+  ACTIVITY: {
+    KEYS: ['aid', 'atp', 'stp', 'ac', 'au', 'err']
+  },
+  ACTIVITY_UPDATE: {
+    KEYS: ['au', 'err']
+  },
+  JOB: {
+    KEYS: ['ngn', 'tpc', 'pj', 'pa', 'key', 'app', 'vrs', 'jid', 'aid', 'ts', 'jc', 'ju', 'js', 'err']
+  },
+  JOB_UPDATE: {
+    KEYS: ['ju', 'err']
+  }
+};
+
 export class SerializerService {
   private abbreviationMaps: AbbreviationMaps;
   private abbreviationReverseMaps: AbbreviationMaps;
   private abbreviationCounter: number;
 
   constructor(abbreviationMaps?: AbbreviationObjects) {
+    this.abbreviationCounter = 0;
+    this.resetAbbreviationMaps(abbreviationMaps || {});
+  }
+
+  resetAbbreviationMaps(abbreviationMaps: AbbreviationObjects): void {
     this.abbreviationMaps = new Map();
     this.abbreviationReverseMaps = new Map();
-    this.abbreviationCounter = 0;
-    if (abbreviationMaps) {
-      for (const id in abbreviationMaps) {
-        this.abbreviationMaps.set(id, new Map(Object.entries(abbreviationMaps[id])));
-      }
-    }
-  }
-
-  private getNextAbbreviation(): string {
-    const firstLetter = String.fromCharCode(97 + Math.floor(this.abbreviationCounter / 26));
-    const secondLetter = String.fromCharCode(97 + this.abbreviationCounter % 26);
-    this.abbreviationCounter++;
-    return firstLetter + secondLetter;
-  }
-
-  //NOTE: Training is addative and will not overwrite existing abbreviations.
-  //NOTE: Once the first job is run, compiler key-training will be disabled;
-  //      however, value-training can be run any time
-  public train(document: object, id: string): void {
-    let map = this.abbreviationMaps.get(id);
-    if (!map) {
-      map = new Map();
-      this.abbreviationMaps.set(id, map);
-    }
-    const flatDocument = this.flatten(document);
-    for (let [key] of Object.entries(flatDocument)) {
-      if (!map.has(key)) {
-        map.set(key, this.getNextAbbreviation());
-      }
-    }
-    for (let [, val] of Object.entries(flatDocument)) {
-      if (!map.has(val)) {
-        map.set(val, this.getNextAbbreviation());
-      }
+    for (const id in abbreviationMaps) {
+      this.abbreviationMaps.set(id, new Map(Object.entries(abbreviationMaps[id])));
     }
   }
 
@@ -63,34 +54,137 @@ export class SerializerService {
     return map;
   }
 
-  //replace key/val expansions with tokens in a 2-d hash
-  deflate(document: FlatDocument, id: string): FlatDocument {
-    const abbreviationMap = this.abbreviationMaps.get(id) || new Map();
-    let result: FlatDocument = {};
-    for (let key in document) {
-      let safeKey = abbreviationMap.get(key) || key;
-      let value = document[key];
-      let safeValue = abbreviationMap.get(value) || value;
-      result[safeKey] = safeValue;
+  compress(document: FlatDocument, ids: string[]): FlatDocument {
+    if (this.abbreviationMaps.size === 0) {
+      return document;
     }
+    let result: FlatDocument = { ...document };
+
+    const compressWithMap = (abbreviationMap: AbbreviationMap) => {
+      for (let key in result) {
+        let safeKey = abbreviationMap.get(key) || key;
+        let value = result[key];
+        let safeValue = abbreviationMap.get(value) || value;
+        if (safeKey !== key || safeValue !== value) {
+          result[safeKey] = safeValue;
+          if (safeKey !== key) {
+            delete result[key];
+          }
+        }
+      }
+    };
+    for (let id of ids) {
+      const abbreviationMap = this.abbreviationMaps.get(id);
+      if (abbreviationMap) {
+        compressWithMap(abbreviationMap);
+      }
+    }
+    return result;
+  }
+
+  decompress(document: FlatDocument, ids: string[]): FlatDocument {
+    if (this.abbreviationMaps.size === 0) {
+      return document;
+    }
+    let result: FlatDocument = { ...document };
+
+    const inflateWithMap = (abbreviationMap: AbbreviationMap, id: string) => {
+      const reversedAbbreviationMap = this.getReverseMap(abbreviationMap, id);
+      for (let key in result) {
+        let safeKey = reversedAbbreviationMap.get(key) || key;
+        let value = result[key];
+        let safeValue = reversedAbbreviationMap.get(value) || value;
+        if (safeKey !== key || safeValue !== value) {
+          result[safeKey] = safeValue;
+          if (safeKey !== key) {
+            delete result[key];
+          }
+        }
+      }
+    };
+    for (let id of ids) {
+      const abbreviationMap = this.abbreviationMaps.get(id);
+      if (abbreviationMap) {
+        inflateWithMap(abbreviationMap, id);
+      }
+    }
+    return result;
+  }
+
+  //replace key/val expansions with tokens in a 2-d hash
+  deflate(document: FlatDocument, id?: string): FlatDocument {
+    if (this.abbreviationMaps.size === 0) {
+      return document; // return original document if no maps exist
+    }
+    let result: FlatDocument = { ...document }; // clone original document
+    // Define a helper function for deflating a document with an abbreviation map
+    const deflateWithMap = (abbreviationMap: AbbreviationMap) => {
+      for (let key in result) {
+        let safeKey = abbreviationMap.get(key) || key;
+        let value = result[key];
+        let safeValue = abbreviationMap.get(value) || value;
+        if (safeKey !== key || safeValue !== value) {
+          result[safeKey] = safeValue;
+          if (safeKey !== key) {
+            delete result[key];
+          }
+        }
+      }
+    };
+    if (id) {
+      // If ID is provided, use the corresponding abbreviation map
+      const abbreviationMap = this.abbreviationMaps.get(id);
+      if (abbreviationMap) {
+        deflateWithMap(abbreviationMap);
+      }
+    } else {
+      // If no ID is provided, iterate all abbreviation maps
+      for (let abbreviationMap of this.abbreviationMaps.values()) {
+        deflateWithMap(abbreviationMap);
+      }
+    }
+    // Return the potentially modified result
     return result;
   }
 
   //replace key/val tokens with expansions in a 2-d hash
-  inflate(document: FlatDocument, id: string): FlatDocument {
-    const abbreviationMap = this.abbreviationMaps.get(id) || new Map();
-    const reversedAbbreviationMap = this.getReverseMap(abbreviationMap, id);
-    let result: FlatDocument = {};
-    for (let key in document) {
-      let safeKey = reversedAbbreviationMap.get(key) || key;
-      let value = document[key];
-      let safeValue = reversedAbbreviationMap.get(value) || value;
-      result[safeKey] = safeValue;
+  inflate(document: FlatDocument, id?: string): FlatDocument {
+    if (this.abbreviationMaps.size === 0) {
+      return document; // return original document if no maps exist
     }
+    let result: FlatDocument = { ...document }; // clone original document
+    // Define a helper function for inflating a document with a reversed abbreviation map
+    const inflateWithMap = (abbreviationMap: AbbreviationMap, id: string) => {
+      const reversedAbbreviationMap = this.getReverseMap(abbreviationMap, id);
+      for (let key in result) {
+        let safeKey = reversedAbbreviationMap.get(key) || key;
+        let value = result[key];
+        let safeValue = reversedAbbreviationMap.get(value) || value;
+        if (safeKey !== key || safeValue !== value) {
+          result[safeKey] = safeValue;
+          if (safeKey !== key) {
+            delete result[key];
+          }
+        }
+      }
+    };
+    if (id) {
+      // If ID is provided, use the corresponding abbreviation map
+      const abbreviationMap = this.abbreviationMaps.get(id);
+      if (abbreviationMap) {
+        inflateWithMap(abbreviationMap, id);
+      }
+    } else {
+      // If no ID is provided, iterate all abbreviation maps
+      for (let [mapId, abbreviationMap] of this.abbreviationMaps.entries()) {
+        inflateWithMap(abbreviationMap, mapId);
+      }
+    }
+    // Return the potentially modified result
     return result;
   }
 
-  //convert a multi-dimensional document to a 2-d hash
+  //convert a multi-dimensional document to a 2-d hash (string:string)
   flatten(document: any, prefix = ''): FlatDocument {
     let result: FlatDocument = {};
     for (let key in document) {
@@ -107,25 +201,26 @@ export class SerializerService {
     return result;
   }
 
-  //convert a 2-d hash to a multi-dimensional document
-  unflatten(document: FlatDocument): any {
-    let result: any = {};
+  stringify(document: Record<string, any>): FlatDocument {
+    let result: FlatDocument = {};
     for (let key in document) {
-      let keys = key.split('/');
-      let current = result;
-      for (let i = 0; i < keys.length; i++) {
-        if (i === keys.length - 1) {
-          let value = document[key];
-          current[keys[i]] = this.fromString(value);
-        } else {
-          current[keys[i]] = current[keys[i]] || {};
-          current = current[keys[i]];
-        }
+      let value = this.toString(document[key]);
+      if (value) {
+        result[key] = value;
       }
     }
-    return this.toArray(result);
+    return result;
   }
-  
+
+  //convert a 2-d hash to a multi-dimensional document
+  parse(document: FlatDocument): any {
+    let result: any = {};
+    for (let [key, value] of Object.entries(document)) {
+      result[key] = this.fromString(value);
+    }
+    return result;
+  }
+
   toString(value: any): string|undefined {
     switch (typeof value) {
       case 'string':
@@ -163,6 +258,9 @@ export class SerializerService {
       case '/n': // null
         return null;
       case '/s': // object (JSON string)
+        if (dateReg.exec(rest)) {
+          return new Date(JSON.parse(rest));
+        }
         return JSON.parse(rest);
       default: // string
         return value;
@@ -239,17 +337,17 @@ export class SerializerService {
   }
 
   generateAndTrain(schema: JSONSchema, id: string): void {
-    //todo: generate multiple docs per expected values to train on
-    let sampleData = this.generateFromObjectSchema(schema);
-    this.train(sampleData, id);
+    this.generateFromObjectSchema(schema);
   }
 
-  public serialize(document: MultiDimensionalDocument, id: string): FlatDocument {
-    return this.deflate(this.flatten(document), id);
+  public package(document: MultiDimensionalDocument, ids: string[]): FlatDocument {
+    const flatDocument = this.stringify(document);
+    return this.compress(flatDocument, ids);
   }
 
-  public deserialize(document: FlatDocument, id: string): MultiDimensionalDocument {
-    return this.unflatten(this.inflate(document, id));
+  public unpackage(document: FlatDocument, ids: string[]): MultiDimensionalDocument {
+    const multiDimensionalDocument = this.decompress(document, ids);
+    return this.parse(multiDimensionalDocument);
   }
 
   public export(): AbbreviationObjects {

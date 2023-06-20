@@ -1,11 +1,13 @@
 import { KeyType, PSNS } from '../../../../modules/key';
 import { LoggerService } from '../../../../services/logger';
+import { MDATA_SYMBOLS } from '../../../../services/serializer';
 import { RedisStoreService } from '../../../../services/store/clients/redis';
-import { SerializerService } from '../../../../services/store/serializer';
-import { ActivityType } from '../../../../typedefs/activity';
+import { RedisConnection, RedisClientType } from '../../../$setup/cache/redis';
+import { ActivityType, Consumes } from '../../../../typedefs/activity';
 import { HookSignal } from '../../../../typedefs/hook';
 import { StatsType } from '../../../../typedefs/stats';
-import { RedisConnection, RedisClientType } from '../../../$setup/cache/redis';
+import { MultiDimensionalDocument, Symbols } from '../../../../typedefs/serializer';
+import { numberToSequence } from '../../../../modules/utils';
 
 describe('RedisStoreService', () => {
   const appConfig = { id: 'test-app', version: '1' };
@@ -41,67 +43,135 @@ describe('RedisStoreService', () => {
     });
   });
 
-  describe('setJob', () => {
-    it('should set the data and metadata for the given job ID', async () => {
-      const jobId = 'JOB_ID';
-      const data = { data: 'DATA' };
-      const metadata = { jid: jobId };
-      const result = await redisStoreService.setJob(jobId, data, metadata, appConfig);
+  describe('reserveSymbolRange', () => {
+    it('should reserve a symbol range for a given activity and handle existing values', async () => {
+      const activityId = 'a1';
+      const appId = 'app1';
+      const size = 286;
+      // First case: No existing key
+      let [lowerLimit, upperLimit] = await redisStoreService.reserveSymbolRange(activityId, appId, size, 'ACTIVITY');
+      expect(lowerLimit).toEqual(26); //0 + reserved metadata slots (first available slot)
+      let rangeKey = redisStoreService.mintKey(KeyType.SYMKEYS, { appId });
+      let range = await redisClient.HGET(rangeKey, activityId);
+      expect(range).toEqual(`${lowerLimit - MDATA_SYMBOLS.SLOTS}:${lowerLimit - MDATA_SYMBOLS.SLOTS + size - 1}`);
+      //26 metadata slots are reserved; lowerLimit = 26; upperLimit = 286 - 1 = 285
+      const symbols: Symbols = {
+        'a1/data/abc': numberToSequence(lowerLimit),
+        'a1/data/def': numberToSequence(lowerLimit + 1),
+      };
+      // Second case : Existing key
+      await redisStoreService.addSymbols(activityId, appId, symbols);
+      let savedSymbols: Symbols;
+      [lowerLimit, upperLimit, savedSymbols] = await redisStoreService.reserveSymbolRange(activityId, appId, size, 'ACTIVITY');
+      expect(lowerLimit).toEqual(MDATA_SYMBOLS.SLOTS + MDATA_SYMBOLS.ACTIVITY.KEYS.length + 2); //lower limit starts at first usable slot
+      expect(upperLimit).toEqual(size - 1); // [0 + ]286 - 1 = 285
+      expect(Object.keys(savedSymbols).length).toEqual(MDATA_SYMBOLS.ACTIVITY.KEYS.length + 2); //total of meta/data keys
+    });
+  });
+
+  describe('getSymbols', () => {
+    it('should retrieve symbols for a given activity', async () => {
+      const activityId = 'a2';
+      const appId = 'app2';
+      const symbols: Symbols = {
+        'a2/data/ghi': 'baa',
+        'a2/data/jkl': 'bab',
+      };
+      await redisStoreService.addSymbols(activityId, appId, symbols);
+      const result = await redisStoreService.getSymbols(activityId, appId);
+      expect(result).toEqual(symbols);
+    });
+  });
+  
+  describe('addSymbols', () => {
+    it('should store symbols for a given activity', async () => {
+      const activityId = 'a3';
+      const appId = 'app3';
+      const symbols: Symbols = {
+        'a3/data/mno': 'caa',
+        'a3/data/pqr': 'cab',
+      };
+      const result = await redisStoreService.addSymbols(activityId, appId, symbols);
+      expect(result).toEqual(true);
+    });
+  });
+
+  describe('setState/getState', () => {
+    it('sets and gets job/activity state', async () => {
+      //1) add symbol sets for activity a1
+      const jobId = 'jid';
+      const topic = '$job.topic';
+      const activityId = 'a1';
+      const appId = appConfig.id;
+      const size = 286;
+      let [lowerLimit] = await redisStoreService.reserveSymbolRange(activityId, appId, size, 'ACTIVITY');
+      let symbols: Symbols = {
+        'a1/output/data/some/field': numberToSequence(lowerLimit),
+        'a1/output/data/another/field': numberToSequence(lowerLimit + 1),
+      };
+      await redisStoreService.addSymbols(activityId, appId, symbols);
+
+      //2) add symbol sets for the parent job/topic ($job.topic)
+      [lowerLimit] = await redisStoreService.reserveSymbolRange(topic, appId, size, 'JOB');
+      symbols = {
+        'data/name': numberToSequence(lowerLimit),
+        'data/age': numberToSequence(lowerLimit + 1),
+      };
+      await redisStoreService.addSymbols(topic, appId, symbols);
+
+      //3) set job state/status
+      const jobState: MultiDimensionalDocument = {
+        'a1/output/data/some/field': true,
+        'a1/output/data/another/field': {'complex': 'object'},
+        'a1/output/metadata/aid': activityId,
+        'a1/output/metadata/atp': 'activity',
+        'data/name': new Date(),
+        'data/age': 55,
+        'metadata/jid': jobId,
+      };
+      const jobStatus = 690000000000000;
+      const result = await redisStoreService.setState(jobState, jobStatus, jobId, appId, [activityId, topic]);
       expect(result).toEqual(jobId);
 
-      const dataResult = await redisStoreService.getJobData(jobId, appConfig);
-      expect(dataResult).toEqual(data);
-
-      const metadataResult = await redisStoreService.getJobMetadata(jobId, appConfig);
-      expect(metadataResult).toEqual(metadata);
+      //4) get job state/status
+      const consumes: Consumes = {
+        [activityId]: [
+          'a1/output/data/some/field', 
+          'a1/output/data/another/field',
+          'a1/output/metadata/aid',
+          'a1/output/metadata/atp',
+        ],
+        [topic]: [
+          'data/name',
+          'data/age',
+          'metadata/jid',
+        ]
+      };
+      const response = await redisStoreService.getState(jobId, appId, consumes);
+      if (response) {
+        const [resolvedJobState, resolvedJobStatus] = response;
+        expect(resolvedJobState).toEqual(jobState);
+        expect(resolvedJobStatus).toEqual(jobStatus);
+      } else {
+        fail('Job state/status not found');
+      }
     });
   });
 
-  describe('getJobMetadata', () => {
-    it('should get the metadata for the given job ID', async () => {
-      const jobId = 'JOB_ID';
-      const metadata = { jid: jobId };
-      await redisStoreService.setJob(jobId, {}, metadata, appConfig);
-      const result = await redisStoreService.getJobMetadata(jobId, appConfig);
-      expect(result).toEqual(metadata);
+  describe('setStateNX', () => {
+    it('should set the job data in the store with NX behavior', async () => {
+      const jobId = 'job-1';
+      const response = await redisStoreService.setStateNX(jobId, appConfig.id);
+      expect(response).toEqual(true);
+      const secondResponse = await redisStoreService.setStateNX(jobId, appConfig.id);
+      expect(secondResponse).toEqual(false);
+      const hashKey = redisStoreService.mintKey(KeyType.JOB_STATE, { appId: appConfig.id, jobId });
+      const storedActivityId = await redisStoreService.redisClient.HGET(hashKey, ':');
+      expect(storedActivityId).toEqual('1');
     });
   });
 
-  describe('getJobData', () => {
-    it('should get the data for the given job ID', async () => {
-      const jobId = 'JOB_ID';
-      const data = { data: 'DATA' };
-      const metadata = { jid: jobId };
-      await redisStoreService.setJob(jobId, data, metadata, appConfig);
-      const result = await redisStoreService.getJobData(jobId, appConfig);
-      expect(result).toEqual(data);
-    });
-  });
-
-  describe('getJobData', () => {
-    it('should get the data for the given job ID', async () => {
-      const jobId = 'JOB_ID';
-      const data = { data: 'DATA' };
-      const metadata = { jid: jobId };
-      await redisStoreService.setJob(jobId, data, metadata, appConfig);
-      const result = await redisStoreService.getJobData(jobId, appConfig);
-      expect(result).toEqual(data);
-    });
-  });
-
-  describe('getJobOutput', () => {
-    it('should return the full job context, including data and metadata', async () => {
-      const jobId = 'JOB_ID';
-      const metadata = { jid: jobId };
-      const data = { data: { some: 'DATA' }};
-      await redisStoreService.setJob(jobId, data, metadata, appConfig);
-      const result = await redisStoreService.getJobOutput(jobId, appConfig);
-      expect(result?.metadata.jid).toEqual(metadata.jid);
-      expect((result?.data.data as {some: string}).some).toEqual(data.data.some);
-    });
-  });
-
-  describe('setJobStats', () => {
+  describe('setStats', () => {
     it('should set and get job stats correctly', async () => {
       const jobKey = 'job-key';
       const jobId = 'job-id';
@@ -112,7 +182,7 @@ describe('RedisStoreService', () => {
         median: [{ metric: 'mdn', target: 'target3', value: 30 }],
       };
 
-      const result = await redisStoreService.setJobStats(jobKey, jobId, dateTime, stats, appConfig);
+      const result = await redisStoreService.setStats(jobKey, jobId, dateTime, stats, appConfig);
       expect(result).not.toBeNull();
 
       const generalStatsKey = redisStoreService.mintKey(KeyType.JOB_STATS_GENERAL, { ...cacheConfig, jobId, jobKey, dateTime });
@@ -124,104 +194,12 @@ describe('RedisStoreService', () => {
       expect(indexStats[0]).toEqual(stats.index[0].value.toString());
   
       const medianStatsKey = redisStoreService.mintKey(KeyType.JOB_STATS_MEDIAN, { ...cacheConfig, jobId, jobKey, dateTime, facet: stats.median[0].target });
-      const medianStats = await redisClient.ZRANGE(medianStatsKey, 0, -1);
-      expect(medianStats[0]).toEqual(stats.median[0].value.toString());
+      const medianStats = await redisClient.ZRANGE_WITHSCORES(medianStatsKey, 0, -1);
+      expect(medianStats[0].score).toEqual(stats.median[0].value);
 
       //expect getStats to cast the value to a number, so it is an exact match even though a string in redis
       const jobStats = await redisStoreService.getJobStats([generalStatsKey]);
       expect(jobStats[generalStatsKey][stats.general[0].target]).toEqual(stats.general[0].value);
-    });
-  });
-
-  describe('getActivityContext', () => {
-    it('should get the data for the given activity ID', async () => {
-      const jobId = 'JOB_ID';
-      const activityId = 'ACTIVITY_ID';
-      const data = { data: 'DATA' };
-      const metadata = { aid: activityId };
-      const hook = null;
-      await redisStoreService.setActivity(jobId, activityId, data, metadata, hook, appConfig);
-      const result = await redisStoreService.getActivityContext(jobId, activityId, appConfig);
-      expect(result?.data).toEqual(data);
-    });
-
-    it('should get the hook data for the given activity ID', async () => {
-      const jobId = 'JOB_ID';
-      const activityId = 'ACTIVITY_ID';
-      const data = { data: 'DATA' };
-      const metadata = { aid: activityId };
-      const hook = { hook: 'SIGNAL' };
-      await redisStoreService.setActivity(jobId, activityId, data, metadata, hook, appConfig);
-      const result = await redisStoreService.getActivityContext(jobId, activityId, appConfig);
-      expect(result?.hook).toEqual(hook);
-    });
-
-    it('should restore all data types', async () => {
-      const jobId = 'JOB_ID';
-      const activityId = 'ACTIVITY_ID';
-      const data = { 
-        string: 'string',
-        boolean: true,
-        number: 55,
-        array_of_numbers: [1, 2, 3],
-        date: new Date(),
-      };
-      const metadata = { aid: activityId };
-      const hook = null;
-      await redisStoreService.setActivity(jobId, activityId, data, metadata, hook, appConfig);
-      const result = await redisStoreService.getActivityContext(jobId, activityId, appConfig);
-      expect(result?.data).toEqual(data);
-    });
-  
-    it('should activate existing app version', async () => {
-      const appId = 'testAppId';
-      const version = 'testVersion';
-      await redisStoreService.setApp(appId, version);
-      const response = await redisStoreService.activateAppVersion(appId, version);
-      expect(response).toBeTruthy();
-    });
-  });
-
-  describe('setActivityNX', () => {
-    it('should set the activity data in the store with NX behavior', async () => {
-      const jobId = 'job-1';
-      const activityId = 'activity-1';
-      // First, set the activity using setActivityNX
-      const response = await redisStoreService.setActivityNX(jobId, activityId, appConfig);
-      expect(response).toEqual(1); // Expect the HSETNX result to be 1 (field was set)
-      // Now, try to set the same activity again using setActivityNX
-      const secondResponse = await redisStoreService.setActivityNX(jobId, activityId, appConfig);
-      expect(secondResponse).toEqual(0); // Expect the HSETNX result to be 0 (field was not set because it already exists)
-      // Verify that the activity data in the store is correct
-      const hashKey = redisStoreService.mintKey(KeyType.JOB_ACTIVITY_DATA, { appId: appConfig.id, jobId, activityId });
-      const storedActivityId = await redisStoreService.redisClient.HGET(hashKey, 'm/aid');
-      expect(storedActivityId).toEqual(activityId);
-    });
-  });
-
-  describe('getActivityMetadata', () => {
-    it('should retrieve the activity metadata from the store', async () => {
-      const jobId = 'job-1';
-      const activityId = 'activity-1';
-      const data = {};
-      const metadata = { aid: activityId };
-      const hook = null;
-      await redisStoreService.setActivity(jobId, activityId, data, metadata, hook, appConfig);
-      const result = await redisStoreService.getActivityMetadata(jobId, activityId, appConfig);
-      expect(result).toEqual(metadata);
-    });
-  });
-
-  describe('getActivity', () => {
-    it('should retrieve the activity data from the store', async () => {
-      const jobId = 'JOB_ID';
-      const activityId = 'ACTIVITY_ID';
-      const data = { data: 'DATA' };
-      const metadata = { aid: activityId };
-      const hook = null;
-      await redisStoreService.setActivity(jobId, activityId, data, metadata, hook, appConfig);
-      const result = await redisStoreService.getActivity(jobId, activityId, appConfig);
-      expect(result).toEqual(data);
     });
   });
 
@@ -426,37 +404,6 @@ describe('RedisStoreService', () => {
       const key = redisStoreService.mintKey(KeyType.SIGNALS, { appId: appConfig.id });
       const remainingValue = await redisClient.HGET(key, `${hook.topic}:${hook.resolved}`);
       expect(remainingValue).toBeNull();
-    });
-  });
-
-  describe('restoreContext', () => {
-    it('should restore nested and flat context data', async () => {
-      const jobId = 'test-job-id';
-      const activity1Id = 'activity1';
-      const activity2Id = 'activity2';
-      const dependsOn = {
-        [activity1Id]: ['d/field1', 'd/field2'],
-        [activity2Id]: ['d/nested/field3', 'd/nested/field4', 'd/nested/field5'],
-      };
-      const initialData = {
-        [activity1Id]: { 'd/field1': 'value1', 'd/field2': 'value2' },
-        [activity2Id]: { 'd/nested/field3': 'value3', 'd/nested/field4': 'value4' },
-      };
-      for (const [activityId, data] of Object.entries(initialData)) {
-        const key = redisStoreService.mintKey(KeyType.JOB_ACTIVITY_DATA, {
-          appId: appConfig.id,
-          jobId,
-          activityId,
-        });
-        await redisClient.HSET(key, [...Object.entries(data)]);
-      }
-      const restoredData = await redisStoreService.restoreContext(jobId, dependsOn, appConfig);
-      initialData[activity1Id] = SerializerService.restoreHierarchy(initialData[activity1Id]);
-      initialData[activity2Id] = SerializerService.restoreHierarchy(initialData[activity2Id]);
-      // @ts-ignore
-      expect(restoredData[activity1Id].output.data.field1).toEqual(initialData[activity1Id].d.field1);
-      // @ts-ignore
-      expect(restoredData[activity2Id].output.data.nested.field3).toEqual(initialData[activity2Id].d.nested.field3);
     });
   });
 });

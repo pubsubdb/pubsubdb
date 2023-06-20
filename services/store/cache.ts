@@ -1,16 +1,14 @@
 /**
- * The Cache is a key/value store and used to store commonly accessed Redis metadata (namely,
- * the execution rules for the app) to save time accessing the execution rules.
- * 
- * The cache should be regularly cleared every 5 minutes or so...it's not expensive and ensures
- * that the cache is always up-to-date. A Conductor Service should be used to synchronize all
- * running redis clients, so that they all switch versions simultaneously
- * 
+ * The Cache is a key/value store and used to store commonly accessed Redis metadata
+ * (mainly the execution rules for the app) to save time accessing them as they
+ * are immutable per verison. The only time the rules are ejected are when
+ * a new version is deployed to the quorum and the cache is invalidated/cleared.
  */
 
 import { ActivityType } from "../../typedefs/activity";
 import { HookRule } from "../../typedefs/hook";
 import { PubSubDBApp, PubSubDBSettings } from "../../typedefs/pubsubdb";
+import { Symbols } from "../../typedefs/serializer";
 import { Transitions } from "../../typedefs/transition";
 
 class Cache {
@@ -19,6 +17,7 @@ class Cache {
   apps: Record<string, PubSubDBApp>;
   schemas: Record<string, ActivityType>;
   subscriptions: Record<string, Record<string, string>>;
+  symbols: Record<string, Symbols>;
   transitions: Record<string, Record<string, unknown>>;
   hookRules: Record<string, Record<string, HookRule[]>>;
   workItems: Record<string, string>;
@@ -32,12 +31,13 @@ class Cache {
    * @param transitions 
    * @param hookRules 
    */
-  constructor(appId: string, settings: PubSubDBSettings, apps: Record<string, PubSubDBApp> = {}, schemas: Record<string, ActivityType> = {}, subscriptions: Record<string, Record<string, string>> = {}, transitions: Record<string, Record<string, unknown>> = {}, hookRules: Record<string, Record<string, HookRule[]>> = {}, workItems: Record<string, string> = {}) {
+  constructor(appId: string, settings: PubSubDBSettings, apps: Record<string, PubSubDBApp> = {}, schemas: Record<string, ActivityType> = {}, subscriptions: Record<string, Record<string, string>> = {}, symbols: Record<string, Symbols> = {}, transitions: Record<string, Record<string, unknown>> = {}, hookRules: Record<string, Record<string, HookRule[]>> = {}, workItems: Record<string, string> = {}) {
     this.appId = appId;
     this.settings = settings;
     this.apps = apps;
     this.schemas = schemas;
     this.subscriptions = subscriptions;
+    this.symbols = symbols;
     this.transitions = transitions;
     this.hookRules = hookRules;
     this.workItems = workItems;
@@ -90,8 +90,8 @@ class Cache {
     this.schemas[`${appId}/${version}`] = schemas as unknown as Record<string, ActivityType>;
   }
 
-  setSchema(appId: string, version: string, topic: string, schema: ActivityType): void {
-    this.schemas[`${appId}/${version}`][topic] = schema;
+  setSchema(appId: string, version: string, activityId: string, schema: ActivityType): void {
+    this.schemas[`${appId}/${version}`][activityId] = schema;
   }
 
   getSubscriptions(appId: string, version: string): Record<string, string> {
@@ -104,6 +104,18 @@ class Cache {
 
   setSubscriptions(appId: string, version: string, subscriptions: Record<string, string>): void {
     this.subscriptions[`${appId}/${version}`] = subscriptions;
+  }
+
+  getSymbols(appId: string, targetEntityId: string): Symbols {
+    return this.symbols[`${appId}/${targetEntityId}`] as Symbols;
+  }
+
+  setSymbols(appId: string, targetEntityId: string, symbols: Symbols): void {
+    this.symbols[`${appId}/${targetEntityId}`] = symbols;
+  }
+
+  deleteSymbols(appId: string, targetEntityId: string): void {
+    delete this.symbols[`${appId}/${targetEntityId}`];
   }
 
   getTransitions(appId: string, version: string): Transitions {

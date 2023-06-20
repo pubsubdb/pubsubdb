@@ -86,7 +86,7 @@ class QuorumService {
   subscriptionHandler(): SubscriptionCallback {
     const self = this;
     return async (topic: string, message: QuorumMessage) => {
-      self.logger.debug('subscriptionHandler', { topic, message });
+      self.logger.debug('quorum-event-received', { topic, type: message.type});
       if (message.type === 'activate') {
         self.engine.setCacheMode(message.cache_mode, message.until_version);
       } else if (message.type === 'ping') {
@@ -156,8 +156,8 @@ class QuorumService {
     const q1 = await this.requestQuorum();
     const q2 = await this.requestQuorum();
     const q3 = await this.requestQuorum();
-    this.logger.info(`Quorum Roll Call Results: q1: ${q1}, q2: ${q2}, q3: ${q3}`);
     if (q1 && q1 === q2 && q2 === q3) {
+      this.logger.info('quorum-rollcall-succeeded', { q1, q2, q3 });
       this.store.publish(
         KeyType.QUORUM,
         { type: 'activate', cache_mode: 'nocache', until_version: version },
@@ -166,15 +166,16 @@ class QuorumService {
       await new Promise(resolve => setTimeout(resolve, QUORUM_DELAY));
       //confirm we received the activation message
       if (this.engine.untilVersion === version) {
-        this.logger.info(`Quorum reached. Activating version ${this.engine.untilVersion}`);
+        this.logger.info('quorum-activation-succeeded', { version });
         const { id } = config;
         const compiler = new CompilerService(this.store, this.logger);
         return await compiler.activate(id, version);
       } else {
-        this.logger.error(`Quorum NOT reached to activate ${version}.`);
+        this.logger.error('quorum-activation-failed', { version });
         throw new Error(`UntilVersion Not Received. Version ${version} not activated`);
       }
     } else {
+      this.logger.info('quorum-rollcall-failed', { q1, q2, q3 });
       throw new Error(`Quorum not reached. Version ${version} not activated.`);
     }
   }

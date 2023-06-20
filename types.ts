@@ -6,6 +6,7 @@ export {
   ActivityData,
   ActivityMetadata,
   AwaitActivity,
+  Consumes,
   ExecActivity,
   FlattenedDataObject,
   HookData,
@@ -34,6 +35,7 @@ export {
 export {
   RedisClientType as IORedisClientType,
   RedisMultiType as IORedisMultiType } from './typedefs/ioredisclient';
+export { ILogger } from './typedefs/logger';
 export {
   AbbreviatedJobMetadata,
   JobActivityContext,
@@ -88,7 +90,9 @@ export {
   FlatDocument,
   FlatObject,
   JSONSchema,
-  MultiDimensionalDocument } from './typedefs/serializer';
+  MultiDimensionalDocument,
+  SymbolRanges,
+  Symbols } from './typedefs/serializer';
 export {
   AggregatedData,
   CountByFacet,
@@ -107,11 +111,13 @@ export {
   Segment,
   TimeSegment } from './typedefs/stats';
 export {
+  StreamCode,
+  StreamConfig,
   StreamData,
+  StreamError,
   StreamDataResponse,
   StreamRetryPolicy,
-  StreamCode,
-  StreamError,
+  StreamRole,
   StreamStatus } from './typedefs/stream';
 export {
   Match,

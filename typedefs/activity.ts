@@ -3,6 +3,8 @@ import { StreamRetryPolicy } from "./stream";
 
 type ActivityExecutionType = 'trigger' | 'await' | 'exec' | 'activity' | 'request' | 'iterate';
 
+type Consumes = Record<string, string[]>;
+
 interface ActivityBase {
   title?: string;
   type?: ActivityExecutionType;
@@ -10,13 +12,18 @@ interface ActivityBase {
   input?: Record<string, any>;
   output?: Record<string, any>;
   settings?: Record<string, any>;
-  dependents?: string[];
-  depends?: Record<string, string[]>;
-  hook?: Record<string, any>;
-  collationInt?: number;
   job?: Record<string, any>;
-  publishes?: string; //set by compiler
+  hook?: Record<string, any>;
   retry?: StreamRetryPolicy
+  collationInt?: number;               //compiler
+  dependents?: string[];               //compiler :legacy:
+  depends?: Record<string, string[]>;  //compiler :legacy:
+  consumes?: Consumes;                 //compiler :new:
+  PRODUCES?: string[];                 //compiler :new:
+  produces?: string[];                 //compiler :new:
+  publishes?: string;                  //compiler 
+  subscribes?: string;                 //compiler
+  trigger?: string;                    //compiler
 }
 
 interface Measure {
@@ -63,11 +70,11 @@ type ActivityMetadata = {
   aid: string;  //activity_id
   atp: string;  //activity_type
   stp: string;  //activity_subtype
-  jid?: string; //job_id
-  key?: string; //job_key
   ac: string;   //GMT created //activity_created
   au: string;   //GMT updated //activity_updated
   err?: string;  //stringified error json: {message: string, code: number, error?}
+  jid?: string; //job_id :legacy:
+  key?: string; //job_key :legacy:
 };
 
 type HookData = Record<string, any>;
@@ -94,6 +101,7 @@ export {
   ActivityContext,
   ActivityData,
   ActivityMetadata,
+  Consumes,
   HookData,
   ActivityBase as BaseActivity,
   TriggerActivity,
