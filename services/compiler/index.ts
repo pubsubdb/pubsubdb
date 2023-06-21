@@ -5,8 +5,8 @@ import * as path from 'path';
 import { ILogger } from '../logger';
 import { Deployer } from './deployer';
 import { Validator } from './validator';
-import { PubSubDBManifest, StoreService } from '../../typedefs/pubsubdb';
-import { RedisClient, RedisMulti } from '../../typedefs/redis';
+import { PubSubDBManifest, StoreService } from '../../types/pubsubdb';
+import { RedisClient, RedisMulti } from '../../types/redis';
 
 /**
  * The compiler service converts a graph into a executable program.

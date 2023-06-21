@@ -5,11 +5,11 @@
  * a new version is deployed to the quorum and the cache is invalidated/cleared.
  */
 
-import { ActivityType } from "../../typedefs/activity";
-import { HookRule } from "../../typedefs/hook";
-import { PubSubDBApp, PubSubDBSettings } from "../../typedefs/pubsubdb";
-import { Symbols } from "../../typedefs/serializer";
-import { Transitions } from "../../typedefs/transition";
+import { ActivityType } from "../../types/activity";
+import { HookRule } from "../../types/hook";
+import { PubSubDBApp, PubSubDBSettings } from "../../types/pubsubdb";
+import { Symbols } from "../../types/serializer";
+import { Transitions } from "../../types/transition";
 
 class Cache {
   settings: PubSubDBSettings;
@@ -18,6 +18,7 @@ class Cache {
   schemas: Record<string, ActivityType>;
   subscriptions: Record<string, Record<string, string>>;
   symbols: Record<string, Symbols>;
+  symvals: Record<string, Symbols>;
   transitions: Record<string, Record<string, unknown>>;
   hookRules: Record<string, Record<string, HookRule[]>>;
   workItems: Record<string, string>;
@@ -31,13 +32,14 @@ class Cache {
    * @param transitions 
    * @param hookRules 
    */
-  constructor(appId: string, settings: PubSubDBSettings, apps: Record<string, PubSubDBApp> = {}, schemas: Record<string, ActivityType> = {}, subscriptions: Record<string, Record<string, string>> = {}, symbols: Record<string, Symbols> = {}, transitions: Record<string, Record<string, unknown>> = {}, hookRules: Record<string, Record<string, HookRule[]>> = {}, workItems: Record<string, string> = {}) {
+  constructor(appId: string, settings: PubSubDBSettings, apps: Record<string, PubSubDBApp> = {}, schemas: Record<string, ActivityType> = {}, subscriptions: Record<string, Record<string, string>> = {}, symbols: Record<string, Symbols> = {}, symvals: Record<string, Symbols> = {}, transitions: Record<string, Record<string, unknown>> = {}, hookRules: Record<string, Record<string, HookRule[]>> = {}, workItems: Record<string, string> = {}) {
     this.appId = appId;
     this.settings = settings;
     this.apps = apps;
     this.schemas = schemas;
     this.subscriptions = subscriptions;
     this.symbols = symbols;
+    this.symvals = symvals;
     this.transitions = transitions;
     this.hookRules = hookRules;
     this.workItems = workItems;
@@ -116,6 +118,18 @@ class Cache {
 
   deleteSymbols(appId: string, targetEntityId: string): void {
     delete this.symbols[`${appId}/${targetEntityId}`];
+  }
+
+  getSymbolValues(appId: string): Symbols {
+    return this.symvals[`${appId}`] as Symbols;
+  }
+
+  setSymbolValues(appId: string, symvals: Symbols): void {
+    this.symvals[`${appId}`] = symvals;
+  }
+
+  deleteSymbolValues(appId: string): void {
+    delete this.symvals[`${appId}`];
   }
 
   getTransitions(appId: string, version: string): Transitions {

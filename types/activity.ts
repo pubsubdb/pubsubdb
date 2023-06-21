@@ -5,7 +5,7 @@ type ActivityExecutionType = 'trigger' | 'await' | 'exec' | 'activity' | 'reques
 
 type Consumes = Record<string, string[]>;
 
-interface ActivityBase {
+interface BaseActivity {
   title?: string;
   type?: ActivityExecutionType;
   subtype?: string;
@@ -14,6 +14,7 @@ interface ActivityBase {
   settings?: Record<string, any>;
   job?: Record<string, any>;
   hook?: Record<string, any>;
+  del?: number;                //compiler (in seconds) -1 forever, 60 default (seconds)
   retry?: StreamRetryPolicy
   collationInt?: number;               //compiler
   dependents?: string[];               //compiler :legacy:
@@ -37,33 +38,33 @@ interface TriggerActivityStats {
   measures?: Measure[]; //what to capture
 }
 
-interface TriggerActivity extends ActivityBase {
+interface TriggerActivity extends BaseActivity {
   type: 'trigger';
   stats?: TriggerActivityStats;
   collationKey?: number;
 }
 
-interface AwaitActivity extends ActivityBase {
+interface AwaitActivity extends BaseActivity {
   type: 'await';
   eventName: string;
   timeout: number;
 }
 
-interface ExecActivity extends ActivityBase {
+interface ExecActivity extends BaseActivity {
   type: 'exec';
   subtype: string;
   timeout: number;
 }
 
-interface RequestActivity extends ActivityBase {
+interface RequestActivity extends BaseActivity {
   type: 'request';
 }
 
-interface IterateActivity extends ActivityBase {
+interface IterateActivity extends BaseActivity {
   type: 'iterate';
 }
 
-type ActivityType = ActivityBase | TriggerActivity | AwaitActivity | ExecActivity | RequestActivity | IterateActivity;
+type ActivityType = BaseActivity | TriggerActivity | AwaitActivity | ExecActivity | RequestActivity | IterateActivity;
 
 type ActivityData = Record<string, any>;
 type ActivityMetadata = {
@@ -72,21 +73,15 @@ type ActivityMetadata = {
   stp: string;  //activity_subtype
   ac: string;   //GMT created //activity_created
   au: string;   //GMT updated //activity_updated
-  err?: string;  //stringified error json: {message: string, code: number, error?}
+  err?: string; //stringified error json: {message: string, code: number, error?}
   jid?: string; //job_id :legacy:
   key?: string; //job_key :legacy:
 };
 
-type HookData = Record<string, any>;
-
 type ActivityContext = {
   data?: ActivityData | null;
   metadata: ActivityMetadata;
-  hook?: HookData
-};
-
-type FlattenedDataObject = {
-  [key: string]: string
+  hook?: ActivityData
 };
 
 type ActivityDataType = {
@@ -96,19 +91,17 @@ type ActivityDataType = {
 };
 
 export {
-  ActivityType,
   ActivityDataType,
   ActivityContext,
   ActivityData,
   ActivityMetadata,
+  ActivityType,
   Consumes,
-  HookData,
-  ActivityBase as BaseActivity,
+  BaseActivity,
   TriggerActivity,
   TriggerActivityStats,
   AwaitActivity,
   ExecActivity,
   RequestActivity,
-  IterateActivity,
-  FlattenedDataObject
+  IterateActivity
 };

@@ -1,11 +1,12 @@
+import { getSymKey } from "../../modules/utils";
 import { CollatorService } from "../collator";
+import { SerializerService } from "../serializer";
 import { StoreService } from '../store';
-import { ActivityType } from "../../typedefs/activity";
-import { HookRule } from "../../typedefs/hook";
-import { PubSubDBGraph, PubSubDBManifest } from "../../typedefs/pubsubdb";
-import { RedisClient, RedisMulti } from "../../typedefs/redis";
-import { MultiDimensionalDocument, Symbols } from "../../typedefs/serializer";
-import { numberToSequence } from "../../modules/utils";
+import { ActivityType } from "../../types/activity";
+import { HookRule } from "../../types/hook";
+import { PubSubDBGraph, PubSubDBManifest } from "../../types/pubsubdb";
+import { RedisClient, RedisMulti } from "../../types/redis";
+import { StringAnyType, Symbols } from "../../types/serializer";
 
 const DEFAULT_METADATA_RANGE_SIZE = 26; //metadata is 26 slots ([a-z] * 1)
 const DEFAULT_DATA_RANGE_SIZE = 260; //data is 260 slots ([a-zA-Z] * 5)
@@ -24,10 +25,11 @@ class Deployer {
     CollatorService.compile(this.manifest.app.graphs);
     this.copyJobSchemas();
     this.bindBackRefs();
-    this.resolveMappingDependencies(); //legacy (activity data maps)
-    this.resolveJobMapsPaths();        //new (job data maps)
-    this.resolveDataDependencies();    //new (activity data maps)
-    await this.generateSymbols();      //new (map paths => symbols)
+    this.resolveMappingDependencies(); // :legacy:
+    this.resolveJobMapsPaths();
+    this.resolveDataDependencies();
+    await this.generateSymKeys();
+    await this.generateSymVals();
     await this.deployHookPatterns();
     await this.deployActivitySchemas();
     await this.deploySubscriptions(); 
@@ -41,7 +43,7 @@ class Deployer {
     }
   }
 
-  async generateSymbols() {
+  async generateSymKeys() {
     //note: symbol ranges are additive (per version); path assignments are immutable
     const appId = this.manifest.app.id;
     for (const graph of this.manifest.app.graphs) {
@@ -75,7 +77,7 @@ class Deployer {
         if (startIndex > maxIndex) {
           throw new Error('Symbol index out of bounds');
         }
-        const symbol = numberToSequence(startIndex);
+        const symbol = getSymKey(startIndex);
         startIndex++
         newSymbols[fullPath] = symbol;
         currentSymbols[fullPath] = symbol; // update the currentSymbols to include this new symbol
@@ -84,11 +86,6 @@ class Deployer {
     return newSymbols;
   }
 
-  /**
-   * job schemas are copied to the trigger activity, as the trigger
-   * is a standin for the overall job. this lets users model things
-   * intuitively, but lets the system optimize around this conflation.
-   */
   copyJobSchemas() {
     const graphs = this.manifest!.app.graphs;
     for (const graph of graphs) {
@@ -125,14 +122,59 @@ class Deployer {
         if (graph.publishes) {
           activities[activityKey].publishes = graph.publishes;
         }
+        if (graph.del) {
+          activities[activityKey].del = graph.del;
+        }
       }
     }
   }
 
+  collectValues(schema: Record<string, any>, values: Set<string>) {
+    for (const [key, value] of Object.entries(schema)) {
+      if (key === 'enum' || key === 'examples' || key === 'default') {
+        if (Array.isArray(value)) {
+          for (const v of value) {
+            if (typeof v === 'string' && v.length > 5) {
+              values.add(v);
+            }
+          }
+        } else if (typeof value === 'string' && value.length > 5) {
+          values.add(value);
+        }
+      } else if (typeof value === 'object') {
+        this.collectValues(value, values);
+      }
+    }
+  }
+  
+  traverse(obj: any, values: Set<string>) {
+    for (const value of Object.values(obj)) {
+      if (typeof value === 'object') {
+        if ('schema' in value) {
+          this.collectValues(value.schema, values);
+        } else {
+          this.traverse(value, values);
+        }
+      }
+    }
+  }
+  
+  async generateSymVals() {
+    const uniqueStrings = new Set<string>();
+    for (const graph of this.manifest!.app.graphs) {
+      this.traverse(graph, uniqueStrings);
+    }
+    const existingSymbols = await this.store.getSymbolValues();
+    const startIndex = Object.keys(existingSymbols).length;
+    const maxIndex = Math.pow(52, 2) - 1;
+    const newSymbols = SerializerService.filterSymVals(startIndex, maxIndex, existingSymbols, uniqueStrings);
+    await this.store.addSymbolValues(newSymbols);
+  }
+
   resolveJobMapsPaths() {
-    function parsePaths(obj: MultiDimensionalDocument): string[] {
+    function parsePaths(obj: StringAnyType): string[] {
       let result = [];
-      function traverse(obj: MultiDimensionalDocument, path = []) {
+      function traverse(obj: StringAnyType, path = []) {
         for (let key in obj) {
           if (typeof obj[key] === 'object' && obj[key] !== null) {
             let newPath = [...path, key];
@@ -165,7 +207,7 @@ class Deployer {
   resolveMappingDependencies() {
     const dynamicMappingRules: string[] = [];
     //recursive function to descend into the object and find all dynamic mapping rules
-    function traverse(obj: MultiDimensionalDocument, depends: string[]): void {
+    function traverse(obj: StringAnyType, depends: string[]): void {
       for (const key in obj) {
         if (typeof obj[key] === 'string') {
           const stringValue = obj[key] as string;
@@ -216,18 +258,6 @@ class Deployer {
     return groupedRules;
   }
 
-  /**
-   * Resolves a mappable value to a group and path. For example, given
-   * the value "{a5.output.data.cat}", the resolved group would be "a5"
-   * and the path would be "d/cat". At runtime the context can be efficiently
-   * generated by using multi with hgetall to restore deeply nested job
-   * context while avoiding any unnecessary data transfer. In general, when
-   * an activity runs, its context is restored by looking at the data it will need
-   * to execute its mapping rules. It then saves just those fields that downstream
-   * activities might eventually request given their mapping rules. This mechanism
-   * ensures that no data is saved that is not needed by downstream activities. And
-   * no data is requested that is not needed for the current activity.
-   */
   resolveMappableValue(mappable: string): [string, string] {
     mappable = mappable.substring(1, mappable.length - 1);
     const [group, type, subtype, ...path] = mappable.split('.');

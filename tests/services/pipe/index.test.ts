@@ -1,5 +1,5 @@
 import { Pipe } from '../../../services/pipe';
-import { Pipe as PipeType } from '../../../typedefs/pipe';
+import { Pipe as PipeType } from '../../../types/pipe';
 
 describe('Pipe', () => {
   let pipe: Pipe|null;

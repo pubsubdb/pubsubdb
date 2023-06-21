@@ -1,8 +1,8 @@
 import { ILogger } from '../logger';
 import { StoreService } from '../store';
-import { HookRule, HookSignal } from '../../typedefs/hook';
-import { JobActivityContext } from '../../typedefs/job';
-import { RedisClient, RedisMulti } from '../../typedefs/redis';
+import { HookRule, HookSignal } from '../../types/hook';
+import { JobState } from '../../types/job';
+import { RedisClient, RedisMulti } from '../../types/redis';
 
 class StoreSignaler {
   store: StoreService<RedisClient, RedisMulti>;
@@ -18,7 +18,7 @@ class StoreSignaler {
     return rules?.[topic]?.[0] as HookRule;
   }
 
-  async registerHook(topic: string, context: JobActivityContext, multi?: RedisMulti): Promise<string> {
+  async registerHook(topic: string, context: JobState, multi?: RedisMulti): Promise<string> {
     const hookRule = await this.getHookRule(topic);
     if (hookRule) {
       const jobId = context.metadata.jid;

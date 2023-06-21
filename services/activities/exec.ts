@@ -12,15 +12,13 @@ import {
   ActivityData,
   ActivityMetadata,
   ExecActivity,
-  ActivityType,
-  HookData
-} from "../../typedefs/activity";
-import { JobActivityContext } from "../../typedefs/job";
-import { MultiResponseFlags } from "../../typedefs/redis";
+  ActivityType } from "../../types/activity";
+import { JobState } from "../../types/job";
+import { MultiResponseFlags } from "../../types/redis";
 import {
   StreamCode,
   StreamData,
-  StreamStatus } from "../../typedefs/stream";
+  StreamStatus } from "../../types/stream";
 
 class Exec extends Activity {
   config: ExecActivity;
@@ -29,9 +27,9 @@ class Exec extends Activity {
     config: ActivityType,
     data: ActivityData,
     metadata: ActivityMetadata,
-    hook: HookData | null,
+    hook: ActivityData | null,
     engine: EngineService,
-    context?: JobActivityContext) {
+    context?: JobState) {
       super(config, data, metadata, hook, engine, context);
   }
 

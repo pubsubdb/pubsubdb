@@ -1,7 +1,7 @@
 import { StoreService } from "../services/store";
-import { AppSubscriptions, AppTransitions, AppVID } from "../typedefs/app";
-import { RedisClient, RedisMulti } from "../typedefs/redis";
-import { FlatObject, MultiDimensionalDocument } from "../typedefs/serializer";
+import { AppSubscriptions, AppTransitions, AppVID } from "../types/app";
+import { RedisClient, RedisMulti } from "../types/redis";
+import { StringAnyType } from "../types/serializer";
 
 export function getGuid() {
   const randomTenDigitNumber = Math.floor(Math.random() * 1e10);
@@ -68,7 +68,12 @@ export function getTimeSeries(granularity: string): string {
   return now.toISOString().replace(/:\d\d\..+|-|T/g, '').replace(':','');
 }
 
-export function numberToSequence(number: number): string {
+export function formatISODate(input: Date | string): string {
+  const date = input instanceof Date ? input : new Date(input);
+  return date.toISOString().replace(/[:TZ-]/g, '');
+}
+
+export function getSymKey(number: number): string {
   const alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
   const base = alphabet.length;
   if (number < 0 || number >= Math.pow(base, 3)) {
@@ -77,6 +82,16 @@ export function numberToSequence(number: number): string {
   let [q1, r1] = divmod(number, base);
   let [q2, r2] = divmod(q1, base);
   return alphabet[q2] + alphabet[r1] + alphabet[r2];
+}
+
+export function getSymVal(number: number): string {
+  const alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const base = alphabet.length;
+  if (number < 0 || number >= Math.pow(base, 2)) {
+    throw new Error('Number out of range');
+  }
+  let [q, r] = divmod(number, base);
+  return alphabet[q] + alphabet[r];
 }
 
 function divmod(m: number, n: number): number[] {
@@ -103,12 +118,10 @@ export function getValueByPath(obj: { [key: string]: any }, path: string): any {
   return currentValue;
 }
 
-export function restoreHierarchy(obj: MultiDimensionalDocument): MultiDimensionalDocument {
-  //TODO: input document is additive (journaled)
-  //      sort/process keys in reverse order and then resolve
-  //      clobber existing values with more-deeply nested values
-  const result: MultiDimensionalDocument = {};
+export function restoreHierarchy(obj: StringAnyType): StringAnyType {
+  const result: StringAnyType = {};
   for (const key in obj) {
+    if (obj[key] === undefined) continue;
     const keys = key.split('/');
     let current = result;
     for (let i = 0; i < keys.length; i++) {

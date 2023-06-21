@@ -2,7 +2,7 @@ import { PSNS } from '../../../modules/key';
 import { ILogger } from '../../../services/logger';
 import { ReporterService } from '../../../services/reporter';
 import { IORedisStoreService as IORedisStore } from '../../../services/store/clients/ioredis';
-import { JobStatsRange } from '../../../typedefs/stats';
+import { JobStatsRange } from '../../../types/stats';
 import { RedisClientType, RedisConnection } from '../../$setup/cache/ioredis';
 
 jest.mock('../../../services/store/clients/ioredis', () => {

@@ -6,7 +6,7 @@ import {
 import {
   ActivityType,
   ActivityData,
-  ActivityMetadata } from '../../../typedefs/activity';
+  ActivityMetadata } from '../../../types/activity';
 import { Trigger } from '../../../services/activities/trigger';
 import { RedisConnection } from '../../$setup/cache/ioredis';
 import { EngineService } from '../../../services/engine';

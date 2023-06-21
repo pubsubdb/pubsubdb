@@ -1,5 +1,3 @@
-import { ReverseAbbreviationMap } from "./abbreviation";
-
 type JobData = Record<string, unknown|Record<string, unknown>>;
 type JobsData = Record<string, unknown>;
 
@@ -25,14 +23,11 @@ type JobMetadata = {
   atp: string;  //activity_type
   stp: string;  //activity_subtype
   err?: string; //stringified job error json: {message: string, code: number, error?}
+  del?: number; //process data del policy
 };
 
-type AbbreviatedJobMetadata = {
-  [key in keyof JobMetadata]: JobMetadata[keyof ReverseAbbreviationMap & key];
-};
-
-type JobActivityContext = {
-  metadata: AbbreviatedJobMetadata;
+type JobState = {
+  metadata: JobMetadata;
   data: JobData;
   [activityId: symbol]: {
     input: ActivityData;
@@ -51,9 +46,9 @@ type JobOutput = {
 
 //the minimum info needed to restore/resume a job in context
 //(e.g., a webhook signal needs this to restore the job context)
-type PartialJobContext = {
+type PartialJobState = {
   metadata: Partial<JobMetadata> & Pick<JobMetadata, 'aid' | 'jid'>;
   data: JobData;
 }
 
-export { JobActivityContext, JobData, JobsData, JobMetadata, AbbreviatedJobMetadata, PartialJobContext, JobOutput };
+export { JobState, JobData, JobsData, JobMetadata, PartialJobState, JobOutput };

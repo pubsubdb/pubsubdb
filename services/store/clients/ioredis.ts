@@ -3,7 +3,7 @@ import { ILogger } from '../../logger';
 import { SerializerService as Serializer } from '../../serializer';
 import { Cache } from '../cache';
 import { StoreService } from '../index';
-import { RedisClientType, RedisMultiType } from '../../../typedefs/ioredisclient';
+import { RedisClientType, RedisMultiType } from '../../../types/ioredisclient';
 
 class IORedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
   redisClient: RedisClientType;
@@ -19,10 +19,6 @@ class IORedisStoreService extends StoreService<RedisClientType, RedisMultiType> 
 
   getMulti(): RedisMultiType {
     return this.redisClient.multi();
-  }
-
-  zAdd(key: string, score: number | string, value: string | number, redisMulti: RedisMultiType): Promise<any> {
-    return redisMulti[this.commands.zadd](key, score, value);
   }
 
   hGetAllResult(result: any) {

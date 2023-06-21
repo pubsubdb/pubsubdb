@@ -1,7 +1,7 @@
 import { Pipe } from "../pipe";
-import { MappingStatements } from "../../typedefs/map";
-import { PubSubDBManifest, StoreService } from "../../typedefs/pubsubdb";
-import { RedisClient, RedisMulti } from "../../typedefs/redis";
+import { MappingStatements } from "../../types/map";
+import { PubSubDBManifest, StoreService } from "../../types/pubsubdb";
+import { RedisClient, RedisMulti } from "../../types/redis";
 
 class Validator {
   manifest: PubSubDBManifest | null = null;

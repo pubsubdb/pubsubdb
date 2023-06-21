@@ -1,5 +1,5 @@
-import { PubSubDBGraph } from "../../typedefs/pubsubdb";
-import { CollationKey } from "../../typedefs/collator";
+import { PubSubDBGraph } from "../../types/pubsubdb";
+import { CollationKey } from "../../types/collator";
 
 class CollatorService {
 

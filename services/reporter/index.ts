@@ -1,10 +1,10 @@
 import { ILogger } from '../logger';
 import { Pipe } from '../pipe';
 import { StoreService as Store } from '../store';
-import {AppVID} from '../../typedefs/app';
-import { TriggerActivity } from '../../typedefs/activity';
-import { JobActivityContext } from '../../typedefs/job';
-import { RedisClient, RedisMulti } from '../../typedefs/redis';
+import { TriggerActivity } from '../../types/activity';
+import { AppVID } from '../../types/app';
+import { JobState } from '../../types/job';
+import { RedisClient, RedisMulti } from '../../types/redis';
 import {
   GetStatsOptions,
   StatsResponse,
@@ -18,7 +18,7 @@ import {
   TimeSegment,
   CountByFacet, 
   StatsType,
-  Stat } from '../../typedefs/stats';
+  StatType } from '../../types/stats';
 
 class ReporterService {
   private appVersion: AppVID;
@@ -315,7 +315,7 @@ class ReporterService {
    * be saved to the database. doesn't actually save the stats, but
    * just generates the info that should be saved
    */
-  resolveTriggerStatistics({ stats: statsConfig}: TriggerActivity, context: JobActivityContext): StatsType {
+  resolveTriggerStatistics({ stats: statsConfig}: TriggerActivity, context: JobState): StatsType {
     const stats: StatsType = {
       general: [],
       index: [],
@@ -347,7 +347,7 @@ class ReporterService {
     return metric === 'index';
   }
 
-  resolveMetric({metric, target}, context: JobActivityContext): Stat {
+  resolveMetric({metric, target}, context: JobState): StatType {
     const pipe = new Pipe([[target]], context);
     const resolvedValue = pipe.process().toString();
     const resolvedTarget = this.resolveTarget(metric, target, resolvedValue);
@@ -356,7 +356,7 @@ class ReporterService {
     } else if (metric === 'count') {
       return { metric, target: resolvedTarget, value: 1 };
     }
-    return { metric, target: resolvedTarget, value: resolvedValue } as Stat;
+    return { metric, target: resolvedTarget, value: resolvedValue } as StatType;
   }
 
   isCardinalMetric(metric: string): boolean {

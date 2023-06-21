@@ -3,7 +3,10 @@
  * 
  * psdb ->                                            {hash}    pubsubdb config {version: "0.0.1", namespace: "psdb"}
  * psdb:a:<appid> ->                                  {hash}    app profile { "id": "appid", "version": "2", "versions/1": "GMT", "versions/2": "GMT"}
+ * psdb:<appid>:e:<engineId> ->                       {string}  setnx to ensure only one engine of given id
  * psdb:<appid>:w: ->                                 {zset}    work items/tasks an engine must do like garbage collect or hook a set of matching records (hookAll)
+ * psdb:<appid>:d: ->                                 {zset}    an orders set of time slice lists that have 1+ jobs to delete
+ * psdb:<appid>:d:<timeValue?> ->                     {list}    job ids to delete for the slice of time
  * psdb:<appid>:q: ->                                 {hash}    quorum-wide messages
  * psdb:<appid>:q:<ngnid> ->                          {hash}    engine-targeted messages (targeted quorum-oriented message)
  * psdb:<appid>:j:<jobid> ->                          {hash}    job data
@@ -20,8 +23,7 @@
  * psdb:<appid>:signals ->                            {hash}    dynamic hook signals (hget/hdel) when resolving (always self-clean); added/removed at runtime
  * psdb:<appid>:sym:keys: ->                          {hash}    list of symbol ranges and :cursor assigned at version deploy time for job keys
  * psdb:<appid>:sym:keys:<activityid|$subscribes> ->  {hash}    list of symbols based upon schema enums (initially) and adaptively optimized (later) during runtime; if '$subscribes' is used as the activityid, it is a top-level `job` symbol set (for job keys)
- * psdb:<appid>:sym:vals: ->                          {hash}    list of symbol ranges and :cursor assigned at version deploy time for job vals
- * psdb:<appid>:sym:vals:<activityid|$subscribes> ->  {hash}    list of symbols based upon schema enums (initially) and adaptively optimized (later) during runtime; if '$subscribes' is used as the activityid, it is a top-level `job` symbol set (for job vals)
+ * psdb:<appid>:sym:vals: ->                          {hash}    list of symbols for job values across all app versions
  */
 
 //default namespace for pubsubdb
@@ -30,6 +32,8 @@ const PSNS = "psdb";
 //these are the entity types that are stored in the key/value store
 enum KeyType {
   APP,
+  DELETE_RANGE,
+  ENGINE_ID,
   HOOKS,
   JOB_STATE,
   JOB_STATS_GENERAL,
@@ -58,6 +62,7 @@ type KeyStoreParams = {
   dateTime?: string;    //UTC date time: YYYY-MM-DDTHH:MM (20203-04-12T00:00); serves as a time-series bucket for the job_key
   facet?: string;       //data path starting at root with values separated by colons (e.g. "object/type:bar")
   topic?: string;       //topic name (e.g., "foo" or "" for top-level)
+  timeValue?: number;   //time value (rounded to minute) (for delete range)
 };
 
 class KeyService {
@@ -77,8 +82,12 @@ class KeyService {
     switch (keyType) {
       case KeyType.PUBSUBDB:
         return namespace;
+      case KeyType.ENGINE_ID:
+        return `${namespace}:${params.appId}:e:${params.engineId}`;
       case KeyType.WORK_ITEMS:
         return `${namespace}:${params.appId}:w:`;
+      case KeyType.DELETE_RANGE:
+          return `${namespace}:${params.appId}:d:${params.timeValue || ''}`;
       case KeyType.APP:
         return `${namespace}:a:${params.appId || ''}`;
       case KeyType.QUORUM:
@@ -107,8 +116,8 @@ class KeyService {
         //`symbol keys` provide the registry of replacement values for job keys
         return `${namespace}:${params.appId}:sym:keys:${params.activityId || ''}`;
       case KeyType.SYMVALS:
-        //`symbol values` provide the registry of replacement values for job values
-        return `${namespace}:${params.appId}:sym:vals:${params.activityId || ''}`;
+        //`symbol vals` provide the registry of replacement values for job vals
+        return `${namespace}:${params.appId}:sym:vals:`;
       case KeyType.STREAMS:
         return `${namespace}:${params.appId || ''}:x:${params.topic || ''}`;
       default:

@@ -5,16 +5,16 @@ import { EngineService } from '../engine';
 import { ILogger } from '../logger';
 import { StoreService } from '../store';
 import { SubService } from '../sub';
-import { CacheMode } from '../../typedefs/cache';
+import { CacheMode } from '../../types/cache';
 import {
   QuorumMessage,
   QuorumMessageCallback,
   RollCallMessage,
   SubscriptionCallback,
   ThrottleMessage
-} from '../../typedefs/quorum';
-import { PubSubDBApps, PubSubDBConfig } from '../../typedefs/pubsubdb';
-import { RedisClient, RedisMulti } from '../../typedefs/redis';
+} from '../../types/quorum';
+import { PubSubDBApps, PubSubDBConfig } from '../../types/pubsubdb';
+import { RedisClient, RedisMulti } from '../../types/redis';
 
 //wait time to see if quorum is reached
 const QUORUM_DELAY = 250;
@@ -70,8 +70,10 @@ class QuorumService {
       await instance.subscribe.subscribe(KeyType.QUORUM, instance.subscriptionHandler(), appId);
       //app-specific quorum subscription (used for pubsub one-time request/response)
       await instance.subscribe.subscribe(KeyType.QUORUM, instance.subscriptionHandler(), appId, instance.guid);
-      //tell engine to check for open tasks
+      //tell engine to check for open `hook` tasks
       instance.engine.processWorkItems();
+      //tell engine to check for open `scrub` tasks
+      instance.engine.processCleanupItems();
       return instance;
     }
   }

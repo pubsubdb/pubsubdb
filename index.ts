@@ -8,7 +8,7 @@ import { IORedisSubService as IORedisSub } from "./services/sub/clients/ioredis"
 import { StoreService as Store } from "./services/store";
 import { StreamService as Stream } from "./services/stream";
 import { SubService as Sub } from "./services/sub";
-import { PubSubDBConfig } from './typedefs/pubsubdb';
+import { PubSubDBConfig } from './types/pubsubdb';
 
 export {
   PubSubDB,

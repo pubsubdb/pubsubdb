@@ -1,15 +1,15 @@
 import { Pipe } from "../pipe";
-import { JobActivityContext } from "../../typedefs/job";
-import { Pipe as PipeType } from "../../typedefs/pipe";
-import { Match, TransitionRule } from "../../typedefs/transition";
+import { JobState } from "../../types/job";
+import { Pipe as PipeType } from "../../types/pipe";
+import { TransitionMatch, TransitionRule } from "../../types/transition";
 
 type RuleType = null | undefined | boolean | string | number | Date | Record<string, any>;
 
 class MapperService {
   private rules: Record<string, unknown>;
-  private data: JobActivityContext;
+  private data: JobState;
 
-  constructor(rules: Record<string, unknown>, data: JobActivityContext) {
+  constructor(rules: Record<string, unknown>, data: JobState) {
     this.rules = rules;
     this.data = data;
   }
@@ -54,14 +54,14 @@ class MapperService {
     return pipe.process();
   }
 
-  static evaluate(transitionRule: TransitionRule|boolean, context: JobActivityContext): boolean {
+  static evaluate(transitionRule: TransitionRule|boolean, context: JobState): boolean {
     if (typeof transitionRule === 'boolean') {
       return transitionRule;
     }
     const orGate = transitionRule.gate === 'or';
     let allAreTrue = true;
     let someAreTrue = false;
-    transitionRule.match.forEach(({ expected, actual }: Match) => {
+    transitionRule.match.forEach(({ expected, actual }: TransitionMatch) => {
       if ((orGate && !someAreTrue) || (!orGate && allAreTrue)) {
         const result = Pipe.resolve(actual, context) === expected;
         if (orGate && result) {

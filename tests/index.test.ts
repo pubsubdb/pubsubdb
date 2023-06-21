@@ -5,14 +5,14 @@ import {
   RedisStore,
   RedisStream,
   RedisSub } from '../index';
-import { JobStatsInput } from '../typedefs/stats';
+import { JobStatsInput } from '../types/stats';
 import {
   StreamData,
   StreamDataResponse,
-  StreamStatus } from '../typedefs/stream';
+  StreamStatus } from '../types/stream';
 import { RedisConnection, RedisClientType } from './$setup/cache/redis';
 import { StreamSignaler } from '../services/signaler/stream';
-import { JobOutput } from '../typedefs/job';
+import { JobOutput } from '../types/job';
 import { sleepFor } from '../modules/utils';
 
 describe('pubsubdb', () => {
@@ -60,6 +60,7 @@ describe('pubsubdb', () => {
   afterAll(async () => {
     await StreamSignaler.stopConsuming();
     await RedisConnection.disconnectAll();
+    await pubSubDB.stop();
   });
 
   describe('init()', () => {
@@ -291,7 +292,7 @@ describe('pubsubdb', () => {
         actual_release_series: '202304110015',
       };
       const response = await pubSubDB.hook('order.routed', payload);
-      expect(response).toBe(946000000000000); //fulfill (last activity still pending at this stage)
+      expect(response).toBe(946000000000000); //fulfill (last activity) still pending at this stage
       await sleepFor(250);
       const status = await pubSubDB.getStatus(payload.id);
       expect(status).toBe(646000000000000); //fulfill should be done by now
@@ -315,6 +316,13 @@ describe('pubsubdb', () => {
       };
       const response = await pubSubDB.hookAll('order.routed', payload, query, ['color:red']);
       expect(response).not.toBeNull();
+    });
+  });
+
+  describe('Add strings to compress', () => {
+    it('should add symbols', async () => {
+      const registered = await pubSubDB.compress(['the quick brown fox', 'jumped over the lazy dog']);
+      expect(registered).toBe(true);
     });
   });
 });

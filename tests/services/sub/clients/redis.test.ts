@@ -2,7 +2,7 @@ import { KeyType, PSNS } from '../../../../modules/key';
 import { LoggerService } from '../../../../services/logger';
 import { RedisStoreService } from '../../../../services/store/clients/redis';
 import { RedisSubService } from '../../../../services/sub/clients/redis';
-import { SubscriptionCallback } from '../../../../typedefs/quorum';
+import { SubscriptionCallback } from '../../../../types/quorum';
 import { RedisConnection, RedisClientType } from '../../../$setup/cache/redis';
 
 describe('RedisSubService', () => {

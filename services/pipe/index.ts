@@ -1,6 +1,6 @@
 import FUNCTIONS from './functions'
-import { JobActivityContext, JobData, JobsData } from '../../typedefs/job';
-import { PipeItem, PipeItems, Pipe as PipeType } from '../../typedefs/pipe';
+import { JobState, JobData, JobsData } from '../../types/job';
+import { PipeItem, PipeItems, Pipe as PipeType } from '../../types/pipe';
 
 class Pipe {
   rules: PipeType;
@@ -19,7 +19,7 @@ class Pipe {
     return typeof obj === 'object' && obj !== null && !Array.isArray(obj) && '@pipe' in obj;
   }
 
-  static resolve(unresolved: { [key: string]: unknown }|PipeItem, context: Partial<JobActivityContext>): any {
+  static resolve(unresolved: { [key: string]: unknown }|PipeItem, context: Partial<JobState>): any {
     let pipe: Pipe;
     if (Pipe.isPipeObject(unresolved)) {
       pipe = new Pipe(unresolved['@pipe'], context);

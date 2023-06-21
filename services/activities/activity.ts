@@ -15,17 +15,16 @@ import {
   ActivityType,
   ActivityData,
   ActivityMetadata,
-  HookData,
-  Consumes } from "../../typedefs/activity";
-import { JobActivityContext } from "../../typedefs/job";
+  Consumes } from "../../types/activity";
+import { JobState } from "../../types/job";
 import {
   MultiResponseFlags,
   RedisClient,
-  RedisMulti } from "../../typedefs/redis";
-import { MultiDimensionalDocument } from "../../typedefs/serializer";
-import { StreamCode, StreamStatus } from "../../typedefs/stream";
-import { TransitionRule, Transitions } from "../../typedefs/transition";
-import { getValueByPath, restoreHierarchy } from "../../modules/utils";
+  RedisMulti } from "../../types/redis";
+import { StringAnyType } from "../../types/serializer";
+import { StreamCode, StreamStatus } from "../../types/stream";
+import { TransitionRule, Transitions } from "../../types/transition";
+import { formatISODate, getValueByPath, restoreHierarchy } from "../../modules/utils";
 
 /**
  * The base class for all activities
@@ -33,10 +32,10 @@ import { getValueByPath, restoreHierarchy } from "../../modules/utils";
 class Activity {
   config: ActivityType;
   data: ActivityData;
+  hook: ActivityData;
   metadata: ActivityMetadata;
   store: StoreService<RedisClient, RedisMulti>
-  hook: HookData;
-  context: JobActivityContext;
+  context: JobState;
   engine: EngineService;
   logger: ILogger;
   status: StreamStatus = StreamStatus.SUCCESS;
@@ -47,15 +46,15 @@ class Activity {
     config: ActivityType,
     data: ActivityData,
     metadata: ActivityMetadata,
-    hook: HookData | null,
+    hook: ActivityData | null,
     engine: EngineService,
-    context?: JobActivityContext) {
+    context?: JobState) {
       this.config = config;
       this.data = data;
       this.metadata = metadata;
       this.hook = hook;
       this.engine = engine;
-      this.context = context || { data: {}, metadata: {} } as JobActivityContext;
+      this.context = context || { data: {}, metadata: {} } as JobState;
       this.logger = engine.logger;
       this.store = engine.store;
   }
@@ -173,7 +172,7 @@ class Activity {
     const jobId = this.context.metadata.jid;
     this.bindJobMetadata();
     this.bindActivityMetadata();
-    let state: MultiDimensionalDocument = {};
+    let state: StringAnyType = {};
     await this.bindJobState(state);
     await this.bindActivityState(state);
     const symbolNames = [`$${this.config.subscribes}`, this.metadata.aid];
@@ -182,11 +181,11 @@ class Activity {
 
   bindJobMetadata(): void {
     //both legs of the most recently run activity (1 and 2) modify ju (job_updated)
-    this.context.metadata.ju = new Date().toISOString();
+    this.context.metadata.ju = formatISODate(new Date());
   }
 
   bindActivityMetadata(): void {
-    const self: MultiDimensionalDocument = this.context['$self'];
+    const self: StringAnyType = this.context['$self'];
     if (!self.output.metadata) {
       self.output.metadata = {};
     }
@@ -195,7 +194,7 @@ class Activity {
     }
     //todo: only bind ju and err if an activity update
     self.output.metadata.ac = 
-      self.output.metadata.au = new Date().toISOString();
+      self.output.metadata.au = formatISODate(new Date());
     self.output.metadata.atp = this.config.type;
     if (this.config.subtype) {
       self.output.metadata.stp = this.config.subtype;
@@ -203,7 +202,7 @@ class Activity {
     self.output.metadata.aid = this.metadata.aid;
   }
 
-  async bindJobState(state: MultiDimensionalDocument): Promise<void> {
+  async bindJobState(state: StringAnyType): Promise<void> {
     const triggerConfig = await this.getTriggerConfig();
     const PRODUCES = [
       ...(triggerConfig.PRODUCES || []),
@@ -217,7 +216,7 @@ class Activity {
     }
   }
 
-  async bindActivityState(state: MultiDimensionalDocument,): Promise<void> {
+  async bindActivityState(state: StringAnyType,): Promise<void> {
     const produces = [
       ...this.config.produces,
       ...this.bindActivityMetadataPaths()
@@ -243,7 +242,7 @@ class Activity {
   }
 
   async getState(jobId?: string) {
-    //assemble list of paths to consume (data and metadata)
+    //assemble list of paths necessary for the activty context (data and metadata)
     const consumes: Consumes = {};
     for (const [activityId, paths] of Object.entries(this.config.consumes)) {
       consumes[activityId] = [];
@@ -252,18 +251,17 @@ class Activity {
       }
     }
     consumes[`$${this.config.subscribes}`] = MDATA_SYMBOLS.JOB.KEYS.map((key) => `metadata/${key}`);
-    //todo: bind job data using mapping statements
     jobId = jobId || this.context.metadata.jid;
     const { id: appId } = await this.engine.getVID();
-    //todo: use status to check if the job is in a terminal state and throw error
-
+    //todo: check if the job is in a terminal state (status)
     const [state, status] = await this.store.getState(jobId, appId, consumes);
     const context = restoreHierarchy(state);
     this.initSelf(context);
-    this.context = context as JobActivityContext;
+    this.initPolicies(context);
+    this.context = context as JobState;
   }
 
-  initSelf(context: MultiDimensionalDocument) {
+  initSelf(context: StringAnyType) {
     const activityId = this.metadata.aid;
     if (!context[activityId]) {
       context[activityId] = { };
@@ -279,6 +277,11 @@ class Activity {
       self.hook = { };
     }
     context['$self'] = self;
+  }
+
+  initPolicies(context) {
+    //`retry` and `del` policies
+    context.metadata.del = this.config.del;
   }
 
   bindActivityData(type: 'output' | 'hook'): void {

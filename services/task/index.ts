@@ -1,11 +1,15 @@
 import { ILogger } from '../logger';
 import { StoreService } from '../store';
-import { RedisClient, RedisMulti } from '../../typedefs/redis';
-import { HookInterface } from '../../typedefs/hook';
+import { RedisClient, RedisMulti } from '../../types/redis';
+import { HookInterface } from '../../types/hook';
+import { XSleepFor } from '../../modules/utils';
+
+const PERSISTENCE_SECONDS = 60;
 
 class TaskService {
   store: StoreService<RedisClient, RedisMulti>;
   logger: ILogger;
+  cleanupTimeout: NodeJS.Timeout | null = null;
 
   constructor(
     store: StoreService<RedisClient, RedisMulti>,
@@ -28,13 +32,40 @@ class TaskService {
       } else {
         await this.store.deleteProcessedTaskQueue(workItemKey, sourceKey, destinationKey);
       }
-      //call in next tick
       setImmediate(() => this.processWorkItems(hookCallback));
     }
   }
 
   async enqueueWorkItems(keys: string[]): Promise<void> {
     await this.store.addTaskQueues(keys);
+  }
+
+  async registerJobForCleanup(jobId: string, del = PERSISTENCE_SECONDS): Promise<void> {
+    if (del > -1) {
+      const deletionTime = Math.floor((Date.now() + del * 1000) / 60000) * 60000; //one minute deletion groups
+      await this.store.registerJobForCleanup(jobId, deletionTime);
+    }
+  }
+
+  async processCleanupItems(cleanupCallback: (jobId: string) => Promise<void>, listKey?: string): Promise<void> {
+    const job = await this.store.getNextCleanupJob(listKey);
+    if (job) {
+      const [listKey, jobId] = job;
+      await cleanupCallback(jobId);
+      setImmediate(() => this.processCleanupItems(cleanupCallback, listKey));
+    } else {
+      let sleep = XSleepFor(PERSISTENCE_SECONDS * 1000);
+      this.cleanupTimeout = sleep.timerId;
+      await sleep.promise;
+      this.processCleanupItems(cleanupCallback)
+     }
+  }
+
+  cancelCleanup() {
+    if (this.cleanupTimeout !== undefined) {
+      clearTimeout(this.cleanupTimeout);
+      this.cleanupTimeout = undefined;
+    }
   }
 }
 

@@ -1,5 +1,5 @@
 import { Logger, createLogger, transports, format } from 'winston';
-import { ILogger } from '../../typedefs/logger';
+import { ILogger } from '../../types/logger';
 
 class LoggerService implements ILogger {
   private logger: Logger;
