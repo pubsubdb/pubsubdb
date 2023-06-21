@@ -50,19 +50,19 @@ class Deployer {
       //generate JOB symbols
       const [,trigger] = this.findTrigger(graph);
       const topic = trigger.subscribes;
-      const [lower, upper, symbols] = await this.store.reserveSymbolRange(`$${topic}`, appId, DEFAULT_RANGE_SIZE, 'JOB');
+      const [lower, upper, symbols] = await this.store.reserveSymbolRange(`$${topic}`, DEFAULT_RANGE_SIZE, 'JOB');
       const prefix = ''; //job meta/data is NOT namespaced
       const newSymbols = this.bindSymbols(lower, upper, symbols, prefix, trigger.PRODUCES);
       if (Object.keys(newSymbols).length) {
-        await this.store.addSymbols(`$${topic}`, appId, newSymbols);
+        await this.store.addSymbols(`$${topic}`, newSymbols);
       }
       //generate ACTIVITY symbols
       for (const [activityId, activity] of Object.entries(graph.activities)) {
-        const [lower, upper, symbols] = await this.store.reserveSymbolRange(activityId, appId, DEFAULT_RANGE_SIZE, 'ACTIVITY');
+        const [lower, upper, symbols] = await this.store.reserveSymbolRange(activityId, DEFAULT_RANGE_SIZE, 'ACTIVITY');
         const prefix = `${activityId}/`; //activity meta/data is namespaced
         const newSymbols = this.bindSymbols(lower, upper, symbols, prefix, activity.produces);
         if (Object.keys(newSymbols).length) {
-          await this.store.addSymbols(activityId, appId, newSymbols);
+          await this.store.addSymbols(activityId, newSymbols);
         }
       }
     }

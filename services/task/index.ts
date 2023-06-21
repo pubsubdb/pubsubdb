@@ -2,7 +2,7 @@ import { ILogger } from '../logger';
 import { StoreService } from '../store';
 import { RedisClient, RedisMulti } from '../../types/redis';
 import { HookInterface } from '../../types/hook';
-import { XSleepFor } from '../../modules/utils';
+import { XSleepFor, sleepFor } from '../../modules/utils';
 
 const PERSISTENCE_SECONDS = 60;
 
@@ -52,7 +52,8 @@ class TaskService {
     if (job) {
       const [listKey, jobId] = job;
       await cleanupCallback(jobId);
-      setImmediate(() => this.processCleanupItems(cleanupCallback, listKey));
+      await sleepFor(10); //pause for 10ms to inerleave other tasks
+      this.processCleanupItems(cleanupCallback, listKey);
     } else {
       let sleep = XSleepFor(PERSISTENCE_SECONDS * 1000);
       this.cleanupTimeout = sleep.timerId;

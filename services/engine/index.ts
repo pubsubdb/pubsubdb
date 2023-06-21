@@ -500,7 +500,7 @@ class EngineService {
   }
   async getState(topic: string, jobId: string): Promise<JobOutput> {
     const { id: appId } = await this.getVID();
-    const jobSymbols = await this.store.getSymbols(`$${topic}`, appId);
+    const jobSymbols = await this.store.getSymbols(`$${topic}`);
     const consumes: Consumes = {
       [`$${topic}`]: Object.keys(jobSymbols)
     }
@@ -510,7 +510,9 @@ class EngineService {
     }
     const [state, status] = output;
     const stateTree = restoreHierarchy(state) as JobOutput;
-    stateTree.metadata.js = status;
+    if (status && stateTree.metadata) {
+      stateTree.metadata.js = status;
+    }
     return stateTree;
   }
 
