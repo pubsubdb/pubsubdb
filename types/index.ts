@@ -1,54 +1,51 @@
 export {
-  BaseActivity as ActivityBase,
   ActivityType,
   ActivityDataType,
   ActivityContext,
   ActivityData,
   ActivityMetadata,
-  AwaitActivity,
   Consumes,
+  AwaitActivity,
+  BaseActivity,
   ExecActivity,
-  FlattenedDataObject,
-  HookData,
   IterateActivity,
   RequestActivity,
   TriggerActivity,
-  TriggerActivityStats } from './typedefs/activity';
+  TriggerActivityStats } from './activity';
 export {
   App,
   AppVID,
   AppTransitions,
   AppSubscriptions
-} from './typedefs/app';
-export { AsyncSignal } from './typedefs/async';
-export { CacheMode } from './typedefs/cache';
-export { CollationKey } from './typedefs/collator';
+} from './app';
+export { AsyncSignal } from './async';
+export { CacheMode } from './cache';
+export { CollationKey } from './collator';
 export {
-  Condition,
-  Gate,
+  HookCondition,
   HookConditions,
-  HookRule,
+  HookGate,
   HookInterface,
-  Hooks,
+  HookRule,
+  HookRules,
   HookSignal
-} from './typedefs/hook';
+} from './hook';
 export {
   RedisClientType as IORedisClientType,
-  RedisMultiType as IORedisMultiType } from './typedefs/ioredisclient';
-export { ILogger } from './typedefs/logger';
+  RedisMultiType as IORedisMultiType } from './ioredisclient';
+export { ILogger } from './logger';
 export {
-  AbbreviatedJobMetadata,
-  JobActivityContext,
+  JobState,
   JobData,
   JobsData,
   JobMetadata,
-  PartialJobContext,
-  JobOutput } from './typedefs/job';
-export { MappingStatements } from './typedefs/map';
+  JobOutput,
+  PartialJobState } from './job';
+export { MappingStatements } from './map';
 export {
   Pipe,
   PipeItem,
-  PipeItems } from './typedefs/pipe';
+  PipeItems } from './pipe';
 export {
   PubSubDB,
   PubSubDBApp,
@@ -60,39 +57,38 @@ export {
   PubSubDBSettings,
   PubSubDBWorker,
   StoreService
-} from './typedefs/pubsubdb';
+} from './pubsubdb';
 export {
   ActivateMessage,
-  QuorumMessage,
   JobMessage,
   JobMessageCallback,
   PingMessage,
   PongMessage,
   ReportMessage,
+  QuorumMessage,
   QuorumProfile,
   QuorumProcessed,
   QuorumStatus,
   RollCallMessage,
   SubscriptionCallback,
   ThrottleMessage,
-  WorkMessage } from './typedefs/quorum';
+  WorkMessage } from './quorum';
 export {
   MultiResponseFlags,
   RedisClient,
-  RedisMulti } from './typedefs/redis'; //common redis types
+  RedisMulti } from './redis'; //common redis types
 export {
   RedisClientType,
-  RedisMultiType } from './typedefs/redisclient';
+  RedisMultiType } from './redisclient';
 export {
-  AbbreviationMap,
-  AbbreviationMaps,
-  AbbreviationObjects,
-  FlatDocument,
-  FlatObject,
   JSONSchema,
-  MultiDimensionalDocument,
+  StringStringType,
+  StringAnyType,
+  SymbolMap,
+  SymbolMaps,
+  SymbolSets,
   SymbolRanges,
-  Symbols } from './typedefs/serializer';
+  Symbols } from './serializer';
 export {
   AggregatedData,
   CountByFacet,
@@ -101,7 +97,7 @@ export {
   Measure,
   MeasureIds,
   MetricTypes,
-  Stat,
+  StatType,
   StatsType,
   IdsResponse,
   JobStats,
@@ -109,7 +105,7 @@ export {
   JobStatsRange,
   StatsResponse,
   Segment,
-  TimeSegment } from './typedefs/stats';
+  TimeSegment } from './stats';
 export {
   StreamCode,
   StreamConfig,
@@ -118,8 +114,8 @@ export {
   StreamDataResponse,
   StreamRetryPolicy,
   StreamRole,
-  StreamStatus } from './typedefs/stream';
+  StreamStatus } from './stream';
 export {
-  Match,
+  TransitionMatch,
   TransitionRule,
-  Transitions } from './typedefs/transition';
+  Transitions } from './transition';

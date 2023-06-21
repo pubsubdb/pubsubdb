@@ -5,7 +5,7 @@
 //   RegisterTimeoutError, 
 //   ExecActivityError, 
 //   DuplicateActivityError} from '../../../modules/errors';
-import { getGuid, getTimeSeries } from '../../modules/utils';
+import { formatISODate, getGuid, getTimeSeries } from '../../modules/utils';
 import { Activity } from "./activity";
 import { CollatorService } from '../collator';
 import { EngineService } from '../engine';
@@ -15,10 +15,9 @@ import {
   ActivityData,
   ActivityMetadata,
   ActivityType,
-  TriggerActivity,
-  HookData } from "../../typedefs/activity";
-import { JobActivityContext } from '../../typedefs/job';
-import { RedisMulti } from '../../typedefs/redis';
+  TriggerActivity } from "../../types/activity";
+import { JobState } from '../../types/job';
+import { RedisMulti } from '../../types/redis';
 
 class Trigger extends Activity {
   config: TriggerActivity;
@@ -27,9 +26,9 @@ class Trigger extends Activity {
     config: ActivityType,
     data: ActivityData,
     metadata: ActivityMetadata,
-    hook: HookData | null,
+    hook: ActivityData | null,
     engine: EngineService,
-    context?: JobActivityContext) {
+    context?: JobState) {
       super(config, data, metadata, hook, engine, context);
   }
 
@@ -63,7 +62,7 @@ class Trigger extends Activity {
     }
   }
 
-  createInputContext(): Partial<JobActivityContext> {
+  createInputContext(): Partial<JobState> {
     const input = { 
       [this.metadata.aid]: {
         input: { data: this.data }
@@ -72,7 +71,7 @@ class Trigger extends Activity {
         input: { data: this.data },
         output: { data: this.data }
       },
-    } as Partial<JobActivityContext>;
+    } as Partial<JobState>;
     return input
   }
 
@@ -82,7 +81,7 @@ class Trigger extends Activity {
     const jobKey = this.resolveJobKey(inputContext);
 
     //create job context
-    const utc = new Date().toISOString();
+    const utc = formatISODate(new Date());
     const { id, version } = await this.engine.getVID();
     const activityMetadata = { ...this.metadata, jid: jobId, key: jobKey };
     this.context = {
@@ -126,12 +125,12 @@ class Trigger extends Activity {
     return this.config.collationKey - this.config.collationInt * 3;
   }
 
-  resolveJobId(context: Partial<JobActivityContext>): string {
+  resolveJobId(context: Partial<JobState>): string {
     const jobId = this.config.stats?.id;
     return jobId ? Pipe.resolve(jobId, context) : getGuid();
   }
 
-  resolveJobKey(context: Partial<JobActivityContext>): string {
+  resolveJobKey(context: Partial<JobState>): string {
     const jobKey = this.config.stats?.key;
     return jobKey ? Pipe.resolve(jobKey, context) : '';
   }

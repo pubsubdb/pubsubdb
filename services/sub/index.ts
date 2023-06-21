@@ -1,6 +1,6 @@
 import { KeyStoreParams, KeyType } from '../../modules/key';
 import { ILogger } from '../logger';
-import { SubscriptionCallback } from '../../typedefs/quorum';
+import { SubscriptionCallback } from '../../types/quorum';
 
 abstract class SubService<T, U> {
   redisClient: T;

@@ -1,6 +1,9 @@
 import { EngineService } from '../engine';
 import { Activity, ActivityType } from './activity';
-import { ActivityData, ActivityMetadata, HookData, RequestActivity } from '../../typedefs/activity';
+import {
+  ActivityData,
+  ActivityMetadata,
+  RequestActivity } from '../../types/activity';
 
 class Request extends Activity {
   config: RequestActivity;
@@ -9,7 +12,7 @@ class Request extends Activity {
     config: ActivityType,
     data: ActivityData,
     metadata: ActivityMetadata,
-    hook: HookData | null,
+    hook: ActivityData | null,
     engine: EngineService) {
     super(config, data, metadata, hook, engine);
   }

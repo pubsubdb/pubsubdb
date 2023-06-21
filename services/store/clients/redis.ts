@@ -3,7 +3,7 @@ import { ILogger } from '../../logger';
 import { SerializerService as Serializer } from '../../serializer';
 import { Cache } from '../cache';
 import { StoreService } from '../index';
-import { RedisClientType, RedisMultiType } from '../../../typedefs/redisclient';
+import { RedisClientType, RedisMultiType } from '../../../types/redisclient';
 
 class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
   redisClient: RedisClientType;
@@ -17,6 +17,8 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
   constructor(redisClient: RedisClientType) {
     super(redisClient);
     this.commands = {
+      setnx: 'SETNX',
+      del: 'DEL',
       hset: 'HSET',
       hsetnx: 'HSETNX',
       hincrby: 'HINCRBY',
@@ -26,10 +28,14 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
       hgetall: 'HGETALL',
       hincrbyfloat: 'HINCRBYFLOAT',
       zrange: 'ZRANGE',
+      zrangebyscore_withscores: 'ZRANGEBYSCORE_WITHSCORES',
+      zrangebyscore: 'ZRANGEBYSCORE',
       zrem: 'ZREM',
       zadd: 'ZADD',
       lmove: 'LMOVE',
       lrange: 'LRANGE',
+      llen: 'LLEN',
+      lpop: 'LPOP',
       rename: 'RENAME',
       rpush: 'RPUSH',
       xack: 'XACK',
@@ -46,6 +52,26 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
     const topic = this.mintKey(keyType, { appId, engineId });
     const status: number = await this.redisClient.publish(topic, JSON.stringify(message));
     return this.isSuccessful(status);
+  }
+
+  zAdd(key: string, score: number | string, value: string | number, redisMulti?: RedisMultiType): Promise<any> {
+    return (redisMulti || this.redisClient)[this.commands.zadd](key, { score: score, value: value.toString() } as any);
+  }
+
+  async zRangeByScoreWithScores(key: string, score: number | string, value: string | number): Promise<string | null> {
+    const result = await this.redisClient[this.commands.zrangebyscore_withscores](key, score, value);
+    if (result?.length > 0) {
+      return result[0];
+    }
+    return null;
+  }
+
+  async zRangeByScore(key: string, score: number | string, value: string | number): Promise<string | null> {
+    const result = await this.redisClient[this.commands.zrangebyscore](key, score, value);
+    if (result?.length > 0) {
+      return result[0];
+    }
+    return null;
   }
 
   async xgroup(command: 'CREATE', key: string, groupName: string, id: string, mkStream?: 'MKSTREAM'): Promise<boolean> {

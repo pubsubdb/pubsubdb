@@ -6,9 +6,9 @@ The issue of asymmetry in microservices and the cloud in general isn\'t new. It\
 
 Consider an analogy: you\'re coordinating a relay race. An event streaming solution like Kafka would serve as your detailed ledger, recording when the race began, who had the baton, when it was passed on, etc. You could wire up consumers to this ledger, developing a real-time app showing runners\' positions, baton handoffs, and timings.
 
-In contrast, think of PubSubDB as an on-the-ground, real-time race coach. It\'s not just logging events—it\'s instructing runners when to start, when to pass the baton, when to stop. It\'s managing the *execution* of the race, rather than simply recording its progress.
+In contrast, think of PubSubDB as an on-the-ground, real-time race coach. It\'s instructing runners when to start, when to pass the baton, when to stop, etc. It\'s managing the *execution* of the race, rather than simply recording it.
 
-This real-time coordination is driven by Redis, which serves as PubSubDB\'s backend. Redis behaves like a flexible buffer, expanding and contracting as necessary to match the pace of information flow. If all receivers perform as expected, Redis stays slim and essentially serves as a network router, executing stateful workflows at stateless speeds.
+Importanly, the process adheres to CQRS principles, so the network runs as fast as the slowest service. If a service is down, PubSubDB can absorb the entire execution stream by inflating the Redis backend. Redis behaves like a flexible buffer in this scheme, expanding and contracting as necessary to match the pace of information flow. If all microservices perform as expected, Redis stays slim and serves as an efficient, interservice network router.
 
 ## Benefits
 In the realm of network flow management, PubSubDB enables developers not just to adapt to changes in network flow, but to actively control it. Pause entire work streams, analyze and redirect. Watch as PubSubDB automatically catches up to the current state of the network.
@@ -115,7 +115,7 @@ Once your application is deployed and activated, you'll be able to kick off work
 * *pubsub* for stateful, one-time request/response exchanges
 
 ### Pub
-Suppose you need to kick off a workflow but the answer isn't relevant at this time. You can optionally await the response (the job ID) to confirm that the request was received, but otherwise, this is a simple fire-and-forget call.
+Kick off a one-way workflow if the answer isn't relevant at this time. You can optionally await the response (the job ID) to confirm that the request was received, but otherwise, this is a simple fire-and-forget call.
 
 ```javascript
 const topic = 'discount.requested';
@@ -124,7 +124,7 @@ const jobId = await pubSubDB.pub(topic, payload);
 //jobId will be `ord123`
 ```
 
-Fetch the job data at any time (even after the job has completed) using the `getState` method.
+Fetch the job `data`, `metadata`, and `status` by calling `getState`.
 
 ```javascript
 const job = await pubSubDB.getState(topic, 'ord123');
@@ -132,7 +132,7 @@ const job = await pubSubDB.getState(topic, 'ord123');
 ```   
 
 ### Sub
-Suppose you need to listen in on the results of all computations on a particular topic, not just the ones you initiated. In that case, you can use the `sub` method.
+Use the `sub` method to listen in on the results of all computations on a particular topic.
 
 This is useful in scenarios where you're interested in monitoring global computation results, performing some action based on them, or even just logging them for auditing purposes.
 

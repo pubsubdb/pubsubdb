@@ -3,8 +3,8 @@ import { XSleepFor, sleepFor } from '../../modules/utils';
 import { ILogger } from '../logger';
 import { StoreService } from '../store';
 import { StreamService } from '../stream';
-import { QuorumProcessed, QuorumProfile } from '../../typedefs/quorum';
-import { RedisClient, RedisMulti } from '../../typedefs/redis';
+import { QuorumProcessed, QuorumProfile } from '../../types/quorum';
+import { RedisClient, RedisMulti } from '../../types/redis';
 import {
   StreamConfig,
   StreamData,
@@ -12,7 +12,7 @@ import {
   StreamError,
   StreamRole,
   StreamStatus
-} from '../../typedefs/stream';
+} from '../../types/stream';
 
 const MAX_RETRIES = 4; //max delay (10s using exponential backoff);
 const MAX_TIMEOUT_MS = 60000;

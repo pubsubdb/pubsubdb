@@ -20,6 +20,14 @@
             "type": "object",
             "properties": {
               "operation": {
+                "examples": [
+                  "calculation.execute",
+                  "executor",
+                  "receiver",
+                  "operate",
+                  "trigger",
+                  "calculate"
+                ],
                 "type": "string",
                 "enum": [
                   "add",
@@ -30,6 +38,12 @@
               },
               "values": {
                 "type": "string",
+                "examples": [
+                  "[100,4,5]",
+                  "[5,4,3,2,1]",
+                  "[1,2,3,4,5]",
+                  "[10,10,10]"
+                ],
                 "description": "stringified JSON array of numbers"
               }
             }
@@ -59,6 +73,14 @@
                 "type": "object",
                 "properties": {
                   "operation": {
+                    "examples": [
+                      "calculation.execute",
+                      "executor",
+                      "receiver",
+                      "operate",
+                      "trigger",
+                      "calculate"
+                    ],
                     "type": "string",
                     "enum": [
                       "add",
@@ -69,6 +91,12 @@
                   },
                   "values": {
                     "type": "string",
+                    "examples": [
+                      "[100,4,5]",
+                      "[5,4,3,2,1]",
+                      "[1,2,3,4,5]",
+                      "[10,10,10]"
+                    ],
                     "description": "stringified JSON array of numbers"
                   }
                 }
@@ -101,6 +129,14 @@
             "type": "object",
             "properties": {
               "operation": {
+                "examples": [
+                  "calculation.execute",
+                  "executor",
+                  "receiver",
+                  "operate",
+                  "trigger",
+                  "calculate"
+                ],
                 "type": "string",
                 "enum": [
                   "add",
@@ -111,6 +147,12 @@
               },
               "values": {
                 "type": "string",
+                "examples": [
+                  "[100,4,5]",
+                  "[5,4,3,2,1]",
+                  "[1,2,3,4,5]",
+                  "[10,10,10]"
+                ],
                 "description": "stringified JSON array of numbers"
               }
             }
@@ -148,6 +190,14 @@
                 "type": "object",
                 "properties": {
                   "operation": {
+                    "examples": [
+                      "calculation.execute",
+                      "executor",
+                      "receiver",
+                      "operate",
+                      "trigger",
+                      "calculate"
+                    ],
                     "type": "string",
                     "enum": [
                       "add",
@@ -158,6 +208,12 @@
                   },
                   "values": {
                     "type": "string",
+                    "examples": [
+                      "[100,4,5]",
+                      "[5,4,3,2,1]",
+                      "[1,2,3,4,5]",
+                      "[10,10,10]"
+                    ],
                     "description": "stringified JSON array of numbers"
                   }
                 }

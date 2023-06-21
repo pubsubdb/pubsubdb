@@ -9,16 +9,16 @@ import {
 import { NumberHandler } from '../../../services/pipe/functions/number';
 import { StreamSignaler } from '../../../services/signaler/stream';
 import { RedisConnection } from '../../$setup/cache/ioredis';
-import { RedisClientType } from '../../../typedefs/ioredisclient';
+import { RedisClientType } from '../../../types/ioredisclient';
 import {
   StreamData,
   StreamDataResponse,
-  StreamStatus } from '../../../typedefs/stream';
+  StreamStatus } from '../../../types/stream';
 import {
   ReportMessage,
   QuorumMessage,
   RollCallMessage,
-  ThrottleMessage } from '../../../typedefs/quorum';
+  ThrottleMessage } from '../../../types/quorum';
 import { QuorumService } from '../../../services/quorum';
 
 describe('QuorumService', () => {

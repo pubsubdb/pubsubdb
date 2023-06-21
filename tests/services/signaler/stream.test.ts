@@ -9,12 +9,12 @@ import {
 import { NumberHandler } from '../../../services/pipe/functions/number';
 import { StreamSignaler } from '../../../services/signaler/stream';
 import { RedisConnection } from '../../$setup/cache/ioredis';
-import { RedisClientType } from '../../../typedefs/ioredisclient';
-import { JobOutput } from '../../../typedefs/job';
+import { RedisClientType } from '../../../types/ioredisclient';
+import { JobOutput } from '../../../types/job';
 import {
   StreamData,
   StreamDataResponse,
-  StreamStatus } from '../../../typedefs/stream';
+  StreamStatus } from '../../../types/stream';
 
 describe('StreamSignaler', () => {
   const appConfig = { id: 'calc', version: '1' };
@@ -198,15 +198,11 @@ describe('StreamSignaler', () => {
     });
 
     it('should run synchronous calls in parallel', async () => {
-      const payload = {
-        operation: 'divide',
-        values: JSON.stringify([200, 4, 5]),
-      };
-      const [divide, b, c, d, multiply] = await Promise.all([
-        pubSubDB.pubsub('calculate', payload),
-        pubSubDB.pubsub('calculate', payload),
-        pubSubDB.pubsub('calculate', payload),
-        pubSubDB.pubsub('calculate', payload),
+      const [divide, multiply] = await Promise.all([
+        pubSubDB.pubsub('calculate', {
+          operation: 'divide',
+          values: JSON.stringify([200, 4, 5]),
+        }),
         pubSubDB.pubsub('calculate', {
           operation: 'multiply',
           values: JSON.stringify([10, 10, 10]),
@@ -214,6 +210,28 @@ describe('StreamSignaler', () => {
       ]);
       expect(divide?.data.result).toBe(10);
       expect(multiply?.data.result).toBe(1000);
+    });
+
+
+    it('should manually delete a completed job', async () => {
+      const payload = {
+        operation: 'divide',
+        values: JSON.stringify([100, 4, 5]),
+      };
+      const jobResponse = await pubSubDB.pubsub('calculate', payload);
+      expect(jobResponse?.metadata.jid).not.toBeNull();
+      expect(jobResponse?.data.result).toBe(5);
+      //delete the job
+      const jobId = jobResponse?.metadata.jid;
+      const state1 = await pubSubDB.getState('calculate', jobId);
+      expect(state1).not.toBeNull();
+      await pubSubDB.scrub(jobId);
+      try {
+        await pubSubDB.getState('calculate', jobId);
+        expect(true).toBe(false);
+      } catch (e) {
+        expect(e.message).toContain('not found');
+      }
     });
 
     it('should subscribe to a topic to see all job results', async () => {
@@ -250,7 +268,8 @@ describe('StreamSignaler', () => {
         expect(error.code).toBe(UNRECOVERABLE_ERROR.code);
         expect(error.job_id).not.toBeNull();
         const jobMetaData = await pubSubDB.getState('calculate', error.job_id);
-        expect(jobMetaData?.metadata).not.toBeNull();
+        expect(jobMetaData?.metadata.err).not.toBeNull();
+        expect(jobMetaData?.metadata.err).toBe('{"message":"unrecoverable error","code":403}');
       }
     });
   });

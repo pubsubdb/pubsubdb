@@ -1,13 +1,13 @@
 import { KeyType, PSNS } from '../../../../modules/key';
 import { LoggerService } from '../../../../services/logger';
 import { IORedisStoreService } from '../../../../services/store/clients/ioredis';
-import { ActivityType, Consumes } from '../../../../typedefs/activity';
-import { HookSignal } from '../../../../typedefs/hook';
-import { StatsType } from '../../../../typedefs/stats';
+import { ActivityType, Consumes } from '../../../../types/activity';
+import { HookSignal } from '../../../../types/hook';
+import { StatsType } from '../../../../types/stats';
 import { RedisConnection, RedisClientType } from '../../../$setup/cache/ioredis';
-import { MultiDimensionalDocument, Symbols } from '../../../../typedefs/serializer';
+import { StringAnyType, Symbols } from '../../../../types/serializer';
 import { MDATA_SYMBOLS } from '../../../../services/serializer';
-import { numberToSequence } from '../../../../modules/utils';
+import { getSymKey } from '../../../../modules/utils';
 
 describe('IORedisStoreService', () => {
   const appConfig = { id: 'test-app', version: '1' };
@@ -56,8 +56,8 @@ describe('IORedisStoreService', () => {
       expect(range).toEqual(`${lowerLimit - MDATA_SYMBOLS.SLOTS}:${lowerLimit - MDATA_SYMBOLS.SLOTS + size - 1}`);
       //26 metadata slots are reserved; lowerLimit = 26; upperLimit = 286 - 1 = 285
       const symbols: Symbols = {
-        'a1/data/abc': numberToSequence(lowerLimit),
-        'a1/data/def': numberToSequence(lowerLimit + 1),
+        'a1/data/abc': getSymKey(lowerLimit),
+        'a1/data/def': getSymKey(lowerLimit + 1),
       };
       // Second case : Existing key
       await redisStoreService.addSymbols(activityId, appId, symbols);
@@ -106,21 +106,21 @@ describe('IORedisStoreService', () => {
       const size = 286;
       let [lowerLimit] = await redisStoreService.reserveSymbolRange(activityId, appId, size, 'ACTIVITY');
       let symbols: Symbols = {
-        'a1/output/data/some/field': numberToSequence(lowerLimit),
-        'a1/output/data/another/field': numberToSequence(lowerLimit + 1),
+        'a1/output/data/some/field': getSymKey(lowerLimit),
+        'a1/output/data/another/field': getSymKey(lowerLimit + 1),
       };
       await redisStoreService.addSymbols(activityId, appId, symbols);
 
       //2) add symbol sets for the parent job/topic ($job.topic)
       [lowerLimit] = await redisStoreService.reserveSymbolRange(topic, appId, size, 'JOB');
       symbols = {
-        'data/name': numberToSequence(lowerLimit),
-        'data/age': numberToSequence(lowerLimit + 1),
+        'data/name': getSymKey(lowerLimit),
+        'data/age': getSymKey(lowerLimit + 1),
       };
       await redisStoreService.addSymbols(topic, appId, symbols);
 
       //3) set job state
-      const jobState: MultiDimensionalDocument = {
+      const jobState: StringAnyType = {
         'a1/output/data/some/field': true,
         'a1/output/data/another/field': {'complex': 'object'},
         'a1/output/metadata/aid': activityId,
@@ -200,6 +200,30 @@ describe('IORedisStoreService', () => {
       //expect getStats to cast the value to a number, so it is an exact match even though a string in redis
       const jobStats = await redisStoreService.getJobStats([generalStatsKey]);
       expect(jobStats[generalStatsKey][stats.general[0].target]).toEqual(stats.general[0].value);
+    });
+  });
+
+  describe('Job Cleanup', () => {
+    it('should register and get jobs for cleanup correctly', async () => {
+      // Register jobs for cleanup
+      const jobId1 = 'job-id-1';
+      const jobId2 = 'job-id-2';
+      const deletionTime = Date.now();
+      await redisStoreService.registerJobForCleanup(jobId1, deletionTime);
+      await redisStoreService.registerJobForCleanup(jobId2, deletionTime);
+      // Check that the jobs were added to the correct list
+      const listKey = redisStoreService.mintKey(KeyType.DELETE_RANGE, { appId: appConfig.id, timeValue: deletionTime });
+      const jobList = await redisClient.lrange(listKey, 0, -1);
+      expect(jobList).toContain(jobId1);
+      expect(jobList).toContain(jobId2);
+      // Retrieve the next job for cleanup
+      const [nextListKey, nextJobId] = (await redisStoreService.getNextCleanupJob()) as [string, string];
+      expect(nextListKey).toEqual(listKey);
+      expect(nextJobId).toEqual(jobId1);  // jobId1 should be the next job since it was registered first
+      // Check that jobId1 was removed from the list
+      const updatedJobList = await redisClient.lrange(listKey, 0, -1);
+      expect(updatedJobList).not.toContain(jobId1);
+      expect(updatedJobList).toContain(jobId2);
     });
   });
 

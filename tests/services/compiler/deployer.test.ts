@@ -1,6 +1,6 @@
 import { Deployer } from '../../../services/compiler/deployer';
 import Manifest from '../../$setup/apps/calc/v1/.pubsubdb.calc.1.json';
-import { PubSubDBManifest } from '../../../typedefs/pubsubdb';
+import { PubSubDBManifest } from '../../../types/pubsubdb';
 
 const manifest: PubSubDBManifest = Manifest as PubSubDBManifest;
 

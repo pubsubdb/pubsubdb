@@ -1,7 +1,7 @@
 import { ILogger } from "../services/logger";
 import { PubSubDBService } from "../services/pubsubdb";
 import { StoreService } from "../services/store";
-import { Hooks } from "./hook";
+import { HookRules } from "./hook";
 import { RedisClient, RedisMulti } from "./redis";
 import { StreamData, StreamDataResponse } from "./stream";
 import { StreamService } from "../services/stream";
@@ -36,6 +36,7 @@ type PubSubDBConfig = {
 type PubSubDBGraph = {
   subscribes: string;
   publishes?: string;
+  del?: number;
   output?: {
     schema: Record<string, any>;
   };
@@ -44,7 +45,7 @@ type PubSubDBGraph = {
   };
   activities: Record<string, any>;
   transitions?: Record<string, any>;
-  hooks?: Hooks;
+  hooks?: HookRules;
 };
 
 type PubSubDBSettings = {

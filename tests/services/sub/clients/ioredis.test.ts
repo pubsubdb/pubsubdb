@@ -2,7 +2,7 @@ import { KeyType, PSNS } from '../../../../modules/key';
 import { LoggerService } from '../../../../services/logger';
 import { IORedisStoreService } from '../../../../services/store/clients/ioredis';
 import { IORedisSubService } from '../../../../services/sub/clients/ioredis';
-import { SubscriptionCallback } from '../../../../typedefs/quorum';
+import { SubscriptionCallback } from '../../../../types/quorum';
 import { RedisConnection, RedisClientType } from '../../../$setup/cache/ioredis';
 
 describe('IORedisSubService', () => {

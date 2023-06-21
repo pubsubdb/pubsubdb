@@ -2,21 +2,22 @@ import { PSNS } from '../../modules/key';
 import { getGuid } from '../../modules/utils';
 import { EngineService } from '../engine';
 import { LoggerService, ILogger } from '../logger';
+import { StreamSignaler } from '../signaler/stream';
+import { QuorumService } from '../quorum';
+import { WorkerService } from '../worker';
 import {
-  JobActivityContext,
+  JobState,
   JobData,
-  JobOutput } from '../../typedefs/job';
+  JobOutput } from '../../types/job';
 import {
   PubSubDBConfig,
-  PubSubDBManifest } from '../../typedefs/pubsubdb';
-import { JobMessageCallback } from '../../typedefs/quorum';
+  PubSubDBManifest } from '../../types/pubsubdb';
+import { JobMessageCallback } from '../../types/quorum';
 import {
   JobStatsInput,
   GetStatsOptions,
   IdsResponse,
-  StatsResponse } from '../../typedefs/stats';
-import { WorkerService } from '../worker';
-import { QuorumService } from '../quorum';
+  StatsResponse } from '../../types/stats';
 
 class PubSubDBService {
   namespace: string;
@@ -95,7 +96,7 @@ class PubSubDBService {
   }
 
   // ************* PUB/SUB METHODS *************
-  async pub(topic: string, data: JobData, context?: JobActivityContext) {
+  async pub(topic: string, data: JobData, context?: JobState) {
     return await this.engine?.pub(topic, data, context);
   }
   async sub(topic: string, callback: JobMessageCallback): Promise<void> {
@@ -137,6 +138,11 @@ class PubSubDBService {
     return await this.engine?.resolveQuery(topic, query);
   }
 
+  // ****************** `SCRUB` CLEAN COMPLETED JOBS *****************
+  async scrub(jobId: string) {
+    await this.engine?.scrub(jobId);
+  }
+
   // ****** `HOOK` ACTIVITY RE-ENTRY POINT ******
   async hook(topic: string, data: JobData): Promise<number> {
     //return collation int
@@ -145,6 +151,16 @@ class PubSubDBService {
   async hookAll(hookTopic: string, data: JobData, query: JobStatsInput, queryFacets: string[] = []): Promise<string[]> {
     return await this.engine?.hookAll(hookTopic, data, query, queryFacets);
   }
+
+  async stop() {
+    await StreamSignaler.stopConsuming();
+    this.engine?.task.cancelCleanup();
+  }
+
+  async compress(terms: string[]): Promise<boolean> {
+    return await this.engine?.compress(terms);
+  }
+
 }
 
 export { PubSubDBService };

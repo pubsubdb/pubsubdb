@@ -6,27 +6,27 @@ import {
 import { ILogger } from '../logger';
 import { MDATA_SYMBOLS, SerializerService as Serializer } from '../serializer';
 import { Cache } from './cache';
-import { ActivityType,  Consumes} from '../../typedefs/activity';
-import { AppVID } from '../../typedefs/app';
+import { ActivityType,  Consumes} from '../../types/activity';
+import { AppVID } from '../../types/app';
 import {
   HookRule,
-  HookSignal } from '../../typedefs/hook';
+  HookSignal } from '../../types/hook';
 import {
   PubSubDBApp,
   PubSubDBApps,
-  PubSubDBSettings } from '../../typedefs/pubsubdb';
+  PubSubDBSettings } from '../../types/pubsubdb';
 import {
-  AbbreviationObjects,
-  FlatDocument,
-  MultiDimensionalDocument,
-  Symbols } from '../../typedefs/serializer';
+  SymbolSets,
+  StringStringType,
+  StringAnyType,
+  Symbols } from '../../types/serializer';
 import {
   IdsData,
   JobStats,
   JobStatsRange,
-  StatsType } from '../../typedefs/stats';
-import { Transitions } from '../../typedefs/transition';
-import { numberToSequence } from '../../modules/utils';
+  StatsType } from '../../types/stats';
+import { Transitions } from '../../types/transition';
+import { formatISODate, getSymKey } from '../../modules/utils';
 
 interface AbstractRedisClient {
   exec(): any;
@@ -39,7 +39,31 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
   namespace: string;
   appId: string
   logger: ILogger;
-  commands: Record<string, string>;
+  commands: Record<string, string> = {
+    setnx: 'setnx',
+    del: 'del',
+    hset: 'hset',
+    hsetnx: 'hsetnx',
+    hincrby: 'hincrby',
+    hdel: 'hdel',
+    hget: 'hget',
+    hmget: 'hmget',
+    hgetall: 'hgetall',
+    hincrbyfloat: 'hincrbyfloat',
+    zrange: 'zrange',
+    zrangebyscore_withscores: 'zrangebyscore',
+    zrangebyscore: 'zrangebyscore',
+    zrem: 'zrem',
+    zadd: 'zadd',
+    lmove: 'lmove',
+    llen: 'llen',
+    lpop: 'lpop',
+    lrange: 'lrange',
+    rename: 'rename',
+    rpush: 'rpush',
+    xack: 'xack',
+    xdel: 'xdel',
+  };
 
 
   //todo: standardize signatures and move concrete methods to this class
@@ -90,26 +114,6 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
 
   constructor(redisClient: T) {
     this.redisClient = redisClient;
-    //default command set uses 'redis' NPM Package format
-    this.commands = {
-      hset: 'hset',
-      hsetnx: 'hsetnx',
-      hincrby: 'hincrby',
-      hdel: 'hdel',
-      hget: 'hget',
-      hmget: 'hmget',
-      hgetall: 'hgetall',
-      hincrbyfloat: 'hincrbyfloat',
-      zrange: 'zrange',
-      zrem: 'zrem',
-      zadd: 'zadd',
-      lmove: 'lmove',
-      lrange: 'lrange',
-      rename: 'rename',
-      rpush: 'rpush',
-      xack: 'xack',
-      xdel: 'xdel',
-    };
   }
 
   async init(namespace = PSNS, appId: string, logger: ILogger): Promise<PubSubDBApps> {
@@ -124,12 +128,28 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
   }
 
   isSuccessful(result: any): boolean {
-    return result === 1 || result === 'OK' || result === true;
+    return result > 0 || result === 'OK' || result === true;
   }
 
-  zAdd(key: string, score: number | string, value: string | number, redisMulti: U): Promise<any> {
-    //default call signature uses 'redis' NPM Package format
-    return redisMulti[this.commands.zadd](key, { score: score, value: value.toString() } as any);
+  zAdd(key: string, score: number | string, value: string | number, redisMulti?: U): Promise<any> {
+    //default call signature uses 'ioredis' NPM Package format
+    return (redisMulti || this.redisClient)[this.commands.zadd](key, score, value);
+  }
+
+  async zRangeByScoreWithScores(key: string, score: number | string, value: string | number): Promise<string | null> {
+    const result = await this.redisClient[this.commands.zrangebyscore_withscores](key, score, value, 'WITHSCORES');
+    if (result?.length > 0) {
+      return result[0];
+    }
+    return null;
+  }
+
+  async zRangeByScore(key: string, score: number | string, value: string | number): Promise<string | null> {
+    const result = await this.redisClient[this.commands.zrangebyscore](key, score, value);
+    if (result?.length > 0) {
+      return result[0];
+    }
+    return null;
   }
 
   mintKey(type: KeyType, params: KeyStoreParams): string {
@@ -139,6 +159,12 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
 
   invalidateCache() {
     this.cache.invalidate();
+  }
+
+  async reserveEngineId(engineId: string): Promise<boolean> {
+    const key = this.mintKey(KeyType.ENGINE_ID, { engineId });
+    const success = await this.redisClient[this.commands.setnx](key, 'id', 1);
+    return this.isSuccessful(success);
   }
 
   async getSettings(bCreate = false): Promise<PubSubDBSettings> {
@@ -212,29 +238,48 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
     return success > 0;
   }
 
-  seedSymbols(target: string, type: 'JOB'|'ACTIVITY', startIndex: number): FlatDocument {
+  seedSymbols(target: string, type: 'JOB'|'ACTIVITY', startIndex: number): StringStringType {
     if (type === 'JOB') {
       return this.seedJobSymbols(startIndex);
     }
     return this.seedActivitySymbols(startIndex, target);
   }
 
-  seedJobSymbols(startIndex: number): FlatDocument {
-    const hash: FlatDocument = {};
+  seedJobSymbols(startIndex: number): StringStringType {
+    const hash: StringStringType = {};
     MDATA_SYMBOLS.JOB.KEYS.forEach((key) => {
-      hash[`metadata/${key}`] = numberToSequence(startIndex);
+      hash[`metadata/${key}`] = getSymKey(startIndex);
       startIndex++;
     });
     return hash;
   }
 
-  seedActivitySymbols(startIndex: number, activityId: string): FlatDocument {
-    const hash: FlatDocument = {};
+  seedActivitySymbols(startIndex: number, activityId: string): StringStringType {
+    const hash: StringStringType = {};
     MDATA_SYMBOLS.ACTIVITY.KEYS.forEach((key) => {
-      hash[`${activityId}/output/metadata/${key}`] = numberToSequence(startIndex);
+      hash[`${activityId}/output/metadata/${key}`] = getSymKey(startIndex);
       startIndex++;
     });
     return hash;
+  }
+
+  async getSymbolValues(): Promise<Symbols> {
+    let symvals: Symbols = this.cache.getSymbolValues(this.appId);
+    if (symvals) {
+      return symvals;
+    } else {
+      const key = this.mintKey(KeyType.SYMVALS, { appId: this.appId });
+      symvals = await this.redisClient[this.commands.hgetall](key);
+      this.cache.setSymbolValues(this.appId, symvals as Symbols);
+      return symvals;
+    }
+  }
+
+  async addSymbolValues(symvals: Symbols): Promise<boolean> {
+    const key = this.mintKey(KeyType.SYMVALS, { appId: this.appId });
+    const success = await this.redisClient[this.commands.hset](key, symvals);
+    this.cache.deleteSymbolValues(this.appId);
+    return this.isSuccessful(success);
   }
 
   async getApp(id: string, refresh = false): Promise<PubSubDBApp> {
@@ -247,7 +292,7 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
       app = {};
       for (const field in sApp) {
         try {
-          app[field] = JSON.parse(sApp[field] as string);
+          app[field] = sApp[field];
         } catch (e) {
           app[field] = sApp[field];
         }
@@ -264,7 +309,7 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
     const payload: PubSubDBApp = {
       id,
       version,
-      [versionId]: `deployed:${new Date().toISOString()}`,
+      [versionId]: `deployed:${formatISODate(new Date())}`,
     };
     await this.redisClient[this.commands.hset](key, payload as any);
     this.cache.setApp(id, payload);
@@ -279,12 +324,12 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
     if (app && app[versionId]) {
       const payload: PubSubDBApp = {
         id,
-        version,
-        [versionId]: `activated:${new Date().toISOString()}`,
+        version: version.toString(),
+        [versionId]: `activated:${formatISODate(new Date())}`,
         active: true
       };
       Object.entries(payload).forEach(([key, value]) => {
-        payload[key] = JSON.stringify(value);
+        payload[key] = value.toString();
       });
       const status = await this.redisClient[this.commands.hset](key, payload as any);
       return this.isSuccessful(status);
@@ -297,8 +342,8 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
     const key = this.mintKey(KeyType.APP, params);
     const payload: PubSubDBApp = {
       id: appId,
-      version,
-      [`versions/${version}`]: new Date().toISOString()
+      version: version.toString(),
+      [`versions/${version}`]: formatISODate(new Date()),
     };
     return await this.redisClient[this.commands.hset](key, payload as any);
   }
@@ -385,19 +430,20 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
     return Number(status);
   }
 
-  async setState(state: MultiDimensionalDocument, status: number | null, jobId: string, appId: string, symbolNames: string[], multi? : U): Promise<string> {
+  async setState(state: StringAnyType, status: number | null, jobId: string, appId: string, symbolNames: string[], multi? : U): Promise<string> {
+    delete state['metadata/js'];
     const hashKey = this.mintKey(KeyType.JOB_STATE, { appId, jobId });
     const symbolLookups = [];
     for (const symbolName of symbolNames) {
       symbolLookups.push(this.getSymbols(symbolName, appId));
     }
     const symbolSets = await Promise.all(symbolLookups);
-    const abbreviationMaps: AbbreviationObjects = {};
+    const symKeys: SymbolSets = {};
     for (const symbolName of symbolNames) {
-      abbreviationMaps[symbolName] = symbolSets.shift();
+      symKeys[symbolName] = symbolSets.shift();
     }
-    this.serializer.resetAbbreviationMaps(abbreviationMaps);
-    delete state['metadata/js'];
+    const symVals = await this.getSymbolValues();
+    this.serializer.resetSymbols(symKeys, symVals);
     const hashData = this.serializer.package(state, symbolNames);
     if (status !== null) {
       hashData[':'] = status.toString();
@@ -408,7 +454,7 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
     return jobId;
   }
 
-  async getState(jobId: string, appId: string, consumes: Consumes): Promise<[MultiDimensionalDocument, number] | undefined> {
+  async getState(jobId: string, appId: string, consumes: Consumes): Promise<[StringAnyType, number] | undefined> {
     const key = this.mintKey(KeyType.JOB_STATE, { appId, jobId });
     const symbolNames = Object.keys(consumes);
     const symbolLookups = [];
@@ -416,14 +462,14 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
       symbolLookups.push(this.getSymbols(symbolName, appId));
     }
     const symbolSets = await Promise.all(symbolLookups);
-    const abbreviationMaps: AbbreviationObjects = {};
+    const symKeys: SymbolSets = {};
     for (const symbolName of symbolNames) {
-      abbreviationMaps[symbolName] = symbolSets.shift();
+      symKeys[symbolName] = symbolSets.shift();
     }
     //always fetch the job status (':') when fetching state
     const fields = [':'];
     for (const symbolName of symbolNames) {
-      const symbolSet = abbreviationMaps[symbolName];
+      const symbolSet = symKeys[symbolName];
       const symbolPaths = consumes[symbolName];
       for (const symbolPath of symbolPaths) {
         const abbreviation = symbolSet[symbolPath];
@@ -435,18 +481,25 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
       }
     }
     const jobDataArray = await this.redisClient[this.commands.hmget](key, fields);
-    const jobData: MultiDimensionalDocument = {};
+    const jobData: StringAnyType = {};
+    let atLeast1 = false; //if status field (':') isn't present assume 404
     fields.forEach((field, index) => {
+      if (jobDataArray[index]) {
+        atLeast1 = true;
+      }
       jobData[field] = jobDataArray[index];
     });
-    this.serializer.resetAbbreviationMaps(abbreviationMaps);
-    const state = this.serializer.unpackage(jobData, symbolNames);
-    let status = 0;
-    if (state[':']) {
-      status = Number(state[':']);
-      delete state[':'];
+    if (atLeast1) {
+      const symVals = await this.getSymbolValues();
+      this.serializer.resetSymbols(symKeys, symVals);
+      const state = this.serializer.unpackage(jobData, symbolNames);
+      let status = 0;
+      if (state[':']) {
+        status = Number(state[':']);
+        delete state[':'];
+      }
+      return [state, status];
     }
-    return [state, status];
   }
 
   async setStateNX(jobId: string, appId: string): Promise<boolean> {
@@ -638,6 +691,35 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
 
   async processTaskQueue(sourceKey: string, destinationKey: string): Promise<any> {
     return await this.redisClient[this.commands.lmove](sourceKey, destinationKey, 'LEFT', 'RIGHT');
+  }
+
+  async registerJobForCleanup(jobId: string, deletionTime: number): Promise<void> {
+    const zsetKey = this.mintKey(KeyType.DELETE_RANGE, { appId: this.appId });
+    const listKey = this.mintKey(KeyType.DELETE_RANGE, { appId: this.appId, timeValue: deletionTime });
+    const len = await this.redisClient[this.commands.rpush](listKey, jobId);
+    if (len === 1) {
+        await this.zAdd(zsetKey, deletionTime.toString(), listKey);
+    }
+  }
+
+  async getNextCleanupJob(listKey?: string): Promise<[listKey: string, jobId: string] | null> {
+    const zsetKey = this.mintKey(KeyType.DELETE_RANGE, { appId: this.appId });
+    const now = Date.now();
+    listKey = listKey || await this.zRangeByScore(zsetKey, 0, now);
+    if (listKey) {
+      const jobId = await this.redisClient[this.commands.lpop](listKey);
+      if (await this.redisClient[this.commands.llen](listKey) === 0) {
+        await this.redisClient[this.commands.zrem](zsetKey, listKey);
+      }
+      return [listKey, jobId];
+    } else {
+      return null;
+    }
+  }
+
+  async scrub(jobId: string) {
+    const jobKey = this.mintKey(KeyType.JOB_STATE, { appId: this.appId, jobId });
+    await this.redisClient[this.commands.del](jobKey);
   }
 }
 

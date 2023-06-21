@@ -1,17 +1,17 @@
 
-interface Condition {
+interface HookCondition {
   expected: string;
   actual: string;
 }
 
-enum Gate {
+enum HookGate {
   AND = 'and',
   OR = 'or',
 }
 
 interface HookConditions {
-  gate?: Gate;
-  match: Condition[];
+  gate?: HookGate;
+  match: HookCondition[];
 }
 
 interface HookRule {
@@ -19,7 +19,7 @@ interface HookRule {
   conditions: HookConditions;
 }
 
-interface Hooks {
+interface HookRules {
   [eventName: string]: HookRule[];
 }
 
@@ -29,4 +29,4 @@ interface HookInterface {
   (topic: string, data: { [key: string]: any, id: string }): Promise<void>;
 }
 
-export { Condition, Gate, HookConditions, HookRule, HookInterface, Hooks, HookSignal };
+export { HookCondition, HookConditions, HookGate, HookInterface, HookRule, HookRules, HookSignal };

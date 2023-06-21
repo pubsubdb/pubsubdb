@@ -4,13 +4,13 @@ import { StreamSignaler } from "../signaler/stream";
 import { StreamService } from "../stream";
 import { StoreService } from "../store";
 import { SubService } from "../sub";
-import { PubSubDBConfig, PubSubDBWorker } from "../../typedefs/pubsubdb";
+import { PubSubDBConfig, PubSubDBWorker } from "../../types/pubsubdb";
 import {
   QuorumMessage,
   ReportMessage,
-  SubscriptionCallback } from "../../typedefs/quorum";
-import { RedisClient, RedisMulti } from "../../typedefs/redis";
-import { StreamRole } from "../../typedefs/stream";
+  SubscriptionCallback } from "../../types/quorum";
+import { RedisClient, RedisMulti } from "../../types/redis";
+import { StreamRole } from "../../types/stream";
 
 const REPORT_INTERVAL = 10000;
 

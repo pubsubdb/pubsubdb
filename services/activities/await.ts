@@ -11,12 +11,10 @@ import {
   ActivityData,
   ActivityMetadata,
   AwaitActivity,
-  ActivityType,
-  HookData
-} from "../../typedefs/activity";
-import { JobActivityContext } from "../../typedefs/job";
-import { MultiResponseFlags } from "../../typedefs/redis";
-import { StreamCode, StreamStatus } from "../../typedefs/stream";
+  ActivityType } from "../../types/activity";
+import { JobState } from "../../types/job";
+import { MultiResponseFlags } from "../../types/redis";
+import { StreamCode, StreamStatus } from "../../types/stream";
 
 class Await extends Activity {
   config: AwaitActivity;
@@ -25,9 +23,9 @@ class Await extends Activity {
     config: ActivityType,
     data: ActivityData,
     metadata: ActivityMetadata,
-    hook: HookData | null,
+    hook: ActivityData | null,
     engine: EngineService,
-    context?: JobActivityContext) {
+    context?: JobState) {
       super(config, data, metadata, hook, engine, context);
   }
 
@@ -60,7 +58,7 @@ class Await extends Activity {
   }
 
   async execActivity(): Promise<void> {
-    const context: JobActivityContext = { 
+    const context: JobState = { 
       data: this.context.data,
       metadata: { 
         ...this.context.metadata,
