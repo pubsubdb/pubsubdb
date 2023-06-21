@@ -46,12 +46,11 @@ describe('RedisStoreService', () => {
   describe('reserveSymbolRange', () => {
     it('should reserve a symbol range for a given activity and handle existing values', async () => {
       const activityId = 'a1';
-      const appId = 'app1';
       const size = 286;
       // First case: No existing key
-      let [lowerLimit, upperLimit] = await redisStoreService.reserveSymbolRange(activityId, appId, size, 'ACTIVITY');
+      let [lowerLimit, upperLimit] = await redisStoreService.reserveSymbolRange(activityId, size, 'ACTIVITY');
       expect(lowerLimit).toEqual(26); //0 + reserved metadata slots (first available slot)
-      let rangeKey = redisStoreService.mintKey(KeyType.SYMKEYS, { appId });
+      let rangeKey = redisStoreService.mintKey(KeyType.SYMKEYS, { appId: appConfig.id });
       let range = await redisClient.HGET(rangeKey, activityId);
       expect(range).toEqual(`${lowerLimit - MDATA_SYMBOLS.SLOTS}:${lowerLimit - MDATA_SYMBOLS.SLOTS + size - 1}`);
       //26 metadata slots are reserved; lowerLimit = 26; upperLimit = 286 - 1 = 285
@@ -60,9 +59,9 @@ describe('RedisStoreService', () => {
         'a1/data/def': getSymKey(lowerLimit + 1),
       };
       // Second case : Existing key
-      await redisStoreService.addSymbols(activityId, appId, symbols);
+      await redisStoreService.addSymbols(activityId, symbols);
       let savedSymbols: Symbols;
-      [lowerLimit, upperLimit, savedSymbols] = await redisStoreService.reserveSymbolRange(activityId, appId, size, 'ACTIVITY');
+      [lowerLimit, upperLimit, savedSymbols] = await redisStoreService.reserveSymbolRange(activityId, size, 'ACTIVITY');
       expect(lowerLimit).toEqual(MDATA_SYMBOLS.SLOTS + MDATA_SYMBOLS.ACTIVITY.KEYS.length + 2); //lower limit starts at first usable slot
       expect(upperLimit).toEqual(size - 1); // [0 + ]286 - 1 = 285
       expect(Object.keys(savedSymbols).length).toEqual(MDATA_SYMBOLS.ACTIVITY.KEYS.length + 2); //total of meta/data keys
@@ -77,8 +76,8 @@ describe('RedisStoreService', () => {
         'a2/data/ghi': 'baa',
         'a2/data/jkl': 'bab',
       };
-      await redisStoreService.addSymbols(activityId, appId, symbols);
-      const result = await redisStoreService.getSymbols(activityId, appId);
+      await redisStoreService.addSymbols(activityId, symbols);
+      const result = await redisStoreService.getSymbols(activityId);
       expect(result).toEqual(symbols);
     });
   });
@@ -91,7 +90,7 @@ describe('RedisStoreService', () => {
         'a3/data/mno': 'caa',
         'a3/data/pqr': 'cab',
       };
-      const result = await redisStoreService.addSymbols(activityId, appId, symbols);
+      const result = await redisStoreService.addSymbols(activityId, symbols);
       expect(result).toEqual(true);
     });
   });
@@ -104,20 +103,20 @@ describe('RedisStoreService', () => {
       const activityId = 'a1';
       const appId = appConfig.id;
       const size = 286;
-      let [lowerLimit] = await redisStoreService.reserveSymbolRange(activityId, appId, size, 'ACTIVITY');
+      let [lowerLimit] = await redisStoreService.reserveSymbolRange(activityId, size, 'ACTIVITY');
       let symbols: Symbols = {
         'a1/output/data/some/field': getSymKey(lowerLimit),
         'a1/output/data/another/field': getSymKey(lowerLimit + 1),
       };
-      await redisStoreService.addSymbols(activityId, appId, symbols);
+      await redisStoreService.addSymbols(activityId, symbols);
 
       //2) add symbol sets for the parent job/topic ($job.topic)
-      [lowerLimit] = await redisStoreService.reserveSymbolRange(topic, appId, size, 'JOB');
+      [lowerLimit] = await redisStoreService.reserveSymbolRange(topic, size, 'JOB');
       symbols = {
         'data/name': getSymKey(lowerLimit),
         'data/age': getSymKey(lowerLimit + 1),
       };
-      await redisStoreService.addSymbols(topic, appId, symbols);
+      await redisStoreService.addSymbols(topic, symbols);
 
       //3) set job state/status
       const jobState: StringAnyType = {

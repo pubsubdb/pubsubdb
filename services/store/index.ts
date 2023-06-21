@@ -190,9 +190,9 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
     return await this.redisClient[this.commands.hset](key, manifest);
   }
 
-  async reserveSymbolRange(target: string, appId: string, size: number, type: 'JOB' | 'ACTIVITY'): Promise<[number, number, Symbols]> {
-    const rangeKey = this.mintKey(KeyType.SYMKEYS, { appId });
-    const symbolKey = this.mintKey(KeyType.SYMKEYS, { activityId: target, appId });
+  async reserveSymbolRange(target: string, size: number, type: 'JOB' | 'ACTIVITY'): Promise<[number, number, Symbols]> {
+    const rangeKey = this.mintKey(KeyType.SYMKEYS, { appId: this.appId });
+    const symbolKey = this.mintKey(KeyType.SYMKEYS, { activityId: target, appId: this.appId });
     //reserve the slot in a `pending` state (range will be established in the next step)
     const response = await this.redisClient[this.commands.hsetnx](rangeKey, target, '?:?');
     if (response) {
@@ -217,24 +217,25 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
     }
   }
 
-  async getSymbols(activityId: string, appId: string): Promise<Symbols> {
-    let symbols: Symbols = this.cache.getSymbols(appId, activityId);
+  async getSymbols(activityId: string): Promise<Symbols> {
+    let symbols: Symbols = this.cache.getSymbols(this.appId, activityId);
     if (symbols) {
       return symbols;
     } else {
-      const params: KeyStoreParams = { activityId, appId };
+      const params: KeyStoreParams = { activityId, appId: this.appId };
       const key = this.mintKey(KeyType.SYMKEYS, params);
       symbols = (await this.redisClient[this.commands.hgetall](key)) as Symbols;
-      this.cache.setSymbols(appId, activityId, symbols);
+      this.cache.setSymbols(this.appId, activityId, symbols);
       return symbols;
     }
   }
 
-  async addSymbols(activityId: string, appId: string, symbols: Symbols): Promise<boolean> {
-    const params: KeyStoreParams = { activityId, appId };
+  async addSymbols(activityId: string, symbols: Symbols): Promise<boolean> {
+    if (!symbols || !Object.keys(symbols).length) return false;
+    const params: KeyStoreParams = { activityId, appId: this.appId };
     const key = this.mintKey(KeyType.SYMKEYS, params);
     const success = await this.redisClient[this.commands.hset](key, symbols);
-    this.cache.deleteSymbols(appId, activityId);
+    this.cache.deleteSymbols(this.appId, activityId);
     return success > 0;
   }
 
@@ -276,6 +277,7 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
   }
 
   async addSymbolValues(symvals: Symbols): Promise<boolean> {
+    if (!symvals || !Object.keys(symvals).length) return false;
     const key = this.mintKey(KeyType.SYMVALS, { appId: this.appId });
     const success = await this.redisClient[this.commands.hset](key, symvals);
     this.cache.deleteSymbolValues(this.appId);
@@ -435,7 +437,7 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
     const hashKey = this.mintKey(KeyType.JOB_STATE, { appId, jobId });
     const symbolLookups = [];
     for (const symbolName of symbolNames) {
-      symbolLookups.push(this.getSymbols(symbolName, appId));
+      symbolLookups.push(this.getSymbols(symbolName));
     }
     const symbolSets = await Promise.all(symbolLookups);
     const symKeys: SymbolSets = {};
@@ -459,7 +461,7 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
     const symbolNames = Object.keys(consumes);
     const symbolLookups = [];
     for (const symbolName of symbolNames) {
-      symbolLookups.push(this.getSymbols(symbolName, appId));
+      symbolLookups.push(this.getSymbols(symbolName));
     }
     const symbolSets = await Promise.all(symbolLookups);
     const symKeys: SymbolSets = {};
@@ -702,18 +704,16 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
     }
   }
 
-  async getNextCleanupJob(listKey?: string): Promise<[listKey: string, jobId: string] | null> {
+  async getNextCleanupJob(listKey?: string): Promise<[listKey: string, jobId: string] | void> {
     const zsetKey = this.mintKey(KeyType.DELETE_RANGE, { appId: this.appId });
     const now = Date.now();
     listKey = listKey || await this.zRangeByScore(zsetKey, 0, now);
     if (listKey) {
       const jobId = await this.redisClient[this.commands.lpop](listKey);
-      if (await this.redisClient[this.commands.llen](listKey) === 0) {
-        await this.redisClient[this.commands.zrem](zsetKey, listKey);
+      if (jobId) {
+        return [listKey, jobId];
       }
-      return [listKey, jobId];
-    } else {
-      return null;
+      await this.redisClient[this.commands.zrem](zsetKey, listKey);
     }
   }
 
