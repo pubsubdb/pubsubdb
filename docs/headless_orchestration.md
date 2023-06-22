@@ -194,10 +194,7 @@ To illustrate, let's imagine a set of tasks: `A`, `B`, and `C`, which need to be
 
 In this model, the client assumes the responsibility of task execution and the subsequent 'pull' of the next task, based on the 'read' model of the system updated after each task completion. This workflow, while effectively using CQRS principles, eliminates the need for a centralized controller and continues without human intervention.
 
-As clients persistently pull for their next tasks, the system inherently becomes self-perpetuating. Each job is not directly aware of its successor, but rather it is the result of the constant pull from the clients based on the state of the 'read' model. Thus, the workflow progresses in a smooth and consistent manner, maintaining its agility and responsiveness to dynamically evolving requirements and workloads.
-
-The intrinsic elegance and scalability offered by CQRS combined with a 'pull'-oriented client design makes the system self-perpetuating, ensuring operational continuity and predictable workflow completion even in the absence of a controller. As we proceed to the next section, we'll delve into the detailed mechanisms that regulate the sequence of activities within a job.
+The scalability offered by CQRS combined with a 'pull'-oriented client design makes the system self-perpetuating, ensuring operational continuity and predictable workflow completion even in the absence of a controller.
 
 ## Conclusion
-
 The design and orchestration of multidimensional workflows in headless environments can be a complex task, but with the right approach and understanding of key principles, it can be made more manageable. By taking into consideration factors like asynchronous activities, ECA rules, action splitting and CQRS, we can design robust and efficient workflows that handle complex business processes at stateless speeds.
