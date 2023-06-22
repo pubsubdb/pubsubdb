@@ -19,6 +19,7 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
     this.commands = {
       setnx: 'SETNX',
       del: 'DEL',
+      expire: 'EXPIRE',
       hset: 'HSET',
       hsetnx: 'HSETNX',
       hincrby: 'HINCRBY',

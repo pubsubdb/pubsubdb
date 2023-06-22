@@ -179,10 +179,6 @@ class EngineService {
     this.task.processWorkItems((this.hook).bind(this));
   }
 
-  async processCleanupItems() {
-    this.task.processCleanupItems((this.scrub).bind(this));
-  }
-
   async report() {
     const message: ReportMessage = {
       type: 'report',
