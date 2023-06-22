@@ -46,7 +46,7 @@ PubSubDB apps are modeled using YAML. These are the *execution instructions* for
 
 2. **Input\/Output Schemas**: Each YAML file defines input and output schemas. These schemas describe the structure of data that the flow expects sends and receives. Each activity can likewise define a custom schema, separate from the input and output schemas for the overall flow.
 
-3. **Activities**: Activities are the building blocks of your workflow. Each activity, such as `get_discount` in the example, represents a single step in the process. Flows are composable and can be modeled using an `await` activity.
+3. **Activities**: Activities are the building blocks of your workflow. Each activity, such as `get_discount` in the example, represents a single step in the process. Flows are composable and can be connected using an `await` activity.
 
 4. **Data Mapping**: The mapping syntax, referred to as [@pipes](./docs/data_mapping.md), allows you to navigate the JSON data generated and exchanged between activities as the flow is run.
 

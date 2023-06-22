@@ -8,8 +8,7 @@
 5. [From ECA Units to Meaningful Business Processes: The Role of Enterprise Application Integration](#from-eca-units-to-meaningful-business-processes-the-role-of-enterprise-application-integration)
 6. [Implementing a Quorum-Based System for Collation and Status Tracking](#implementing-a-quorum-based-system-for-collation-and-status-tracking)
 7. [Ensuring the Continuity of the Process: Making the System Self-Perpetuating](#ensuring-the-continuity-of-the-process-making-the-system-self-perpetuating)
-8. [Beyond a Single Job: Job-to-Job Callbacks and Inter-Process Communication](#beyond-a-single-job-job-to-job-callbacks-and-inter-process-communication)
-9. [Conclusion](#conclusion)
+8. [Conclusion](#conclusion)
 
 ## Introduction: The Challenge of Orchestration in a Headless Environment
 
@@ -241,67 +240,6 @@ jobX();
 In both scenarios, the crucial element is that each activity or job is aware of its successor and can trigger its execution upon completion. This design allows for continuous progression, maintaining a dynamic and responsive system that can adjust to evolving requirements and workloads.
 
 In the following section, we'll take a closer look at the specific mechanism controlling the sequence of activities within a job.
-
-## Beyond a Single Job: Job-to-Job Callbacks and Inter-Process Communication
-While it is critical to manage the sequence of activities within a single job, the real power of a headless orchestration system lies in its ability to handle interactions between different jobs. Job-to-job callbacks and inter-process communication are instrumental in providing the flexibility and scalability required in today's complex business environments.
-
-A job-to-job callback is a mechanism that allows a job to call another job, then suspend its operation (hibernate) until it receives a response from the called job. This capability lets a job trigger a process in another part of the system without needing to stay active while the other process runs, significantly enhancing system efficiency.
-
-Pseudo-code for a job-to-job callback might look like this:
-
-```
-// Function representing a job with a callback
-function jobWithCallback(task, callbackJob) {
-  // Execute task...
-
-  // Upon completion, trigger callback job
-  if (callbackJob) {
-    let response = callbackJob();
-    // Hibernate until response received
-    await response;
-    // Continue with the next steps...
-  }
-}
-
-// Define jobs X and Y
-let jobX = () => jobWithCallback('X', jobY);
-let jobY = () => job('Y', null);
-
-// Start the process
-jobX();
-```
-
-Inter-process communication (IPC) is another key aspect of orchestrating workflows in a headless system. IPC allows different jobs, potentially running on different machines or within different environments, to share information and coordinate their activities. This is essential for enabling a coherent, system-wide workflow where each job can contribute its part to the overall process.
-
-One common IPC method involves using a message-passing system. Here's how this could look in pseudo-code:
-
-```
-// Function representing a job that sends a message
-function jobSendMessage(task, message) {
-  // Execute task...
-
-  // Send message to IPC system
-  ipc.send(message);
-}
-
-// Function representing a job that receives a message
-function jobReceiveMessage() {
-  // Wait for message from IPC system
-  let message = ipc.receive();
-
-  // Continue with the next steps...
-}
-
-// Define jobs X and Y
-let jobX = () => jobSendMessage('X', 'Hello, Job Y!');
-let jobY = () => jobReceiveMessage();
-
-// Start the process
-jobX();
-jobY();
-```
-
-Note that these examples are simplified, and real-world scenarios would involve more complex tasks, multiple callback jobs, and a robust IPC system that can handle concurrent messages and deal with potential failures. Still, they should give you a sense of how job-to-job callbacks and IPC are integral to the functioning of a headless orchestration system.
 
 ## Conclusion
 

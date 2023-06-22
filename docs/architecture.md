@@ -1,7 +1,6 @@
 # A Distributed Engine Architecture for Operationalizing Data at Web Scale
 
 - [Introduction](#introduction)
-- [Distributed Event Bus](#distributed-event-bus)
 - [First Principles](#first-principles)
   * [Sequence Activities with a DAG](#sequence-activities-with-a-dag)
   * [Limit Execution Scope to ECA](#limit-execution-scope-to-eca)
@@ -16,20 +15,23 @@
 - [Comparison to Other Architectures](#comparison-to-other-architectures)
 
 ## Introduction
-The [Ajax/Single Page Application architecture](https://patents.google.com/patent/US8136109) efficiently solves distributed state at Web scale by cleanly separating data and processing instructions into two distinct channels. A home server provides the instructions to each connected client but does not execute the processing instructions itself. The clients then cache and execute the instructions and exchange pure data (the results of the execution) with the home server.
+The [Ajax/Single Page Application architecture](https://patents.google.com/patent/US8136109) efficiently solves distributed state at Web scale by cleanly separating data and processing instructions into two distinct channels. PubSubDB is modeled using this architecural Pattern, with a reference implementation using Redis as the *Server* and PubSubDB as the *Client(s)*. 
 
-<img src="https://patentimages.storage.googleapis.com/7e/cb/e1/4d40791b381af8/US08136109-20120313-D00000.png" alt="Patent illustration" style="max-width: 300px;max-height:300px;width:280px;">
+### Central Server
+A home server provides the instructions to each connected client, journaling all events in an immutable ledger. Importantly, the home server *never* executes its processing instructions but does serve as the single source of truth for storing the results.
 
-## Distributed Event Bus
-PubSubDB builds upon the *Distributed Engine* Pattern, delivering a specific type of engine referred to as an *Event Bus* or *Integration Server*. Each time a *Distributed Bus* receives an event, it processes and routes it according to its cached execution rules. The solution is a fully functional *Enterprise Application Integration* (EAI) deployment with all expected execution patterns supported.
+<img src="https://patentimages.storage.googleapis.com/7e/cb/e1/4d40791b381af8/US08136109-20120313-D00000.png" alt="Patent illustration" style="max-width: 300px;max-height:300px;width:300px;">
+
+### Distributed Clients
+Each time a client receives an event, it processes and routes it according to its cached instruction sets received from the server. Clients *never* retain state (they never journal the events they process) but are allowed to cache the execution rules as they are immutable.
 
 ## First Principles
-There are a set of architectural first-principles that undergird how state and process must be separated to realize the full performance benefit. They can seem inconsequential individually, but when applied as a set, they enable distributed computation at scale, without back-pressure, overflow, timeout and other risks typically associated with networked systems.
+There are a set of architectural first-principles that undergird how state and process must be separated to realize the full performance benefit of this scheme. They are inconsequential individually, but when applied as a set, they enable distributed computation at scale, without back-pressure, overflow, timeout and other risks typically associated with networked systems.
 
-By converting the application into a series of stateless, single-purpose execution instructions, the network expands and contracts in real-time to absorb assymetry at its source.
+By converting the application into a series of stateless, single-purpose execution instructions, the network expands and contracts in real-time to absorb assymetry at its source. And it does so entirely headless without a central governing body, which is why its scale is limited only by Redis' ability to scale.
 
 ### Sequence Activities with a DAG
-The Distributed Event Bus uses a Directed Acyclic Graph (DAG) variant known as rooted tree to model the activity flow. This was chosen due to its strict enforcement of a single entry point while still allowing for parallel activities. Sequence and parallelization are both critical to building an efficient execution engine, and the DAG is the most efficient representation that achieves this.
+PubSubDB uses a Directed Acyclic Graph (DAG) variant known as rooted tree to model the activity flow. This was chosen due to its strict enforcement of a single entry point while still allowing for parallel activities. Sequence and parallelization are both critical to building an efficient execution engine, and the DAG is the most efficient representation that achieves this.
 
 <img src="./img/architecture/dag.png" alt="Sequence Activities with a DAG" style="max-width: 300px;max-height:200px;height:200px;">
 
@@ -49,7 +51,7 @@ To address the need for long-running business processes, including those that su
 <img src="./img/architecture/eai.png" alt="Mediate Duplexed Calls with EAI" style="max-width: 680px;max-height:300px;width:580px;">
 
 ### Orchestrate through Emergent State
-The Distributed Event Bus implicitly manages process orchestration (collation, aggregation, inter-flow coordination, etc) by using a quorum of connected clients to act as a stand-in for the central server. Process state is implicitly generated by the quorum without any single client being aware of the uber-process. This is facilitated via a [multi-digit collation key](../services/collator/README.md) that represents the state of all activities in a running flow. As each connected client processes its single ECA unit of execution, the backend data store (Redis) will return long integers that trigger fan-in resolution without the performance overhead of a central orchestrating server.
+PubSubDB implicitly manages process orchestration (collation, aggregation, inter-flow coordination, etc) by using a quorum of connected clients to act as a stand-in for the central server. Process state is implicitly generated by the quorum without any single client being aware of the uber-process. This is facilitated via a [multi-digit collation key](../services/collator/README.md) that represents the state of all activities in a running flow. As each connected client processes its single ECA unit of execution, the backend data store (Redis) will return long integers that trigger fan-in resolution without the performance overhead of a central orchestrating server.
 
 <img src="./img/architecture/quorum.png" alt="Orchestrate through Emergent State" style="max-width: 280px;max-height:300px;width:280px;">
 
