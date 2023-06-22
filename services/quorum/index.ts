@@ -72,8 +72,6 @@ class QuorumService {
       await instance.subscribe.subscribe(KeyType.QUORUM, instance.subscriptionHandler(), appId, instance.guid);
       //tell engine to check for open `hook` tasks
       instance.engine.processWorkItems();
-      //tell engine to check for open `scrub` tasks
-      instance.engine.processCleanupItems();
       return instance;
     }
   }

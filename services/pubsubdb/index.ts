@@ -154,7 +154,6 @@ class PubSubDBService {
 
   async stop() {
     await StreamSignaler.stopConsuming();
-    this.engine?.task.cancelCleanup();
   }
 
   async compress(terms: string[]): Promise<boolean> {

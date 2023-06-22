@@ -7,7 +7,7 @@
 4. [Splitting Actions for Long-Running Business Processes](#splitting-actions-for-long-running-business-processes)
 5. [From ECA Units to Meaningful Business Processes: The Role of Enterprise Application Integration](#from-eca-units-to-meaningful-business-processes-the-role-of-enterprise-application-integration)
 6. [Implementing a Quorum-Based System for Collation and Status Tracking](#implementing-a-quorum-based-system-for-collation-and-status-tracking)
-7. [Ensuring the Continuity of the Process: Making the System Self-Perpetuating](#ensuring-the-continuity-of-the-process-making-the-system-self-perpetuating)
+7. [Harnessing the Power of CQRS for Self-Perpetuation](#harnessing-the-power-of-cqrs-for-self-perpetuation)
 8. [Conclusion](#conclusion)
 
 ## Introduction: The Challenge of Orchestration in a Headless Environment
@@ -187,60 +187,17 @@ This mechanism offers a robust solution for tracking the state of distributed wo
 
 Up next, we'll delve into how to ensure perpetual workflow progression, keeping the system moving from activity to activity, and from job to job.
 
-## Ensuring the Continuity of the Process: Making the System Self-Perpetuating
-When operating within an asynchronous and distributed environment, ensuring the continuity of operations is paramount. The key principle here is to make the system self-perpetuating, facilitating a smooth transition from activity to activity, and from job to job, even across generations of activity graphs.
+## Harnessing the Power of CQRS for Self-Perpetuation
+In a distributed environment, particularly when there is no central controller, ensuring operational continuity becomes a top priority. One of the most compelling principles to leverage for this goal is CQRS (Command Query Responsibility Segregation), a pattern that effectively decouples the 'write' model (commands) from the 'read' model (queries) in a system. In our context, it's this decoupling that catalyzes the self-perpetuation behavior of the system.
 
-This principle's embodiment is the mechanism that triggers the next generation of activities within a workflow. To illustrate, consider a process comprising several activities — `A`, `B`, and `C`. The completion of `A` triggers `B`, and `B`'s completion subsequently triggers `C`. This mechanism enables the workflow to proceed without human intervention or a central coordinator, adhering to the self-perpetuating principle.
+To illustrate, let's imagine a set of tasks: `A`, `B`, and `C`, which need to be executed in sequence. Unlike the traditional approach, where the completion of `A` directly triggers `B` and `B` triggers `C`, in our system the tasks are driven by the clients constantly pulling for updates.
 
-Here's a simple pseudo-code representation of this concept:
+In this model, the client assumes the responsibility of task execution and the subsequent 'pull' of the next task, based on the 'read' model of the system updated after each task completion. This workflow, while effectively using CQRS principles, eliminates the need for a centralized controller and continues without human intervention.
 
-```
-// Function representing an activity
-function activity(task, nextTask) {
-  // Execute task...
-  
-  // Upon completion, trigger next task
-  if (nextTask) {
-    nextTask();
-  }
-}
+As clients persistently pull for their next tasks, the system inherently becomes self-perpetuating. Each job is not directly aware of its successor, but rather it is the result of the constant pull from the clients based on the state of the 'read' model. Thus, the workflow progresses in a smooth and consistent manner, maintaining its agility and responsiveness to dynamically evolving requirements and workloads.
 
-// Define tasks A, B, and C
-let taskA = () => activity('A', taskB);
-let taskB = () => activity('B', taskC);
-let taskC = () => activity('C', null);
-
-// Start the process
-taskA();
-```
-
-Another pivotal mechanism is a job-to-job callback system that enables one job to trigger another, hibernate, and then awaken when the called job responds. This system leverages the collation integer described earlier, ensuring that job responses always find their way back to the originating job.
-
-Here's a rough pseudo-code representation:
-
-```
-// Function representing a job
-function job(task, callbackJob) {
-  // Execute task...
-  
-  // Upon completion, trigger callback job
-  if (callbackJob) {
-    callbackJob();
-  }
-}
-
-// Define jobs X and Y
-let jobX = () => job('X', jobY);
-let jobY = () => job('Y', null);
-
-// Start the process
-jobX();
-```
-
-In both scenarios, the crucial element is that each activity or job is aware of its successor and can trigger its execution upon completion. This design allows for continuous progression, maintaining a dynamic and responsive system that can adjust to evolving requirements and workloads.
-
-In the following section, we'll take a closer look at the specific mechanism controlling the sequence of activities within a job.
+The intrinsic elegance and scalability offered by CQRS combined with a 'pull'-oriented client design makes the system self-perpetuating, ensuring operational continuity and predictable workflow completion even in the absence of a controller. As we proceed to the next section, we'll delve into the detailed mechanisms that regulate the sequence of activities within a job.
 
 ## Conclusion
 
-The design and orchestration of multidimensional workflows in headless environments can be a complex task, but with the right approach and understanding of key principles, it can be made more manageable. By taking into consideration factors like asynchronous activities, ECA rules and action splitting, we can design robust and efficient workflows that handle complex business processes at stateless speeds.
+The design and orchestration of multidimensional workflows in headless environments can be a complex task, but with the right approach and understanding of key principles, it can be made more manageable. By taking into consideration factors like asynchronous activities, ECA rules, action splitting and CQRS, we can design robust and efficient workflows that handle complex business processes at stateless speeds.

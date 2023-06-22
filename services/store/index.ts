@@ -42,6 +42,7 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
   commands: Record<string, string> = {
     setnx: 'setnx',
     del: 'del',
+    expire: 'expire',
     hset: 'hset',
     hsetnx: 'hsetnx',
     hincrby: 'hincrby',
@@ -695,14 +696,22 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
     return await this.redisClient[this.commands.lmove](sourceKey, destinationKey, 'LEFT', 'RIGHT');
   }
 
+  //note: this is a future-oriented method in support of manual job cleanup taks; enable zset and processor if desired
   async registerJobForCleanup(jobId: string, deletionTime: number): Promise<void> {
-    const zsetKey = this.mintKey(KeyType.DELETE_RANGE, { appId: this.appId });
     const listKey = this.mintKey(KeyType.DELETE_RANGE, { appId: this.appId, timeValue: deletionTime });
     const len = await this.redisClient[this.commands.rpush](listKey, jobId);
     if (len === 1) {
-        await this.zAdd(zsetKey, deletionTime.toString(), listKey);
+      const zsetKey = this.mintKey(KeyType.DELETE_RANGE, { appId: this.appId });
+      await this.zAdd(zsetKey, deletionTime.toString(), listKey);
     }
   }
+
+  async expireJob(jobId: string, inSeconds: number): Promise<void> {
+    if (!isNaN(inSeconds) && inSeconds > 0) {
+      const jobKey = this.mintKey(KeyType.JOB_STATE, { appId: this.appId, jobId });
+      await this.redisClient[this.commands.expire](jobKey, inSeconds);
+    }
+}
 
   async getNextCleanupJob(listKey?: string): Promise<[listKey: string, jobId: string] | void> {
     const zsetKey = this.mintKey(KeyType.DELETE_RANGE, { appId: this.appId });
