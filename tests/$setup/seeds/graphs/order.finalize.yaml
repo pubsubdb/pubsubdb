@@ -16,7 +16,7 @@ activities:
 
   bundler:
     title: Bundle Routed Order
-    type: exec
+    type: worker
     subtype: order.bundle
     input:
       schema:

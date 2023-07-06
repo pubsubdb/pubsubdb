@@ -7,7 +7,7 @@ export {
   Consumes,
   AwaitActivity,
   BaseActivity,
-  ExecActivity,
+  WorkerActivity,
   IterateActivity,
   RequestActivity,
   TriggerActivity,

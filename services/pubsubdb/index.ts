@@ -116,9 +116,9 @@ class PubSubDBService {
   async deploy(path: string): Promise<PubSubDBManifest> {
     return await this.engine?.deploy(path);
   }
-  async activate(version: string): Promise<boolean> {
+  async activate(version: string, delay?: number): Promise<boolean> {
     //activation is a quorum operation
-    return await this.quorum?.activate(version);
+    return await this.quorum?.activate(version, delay);
   }
 
   // ************* REPORTER METHODS *************

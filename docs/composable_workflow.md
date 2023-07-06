@@ -13,7 +13,7 @@ activities:
     type: trigger
   a2:
     title: Create Asana Task
-    type: exec
+    type: worker
     subtype: asana.1.createTask
   a3:
     title: Save Task ID
@@ -76,8 +76,8 @@ activities:
           target: "{$self.output.data.division}"
   a2:
     title: Exec Asana Task
-    type: exec
-    exec: asana.1.createTask
+    type: worker
+    subtype: asana.1.createTask
     credentials: asana.1.mycreds
     hook:
       schema:

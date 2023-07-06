@@ -62,12 +62,14 @@ The conventional ECA (Event-Condition-Action) model treats the *Action* as a sin
 The duplexing principle is fundamental to the operation of the engine (the quorum), which interprets an activity's execution as two interconnected yet standalone actions. The following pseudo-code representation provides an insight into the engine's role in processing an activity:
 
 ```
-On EVENT:
+On EVENT (PARENT ACTIVITY COMPLETED):
   If CONDITION:
     EXECUTE ACTION-BEGIN (Duplex Leg 1)
 
 --------------- EXTERNAL SYSTEM PROCESSING ----------------
 
+On EVENT (WORKER COMPLETED):
+  If CONDITION (JOB STILL ACTIVE):
     EXECUTE ACTION-END (Duplex Leg 2)
 ```
 
@@ -78,27 +80,7 @@ Importantly, this dual-action approach spawns a seemingly perpetual chain of act
 ## From ECA Units to Meaningful Business Processes: The Role of Enterprise Application Integration
 The transformation of isolated event-driven operations, or ECA units, into cohesive business processes calls for an intermediary abstraction layer to direct and synchronize these individual units. Enterprise Application Integration (EAI) plays this pivotal role, acting as a crucial orchestrator.
 
-EAI serves as a principal scheme for unification, amalgamating separate ECA units into a comprehensive network of business processes. It orchestrates data exchange among these units, fostering their collective participation in executing complex workflows that span across varied services and subsystems.
-
-While EAI primarily eases data exchange between service endpoints within an integration architecture, its role is not limited to data conveyance. EAI ensures that the transmitted data complies with predetermined schemas and data types, thereby enhancing interoperability and ensuring data consistency across the headless system.
-
-The pseudo-code from the previous section illustrates the glue-like role of EAI. It bookends the data brokering process, generating the input and processing the output when interfacing with external systems:
-
-```
-On EVENT:
-  If CONDITION:
-    EXECUTE ACTION-BEGIN (Duplex Leg 1)
-      (EAI) Serialize Engine State (sleep)
-      (EAI) Map/write INPUT to EXTERNAL SYSTEM
-
---------------- EXTERNAL SYSTEM PROCESSING ----------------
-
-      (EAI) Map/read OUTPUT from EXTERNAL SYSTEM
-      (EAI) Regenerate Engine State (awaken)
-    EXECUTE ACTION-END (Duplex Leg 2)
-```
-
-Incorporating an EAI layer into the system not only maintains the high throughput of event-driven architectures but also broadens the capability to model and execute intricate, long-running business processes.
+EAI serves as a principal scheme for unification, amalgamating separate ECA units into a comprehensive network of business processes. It describes the rules for data exchange among these units, fostering their collective participation in executing complex workflows that span across varied services and subsystems. EAI ensures that the transmitted data complies with predetermined schemas and data types, thereby enhancing interoperability and ensuring data consistency across the headless system.
 
 ## Building Quorum-Based Systems for Activity Collation and Status Tracking
 Activity collation forms the nexus of an asynchronous workflow system, bearing the critical responsibility of tracing and managing the state of all activities within an active process or a "Job". This task is accomplished through a multi-digit collation key. Each digit within this key is a symbolic representation of the status of a specific activity in the workflow.
@@ -116,7 +98,7 @@ The collation key structure is conceived with explicit numeric values designated
 - 1: `Await` Left Parentheses
 - 0: N/A (the flow has fewer activities than the collation key)
 
-This structured approach empowers a quick understanding of the job's current state from a mere glance at the collation key. Moreover, two special digits, 2 and 1, are designated for 'bookending' subordinated workflows, a design decision that streamlines the expression of a composite job state. For example, a composite state of `99996146636629` tells us that two separate workflows, Flow A and Flow B, have concluded successfully, where Activity 5 in Flow A ignited Flow B, and the latter returned its response successfully.
+This structured approach empowers a quick understanding of the job's current state from a mere glance at the collation key. Moreover, two special digits, 1 and 2, are designated for 'bookending' subordinated workflows, a design decision that streamlines the expression of a composite job state. For example, a composite state of `36636146636626` tells us that two separate workflows, Flow A and Flow B, have concluded successfully, where Activity 5 in Flow A spawned Flow B, and the latter returned its response successfully.
 
 The Collation Service employs an ascending string sorting methodology to counter the absence of a sibling node order guarantee in a Directed Acyclic Graph (DAG). Despite the trigger being the first element in the graph, it could be placed fifth alphabetically, as seen in the following sequence:
 
@@ -135,7 +117,7 @@ Conversely, a collation key like `766366000000000` symbolizes an *error* state. 
 These examples illustrate the capacity of the quorum-based collation and status tracking system to facilitate detailed, real-time monitoring of asynchronous workflow execution. This system, capable of offering both macro and micro insights, empowers the orchestration service to efficiently manage intricate workflows, cater to errors and exceptions, and secure the successful completion of activities within the graph.
 
 ## Leveraging CQRS to Enable Self-Perpetuation
-In the orchestration of business processes, *operational continuity* emerges as a critical aspect. This is where Command Query Responsibility Segregation (CQRS), a refined architectural pattern, has a pivotal role to play. CQRS fundamentally decouples the 'write' operations (commands) from the 'read' operations (queries) in a system, thus enabling an operationally resilient and efficient environment.
+In the orchestration of business processes, *operational continuity* emerges as a critical aspect. This is where Command Query Responsibility Segregation (CQRS) has a pivotal role to play. CQRS fundamentally decouples the 'write' operations (commands) from the 'read' operations (queries) in a system, thus enabling an operationally resilient and efficient environment.
 
 Let's take a sequence of tasks: `A`, `B`, and `C`. In a conventional execution flow, the completion of `A` directly initiates `B`, which in turn sets off `C`:
 

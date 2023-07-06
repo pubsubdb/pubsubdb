@@ -175,7 +175,7 @@
           },
           "executor": {
             "title": "Execute Calculation",
-            "type": "exec",
+            "type": "worker",
             "subtype": "calculation.execute",
             "retry": {
               "404": [

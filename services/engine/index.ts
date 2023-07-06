@@ -3,7 +3,7 @@ import { formatISODate, getSubscriptionTopic, restoreHierarchy } from '../../mod
 import Activities from '../activities';
 import { Activity } from '../activities/activity';
 import { Await } from '../activities/await';
-import { Exec } from '../activities/exec';
+import { Worker } from '../activities/worker';
 import { Trigger } from '../activities/trigger';
 import { CollatorService } from '../collator';
 import { CompilerService } from '../compiler';
@@ -304,7 +304,7 @@ class EngineService {
       },
       data: streamData.data,
     };
-    const activityHandler = await this.initActivity(`.${streamData.metadata.aid}`, context.data, context as JobState) as Exec;
+    const activityHandler = await this.initActivity(`.${streamData.metadata.aid}`, context.data, context as JobState) as Worker;
     //return void; it is a signal to the
     await activityHandler.processWorkerResponse(streamData.status, streamData.code);
   }
