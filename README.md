@@ -72,7 +72,7 @@ activities:
 
   get_available:
     title: Check Available Discounts
-    type: exec
+    type: worker
     subtype: discounts.enumerate
     ...
 
@@ -133,7 +133,7 @@ const jobOutput: JobOutput = await pubSubDB.pubsub(topic, payload);
 No matter where in the network the calculation is performed (no matter the microservice that is subscribed as the official *worker* to perform the calculation...or even if multiple microservices are invoked during the workflow execution), the answer will always be published back to the originating caller the moment it's ready.
 
 ## Workers
-Deploy workers by associating functions with a named topic of your choosing. Thereafter, any time PubSubDB runs an `exec` activity that specifies this topic, it will call invoke the function, passing all data described by its schema. Return a response to automatically resume the workflow.
+Deploy workers by associating functions with a named topic of your choosing. Thereafter, any time PubSubDB runs a `worker` activity that specifies this topic, it will call invoke the function, passing all data described by its schema. Return a response to automatically resume the workflow.
 
 In the following example, a worker function has been registered to respond to the `discounts.enumerate` topic.
 

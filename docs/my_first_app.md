@@ -63,7 +63,7 @@ There are four primary types of activities in PubSubDB:
 
 3. `await`: An `await` activity waits for a response from another workflow before proceeding. All other activities in the workflow running in parallel will continue to run as expected; however, the await activity will pause until the response is returned from the spawned workflow job.
 
-4. `exec`: An `exec` activity identifies a function on the network where PubSubDB has a presence. If you have a microservice running an instance of PubSubDB, you can register a function with an arbitrary topic of your choice and any time that PubSubDB runs a workflow with an `exec` activity with this topic, it will call the function in Job context, passing all job data described by the schema. In the following example, PubSubDB has been initialized to run the function when the `calculation.execute` topic is encountered in a flow. The function will execute in buffered job context, isolated from network back-pressure risk.
+4. `worker`: A `worker` activity identifies a function on the network where PubSubDB has a presence. If you have a microservice running an instance of PubSubDB, you can register a function with an arbitrary topic of your choice and any time that PubSubDB runs a workflow with a `worker` activity with this topic, it will call the function in Job context, passing all job data described by the schema. In the following example, PubSubDB has been initialized to run the function when the `calculation.execute` topic is encountered in a flow. The function will execute in buffered job context, isolated from network back-pressure risk.
 
     ```typescript
     import {
@@ -244,7 +244,7 @@ activities:
 
   executor:
     title: Execute Calculation
-    type: exec
+    type: worker
     subtype: calculation.execute
     input:
       schema:
@@ -258,7 +258,7 @@ activities:
 
 'Receiver' is a `trigger` type activity, which is the entry point for this flow. It receives the calculation details and passes it to the 'executor' activity.
 
-'Executor' is an `exec` type activity, which takes the calculation details from the 'receiver' activity and executes the calculation.
+'Executor' is a `worker` type activity, which takes the calculation details from the 'receiver' activity and executes the calculation.
 
 ### Transitions
 The flow of control in this workflow is straightforward - from 'receiver' to 'executor'. This is represented by the following transition in the YAML:

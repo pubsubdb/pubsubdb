@@ -236,7 +236,7 @@ describe('pubsubdb', () => {
   });
 
   describe('Execute unit of work', () => {
-    it('should invoke a flow with an exec activity', async () => {
+    it('should invoke a flow with an worker activity', async () => {
       const payload = {
         id: `ord_unitofwork123`,
         size: 'lg',

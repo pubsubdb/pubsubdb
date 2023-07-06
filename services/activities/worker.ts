@@ -11,7 +11,7 @@ import { EngineService } from "../engine";
 import {
   ActivityData,
   ActivityMetadata,
-  ExecActivity,
+  WorkerActivity,
   ActivityType } from "../../types/activity";
 import { JobState } from "../../types/job";
 import { MultiResponseFlags } from "../../types/redis";
@@ -20,8 +20,8 @@ import {
   StreamData,
   StreamStatus } from "../../types/stream";
 
-class Exec extends Activity {
-  config: ExecActivity;
+class Worker extends Activity {
+  config: WorkerActivity;
 
   constructor(
     config: ActivityType,
@@ -84,7 +84,7 @@ class Exec extends Activity {
   async processWorkerResponse(status: StreamStatus = StreamStatus.SUCCESS, code: StreamCode = 200): Promise<void> {
     const jid = this.context.metadata.jid;
     const aid = this.metadata.aid;
-    this.logger.debug('exec-onresponse-started', { jid, aid, status, code });
+    this.logger.debug('worker-onresponse-started', { jid, aid, status, code });
     this.status = status;
     this.code = code;
     await this.getState();
@@ -133,4 +133,4 @@ class Exec extends Activity {
   }
 }
 
-export { Exec };
+export { Worker };

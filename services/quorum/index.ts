@@ -148,14 +148,14 @@ class QuorumService {
 
 
   // ************* COMPILER METHODS *************
-  async activate(version: string): Promise<boolean> {
+  async activate(version: string, delay = QUORUM_DELAY): Promise<boolean> {
     version = version.toString();
     const config = await this.engine.getVID();
     //request a quorum to activate the version
-    await this.requestQuorum();
-    const q1 = await this.requestQuorum();
-    const q2 = await this.requestQuorum();
-    const q3 = await this.requestQuorum();
+    await this.requestQuorum(delay);
+    const q1 = await this.requestQuorum(delay);
+    const q2 = await this.requestQuorum(delay);
+    const q3 = await this.requestQuorum(delay);
     if (q1 && q1 === q2 && q2 === q3) {
       this.logger.info('quorum-rollcall-succeeded', { q1, q2, q3 });
       this.store.publish(
@@ -163,7 +163,7 @@ class QuorumService {
         { type: 'activate', cache_mode: 'nocache', until_version: version },
         this.appId
       );
-      await new Promise(resolve => setTimeout(resolve, QUORUM_DELAY));
+      await new Promise(resolve => setTimeout(resolve, delay));
       //confirm we received the activation message
       if (this.engine.untilVersion === version) {
         this.logger.info('quorum-activation-succeeded', { version });

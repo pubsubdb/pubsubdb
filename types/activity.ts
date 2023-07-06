@@ -1,7 +1,7 @@
 import { MetricTypes } from "./stats";
 import { StreamRetryPolicy } from "./stream";
 
-type ActivityExecutionType = 'trigger' | 'await' | 'exec' | 'activity' | 'request' | 'iterate';
+type ActivityExecutionType = 'trigger' | 'await' | 'worker' | 'activity' | 'request' | 'iterate';
 
 type Consumes = Record<string, string[]>;
 
@@ -50,8 +50,8 @@ interface AwaitActivity extends BaseActivity {
   timeout: number;
 }
 
-interface ExecActivity extends BaseActivity {
-  type: 'exec';
+interface WorkerActivity extends BaseActivity {
+  type: 'worker';
   subtype: string;
   timeout: number;
 }
@@ -64,7 +64,7 @@ interface IterateActivity extends BaseActivity {
   type: 'iterate';
 }
 
-type ActivityType = BaseActivity | TriggerActivity | AwaitActivity | ExecActivity | RequestActivity | IterateActivity;
+type ActivityType = BaseActivity | TriggerActivity | AwaitActivity | WorkerActivity | RequestActivity | IterateActivity;
 
 type ActivityData = Record<string, any>;
 type ActivityMetadata = {
@@ -91,17 +91,17 @@ type ActivityDataType = {
 };
 
 export {
-  ActivityDataType,
   ActivityContext,
   ActivityData,
+  ActivityDataType,
   ActivityMetadata,
   ActivityType,
   Consumes,
-  BaseActivity,
-  TriggerActivity,
   TriggerActivityStats,
   AwaitActivity,
-  ExecActivity,
+  BaseActivity,
+  IterateActivity,
   RequestActivity,
-  IterateActivity
+  TriggerActivity,
+  WorkerActivity
 };

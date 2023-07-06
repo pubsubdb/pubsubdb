@@ -19,7 +19,7 @@ The PubSubDB model is a modern, JSON-based alternative to WSDL/SOAP, offering a 
     - [4.1.1. Activity](#411-activity)
     - [4.1.2. Trigger](#412-trigger)
     - [4.1.3. Await](#413-await)
-    - [4.1.4. Exec](#414-exec)
+    - [4.1.4. Worker](#414-worker)
     - [4.1.5. Iterate](#415-iterate)
     - [4.1.6. Request](#416-request)
   - [4.2. Input and Output Schemas](#42-input-and-output-schemas)
@@ -349,16 +349,16 @@ a2:
         # ...
 ```
 
-#### 4.1.4. Exec
+#### 4.1.4. Worker
 
-An `exec` activity is used to execute a method in the system. The typical workflow would be to instantiate an instance of PubSubDB and provide/register callback methods to handle the desired topics. As the engine orchestrates worflows, it will invoke the callback handler, providing a payload with the request. Registered callbacks are expected to return a data payload in the exact shape as what was received (as per the schema for the activity). 
+A `worker` activity is used to call a method in a service where PubSubDB has a presence. The typical workflow would be to instantiate an instance of PubSubDB and provide/register callback methods to handle the desired topics. As the engine orchestrates worflows, it will invoke the callback handler, providing a payload with the request. Registered callbacks are expected to return a data payload in the exact shape as what was received (with `data`, `metadata`, and `status` fields). 
 
-Example of an exec activity in YAML:
+Example of a `worker` activity in YAML:
 
 ```yaml
 my_calculator_activity:
   title: Calculate Something
-  type: exec
+  type: worker
   subtype: calculation.execute
   input:
     schema:

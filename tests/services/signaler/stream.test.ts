@@ -135,7 +135,7 @@ describe('StreamSignaler', () => {
   });
 
   describe('Execute streamed tasks', () => {
-    it('should invoke an exec activity (add) in calculator app', async () => {
+    it('should invoke a worker activity (add) in calculator app', async () => {
       const payload = {
         operation: 'add',
         values: JSON.stringify([1, 2, 3, 4, 5]),
@@ -145,7 +145,7 @@ describe('StreamSignaler', () => {
       expect(jobResponse?.data.result).toBe(15);
     });
 
-    it('should invoke an exec activity (subtract) in calculator app', async () => {
+    it('should invoke a worker activity (subtract) in calculator app', async () => {
       const payload = {
         operation: 'subtract',
         values: JSON.stringify([5, 4, 3, 2, 1]),
@@ -155,7 +155,7 @@ describe('StreamSignaler', () => {
       expect(jobResponse?.data.result).toBe(-5);
     });
 
-    it('should invoke an exec activity (multiply) in calculator app', async () => {
+    it('should invoke a worker activity (multiply) in calculator app', async () => {
       const payload = {
         operation: 'multiply',
         values: JSON.stringify([5, 4, 3, 2, 1]),
@@ -165,7 +165,7 @@ describe('StreamSignaler', () => {
       expect(jobResponse?.data.result).toBe(120);
     });
 
-    it('should invoke an exec activity (divide) in calculator app', async () => {
+    it('should invoke a worker activity (divide) in calculator app', async () => {
       const payload = {
         operation: 'divide',
         values: JSON.stringify([100, 4, 5]),

@@ -125,7 +125,7 @@ class StreamSignaler {
     try {
       output = await callback(input);
     } catch (err) {
-      this.logger.error(`stream-exec-function-failed`, { err, id, stream });
+      this.logger.error(`stream-call-function-failed`, { err, id, stream });
       output = this.structureUnhandledError(input, err);
     }
     return output as StreamDataResponse;
