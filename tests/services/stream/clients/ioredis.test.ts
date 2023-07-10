@@ -138,6 +138,8 @@ describe('IORedisStreamService', () => {
       let pendingMessages = await redisStreamService.xpending(key, groupName, '-', '+', 1, initialConsumer) as [string, string, number, any][];
       let claimedMessage = pendingMessages.find(([id,consumer, ,]) => id === messageId && consumer === initialConsumer);
       expect(claimedMessage).toBeDefined();
+      // Claim the message by another consumer using sendCommand
+      await redisStreamService.xclaim(key, groupName, claimantConsumer, 0, messageId);
       // Retrieve pending messages for the claimant consumer
       pendingMessages = await redisStreamService.xpending(key, groupName, '-', '+', 1, claimantConsumer) as [string, string, number, any][];
       claimedMessage = pendingMessages.find(([id,consumer, ,]) => id === messageId && consumer === claimantConsumer);
