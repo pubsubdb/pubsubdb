@@ -80,7 +80,11 @@ class RedisStreamService extends StreamService<RedisClientType, RedisMultiType> 
       if (end) args.push(end);
       if (count !== undefined) args.push(count.toString());
       if (consumer) args.push(consumer);
-      return await this.redisClient.sendCommand(['XPENDING', ...args]);
+      try {
+        return await this.redisClient.sendCommand(['XPENDING', ...args]);
+      } catch (err) {
+        console.log('err, args', err, args);
+      }
     } catch (err) {
       this.logger.error(`Error in retrieving pending messages for group: ${group} in key: ${key}`, err);
       throw err;

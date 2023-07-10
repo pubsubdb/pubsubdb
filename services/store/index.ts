@@ -433,7 +433,7 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
     return Number(status);
   }
 
-  async setState(state: StringAnyType, status: number | null, jobId: string, appId: string, symbolNames: string[], multi? : U): Promise<string> {
+  async setState({ ...state }: StringAnyType, status: number | null, jobId: string, appId: string, symbolNames: string[], multi? : U): Promise<string> {
     delete state['metadata/js'];
     const hashKey = this.mintKey(KeyType.JOB_STATE, { appId, jobId });
     const symbolLookups = [];
@@ -499,6 +499,7 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
       let status = 0;
       if (state[':']) {
         status = Number(state[':']);
+        state[`metadata/js`] = status;
         delete state[':'];
       }
       return [state, status];

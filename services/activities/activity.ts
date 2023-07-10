@@ -253,7 +253,6 @@ class Activity {
     consumes[`$${this.config.subscribes}`] = MDATA_SYMBOLS.JOB.KEYS.map((key) => `metadata/${key}`);
     jobId = jobId || this.context.metadata.jid;
     const { id: appId } = await this.engine.getVID();
-    //todo: check if the job is in a terminal state (status)
     const [state, status] = await this.store.getState(jobId, appId, consumes);
     const context = restoreHierarchy(state);
     this.initSelf(context);

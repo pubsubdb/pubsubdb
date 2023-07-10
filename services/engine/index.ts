@@ -115,7 +115,8 @@ class EngineService {
           namespace: instance.namespace,
           appId: instance.appId,
           guid: instance.guid,
-          role: StreamRole.ENGINE
+          role: StreamRole.ENGINE,
+          xclaim: config.engine.xclaim,
         },
         instance.stream,
         instance.store,

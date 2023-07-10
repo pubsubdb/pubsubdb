@@ -23,6 +23,8 @@ const BLOCK_TIME_MS = process.env.NODE_ENV === 'test' ? TEST_BLOCK_DURATION : BL
 const REPORT_INTERVAL = 10000;
 const UNKNOWN_STATUS_CODE = 500;
 const UNKNOWN_STATUS_MESSAGE = 'unknown';
+const XCLAIM_MS = 1000 * 60; //max time a message can be unacked before it is claimed by another
+const XPENDING_COUNT = 10;
 
 class StreamSignaler {
   static signalers: Set<StreamSignaler> = new Set();
@@ -33,6 +35,7 @@ class StreamSignaler {
   topic: string | undefined;
   store: StoreService<RedisClient, RedisMulti>;
   stream: StreamService<RedisClient, RedisMulti>;
+  xclaim: number;
   logger: ILogger;
   throttle = 0;
   errorCount = 0;
@@ -50,6 +53,7 @@ class StreamSignaler {
     this.topic = config.topic;
     this.stream = stream;
     this.store = store;
+    this.xclaim = config.xclaim || XCLAIM_MS;
     this.logger = logger;
   }
 
@@ -70,6 +74,7 @@ class StreamSignaler {
     StreamSignaler.signalers.add(this);
     this.shouldConsume = true;
     await this.createGroup(stream, group);
+    let lastCheckedPendingMessagesAt = Date.now();
 
     async function consume() {
       let sleep = XSleepFor(this.throttle);
@@ -85,6 +90,16 @@ class StreamSignaler {
         if (this.isStreamMessage(result)) {
           const [[, messages]] = result;
           for (const [id, message] of messages) {
+            await this.consumeOne(stream, group, id, message, callback);
+          }
+        }
+
+        // Check for pending messages now and then (Redis 6.2 syntax option!)
+        const now = Date.now();
+        if (now - lastCheckedPendingMessagesAt > this.xclaim) {
+          lastCheckedPendingMessagesAt = now;
+          const pendingMessages = await this.claimUnacknowledgedMessages(stream, group, consumer);
+          for (const [id, message] of pendingMessages) {
             await this.consumeOne(stream, group, id, message, callback);
           }
         }
@@ -290,22 +305,19 @@ class StreamSignaler {
     this.logger.info(`stream-throttle-reset`, { delay: this.throttle, topic: this.topic });
   }
 
-  async claimUnacknowledgedMessages(stream: string, group: string, newConsumerName: string, idleTimeMs: number) {
-    const [firstId, , count] = await this.store.xpending(stream, group);
-    if (typeof count === 'number') {    
-      if (count > 0) {
-        const pendingMessages = await this.store.xpending(stream, group, firstId.toString(), '+', count);
-        for (const pendingMessage of pendingMessages) {
-          if (Array.isArray(pendingMessage)) {
-            const [id, consumer, elapsedTimeMs] = pendingMessage;
-            if (elapsedTimeMs > idleTimeMs) {
-              this.logger.info(`stream-reclaim-message`, { id, consumer, elapsedTimeMs, topic: this.topic });
-              await this.store.xclaim(stream, group, newConsumerName, idleTimeMs, id);
-            }
-          }
+  async claimUnacknowledgedMessages(stream: string, group: string, consumer: string, idleTimeMs = this.xclaim, limit = XPENDING_COUNT): Promise<[string, [string, string]][]> {
+    let pendingMessages = [];
+    const pendingMessagesInfo = await this.stream.xpending(stream, group, '-', '+', limit); //[[ '1688768134881-0', 'testConsumer1', 1017, 1 ]]
+    for (const pendingMessageInfo of pendingMessagesInfo) {
+      if (Array.isArray(pendingMessageInfo)) {
+        const [id, , elapsedTimeMs] = pendingMessageInfo;
+        if (elapsedTimeMs > idleTimeMs) {
+          const message = await this.stream.xclaim(stream, group, consumer, idleTimeMs, id);
+          pendingMessages = pendingMessages.concat(message);
         }
       }
     }
+    return pendingMessages;
   }
 }
 

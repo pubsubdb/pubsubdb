@@ -119,6 +119,7 @@ describe('IORedisStoreService', () => {
       await redisStoreService.addSymbols(topic, symbols);
 
       //3) set job state
+      const jobStatus = 690000000000000;
       const jobState: StringAnyType = {
         'a1/output/data/some/field': true,
         'a1/output/data/another/field': {'complex': 'object'},
@@ -127,8 +128,8 @@ describe('IORedisStoreService', () => {
         'data/name': new Date(),
         'data/age': 55,
         'metadata/jid': jobId,
+        'metadata/js': jobStatus,
       };
-      const jobStatus = 690000000000000;
       const result = await redisStoreService.setState(jobState, jobStatus, jobId, appId, [activityId, topic]);
       expect(result).toEqual(jobId);
       
