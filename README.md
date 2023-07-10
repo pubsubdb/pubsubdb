@@ -4,7 +4,11 @@
 ## Overview
 In a microservices environment, each service has its own unique capacity and throughput, leading to asymmetry when one service calls another. It\'s a significant challenge that solutions like Kafka were designed to address. The core principle behind these solutions is [CQRS](https://learn.microsoft.com/en-us/azure/architecture/patterns/cqrs), which separates the responsibility of *producing* events and *consuming* them.
 
-PubSubDB adheres to CQRS principles, using Redis streams to buffer the handoff between producers and consumers. If your services are running slowly or are unavailable, PubSubDB will inflate Redis to absorb the disruption and then deflate automatically as service is restored. While some workflows might take a little longer when the network has disruptions, every workflow inevitably runs to completion. 
+PubSubDB adheres to CQRS principles, using Redis streams to buffer the handoff between producers and consumers. If your services are running slowly or are unavailable, PubSubDB will inflate Redis to absorb the disruption and then deflate automatically as service is restored. While some workflows might take a little longer when the network has disruptions, every workflow inevitably runs to completion.
+
+## Video
+Designing for Resilience with PubSubDB
+[![video](https://cdn.loom.com/sessions/thumbnails/e02593806783449f9ff84e222bdb8289-with-play.gif)](https://www.loom.com/share/e02593806783449f9ff84e222bdb8289)
 
 ## Install
 [![npm version](https://badge.fury.io/js/%40pubsubdb%2Fpubsubdb.svg)](https://badge.fury.io/js/%40pubsubdb%2Fpubsubdb)
