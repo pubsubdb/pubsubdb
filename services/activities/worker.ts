@@ -88,6 +88,12 @@ class Worker extends Activity {
     this.status = status;
     this.code = code;
     await this.getState();
+    let isComplete = CollatorService.isActivityComplete(this.context.metadata.js, this.config.collationInt as number);
+    if (isComplete) {
+      this.logger.warn('worker-onresponse-duplicate', { jid, aid, status, code });
+      this.logger.debug('worker-onresponse-duplicate-resolution', { resolution: 'Increase PubSubDB config `xclaim` timeout.' });
+      return; //ok to return early here (due to xclaimed intercept completing first)
+    }
     let multiResponse: MultiResponseFlags = [];
     if (status === StreamStatus.PENDING) {
       await this.processPending();
@@ -96,7 +102,7 @@ class Worker extends Activity {
         await this.processSuccess():
         await this.processError();
       const activityStatus = multiResponse[multiResponse.length - 1];
-      const isComplete = CollatorService.isJobComplete(activityStatus as number);
+      isComplete = CollatorService.isJobComplete(activityStatus as number);
       this.transition(isComplete);
     }
   }

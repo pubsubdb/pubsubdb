@@ -2,6 +2,7 @@ import { PSNS } from '../../../../modules/key';
 import { LoggerService } from '../../../../services/logger';
 import { RedisStreamService } from '../../../../services/stream/clients/redis';
 import { RedisConnection, RedisClientType } from '../../../$setup/cache/redis';
+import { sleepFor } from '../../../../modules/utils';
 
 describe('RedisStreamService', () => {
   let redisConnection: RedisConnection;
@@ -125,6 +126,13 @@ describe('RedisStreamService', () => {
       const messageId = await redisStreamService.xadd(key, msgId, field, value);
       // Then, read the message from the group
       await redisStreamService.xreadgroup('GROUP', groupName, initialConsumer, 'BLOCK', 1000, 'STREAMS', key, '>');
+      //count pending messages
+      await sleepFor(1000);
+      const pendingMessageCount = await redisStreamService.xpending(key, groupName, '-', '+', 1) as [string, string, number, any][];
+      //[[ '1688768134881-0', 'testConsumer1', 1017, 1 ]] //id, consumer, delay
+      expect(pendingMessageCount[0][1]).toBe(initialConsumer);
+      expect(pendingMessageCount[0][2]).toBeGreaterThan(1000);
+      expect(pendingMessageCount[0][3]).toBe(1);
       // Retrieve pending messages for the initial consumer
       let pendingMessages = await redisStreamService.xpending(key, groupName, '-', '+', 1, initialConsumer) as [string, string, number, any][];
       let claimedMessage = pendingMessages.find(([id, consumer, ,]) => id === messageId && consumer === initialConsumer);

@@ -51,6 +51,42 @@ describe('StreamSignaler', () => {
   //audit
   let timestampAfterAudit: number;
 
+  //worker callback function
+  const callback =  async (streamData: StreamData): Promise<StreamDataResponse> => {
+    const values = JSON.parse(streamData.data.values as string) as number[];
+    const operation = streamData.data.operation as 'add'|'subtract'|'multiply'|'divide';
+    const result = new NumberHandler()[operation](values);
+
+    if (simulateUnrecoverableError) {
+      simulateUnrecoverableError = false;
+      //simulate an error for which there is no retry policy
+      return {
+        status: StreamStatus.ERROR,
+        code: UNRECOVERABLE_ERROR.code,
+        metadata: { ...streamData.metadata },
+        data: { code: UNRECOVERABLE_ERROR.code, message: UNRECOVERABLE_ERROR.message },
+      } as StreamDataResponse;
+
+    } else if (simulateOneTimeError) {
+      simulateOneTimeError = false;
+      //simulate a system error and retry
+      //YAML config says to retry 500 3x
+      return {
+        status: StreamStatus.ERROR,
+        code: 500,
+        metadata: { ...streamData.metadata },
+        data: { error: 'recoverable error' },
+      } as StreamDataResponse;
+
+    } else {
+      return {
+        status: StreamStatus.SUCCESS,
+        metadata: { ...streamData.metadata },
+        data: { result },
+      } as StreamDataResponse;
+    }
+  };
+
   beforeAll(async () => {
     //init Redis connections and clients
     redisConnection = await RedisConnection.getConnection(CONNECTION_KEY);
@@ -62,61 +98,31 @@ describe('StreamSignaler', () => {
     redisEngineStreamer = await streamEngineConnection.getClient();
     redisWorkerStreamer = await streamWorkerConnection.getClient();
     redisStorer.flushdb();
+
     //wrap Redis clients in PubSubDB Redis client wrappers
     redisStore = new IORedisStore(redisStorer);
     redisEngineStream = new IORedisStream(redisEngineStreamer);
     redisWorkerStream = new IORedisStream(redisWorkerStreamer);
     redisSub = new IORedisSub(redisSubscriber);
-    //init/activate PubSubDB (test both `engine` and `worker` roles)
+
     const config: PubSubDBConfig = {
       appId: appConfig.id,
       namespace: PSNS,
       logLevel: 'debug',
       engine: {
-        store: redisStore, //ALWAYS OK to reuse a store connection
-        stream: redisEngineStream, //NEVER OK to reuse a stream connection
-        sub: redisSub, //ALWAYS OK for other subscription clients to re-use sub connections
+        store: redisStore,
+        stream: redisEngineStream,
+        sub: redisSub,
       },
       workers: [
         {
           topic: 'calculation.execute',
-          store: redisStore, //ALWAYS OK to reuse a store connection
-          stream: redisWorkerStream, //NEVER OK to reuse a stream connection
-          sub: redisSub, //ALWAYS OK for other subscription clients to re-use sub connections
-          callback: async (streamData: StreamData): Promise<StreamDataResponse> => {
-            const values = JSON.parse(streamData.data.values as string) as number[];
-            const operation = streamData.data.operation as 'add'|'subtract'|'multiply'|'divide';
-            const result = new NumberHandler()[operation](values);
 
-            if (simulateUnrecoverableError) {
-              simulateUnrecoverableError = false;
-              //simulate an error for which there is no retry policy
-              return {
-                status: StreamStatus.ERROR,
-                code: UNRECOVERABLE_ERROR.code,
-                metadata: { ...streamData.metadata },
-                data: { code: UNRECOVERABLE_ERROR.code, message: UNRECOVERABLE_ERROR.message },
-              } as StreamDataResponse;
+          store: redisStore,
+          stream: redisWorkerStream,
+          sub: redisSub,
 
-            } else if (simulateOneTimeError) {
-              simulateOneTimeError = false;
-              //simulate a system error and retry
-              //YAML config says to retry 500 3x
-              return {
-                status: StreamStatus.ERROR,
-                code: 500,
-                metadata: { ...streamData.metadata },
-                data: { error: 'recoverable error' },
-              } as StreamDataResponse;
-
-            } else {
-              return {
-                status: StreamStatus.SUCCESS,
-                metadata: { ...streamData.metadata },
-                data: { result },
-              } as StreamDataResponse;
-            }
-          }
+          callback,
         }
       ]
     };

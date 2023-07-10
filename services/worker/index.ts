@@ -83,6 +83,7 @@ class WorkerService {
             guid: service.guid,
             role: StreamRole.WORKER,
             topic: worker.topic,
+            xclaim: worker.xclaim,
           },
           worker.stream,
           worker.store,

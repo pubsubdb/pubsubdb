@@ -93,7 +93,16 @@ class IORedisStreamService extends StreamService<RedisClientType, RedisMultiType
     consumer?: string
   ): Promise<[string, string, number, [string, number][]][] | [string, string, number, number] | unknown[]> {
     try {
-      return await this.redisClient.xpending(key, group, start, end, count, consumer);
+      const args = [key, group];
+      if (start) args.push(start);
+      if (end) args.push(end);
+      if (count !== undefined) args.push(count.toString());
+      if (consumer) args.push(consumer);
+      try {
+        return await this.redisClient.call('XPENDING', ...args) as [string, string, number, number][];
+      } catch (err) {
+        console.log('err, args', err, args);
+      }
     } catch (err) {
       this.logger.error(`Error in retrieving pending messages for [stream ${key}], [group ${group}]`, err);
       throw err;

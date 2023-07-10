@@ -91,6 +91,12 @@ class CollatorService {
       !CollatorService.isThereAnIncompleteActivity(collationKey);
   }
 
+  static isActivityComplete(collationKey: number, collationInt: number): boolean {
+    const digit = CollatorService.extractDigit(collationKey.toString(), collationInt.toString());
+    return CollatorService.isThereAnError(digit) ||
+      !CollatorService.isThereAnIncompleteActivity(digit);
+  }
+
   static isThereAnError(collationKey: number|string): boolean {
     return collationKey.toString().includes(CollationKey.Errored.toString());
   }
@@ -100,6 +106,16 @@ class CollatorService {
     return str.includes(CollationKey.Pending.toString()) ||
       str.includes(CollationKey.Started.toString()) || 
       str.includes(CollationKey.Paused.toString());
+  }
+
+  static extractDigit(collationKey: string, collationInt: string): string {
+    let index: number;
+    if (parseInt(collationInt) === 1) {
+      index = 14; // for 1, the last digit of collationKey is selected
+    } else {
+      index = 15 - collationInt.length;
+    }
+    return collationKey.charAt(index);
   }
 }
 
