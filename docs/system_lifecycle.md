@@ -1,6 +1,6 @@
-# System Lifecycle
+# System Lifecycle Guide
 
-This README provides an overview of the inner workings of the `PubSubDB` runtime engine. The document is intended to serve as a resource for operations and infrastructure teams who need to monitor, troubleshoot, and understand this system in detail. It describes the core engine activities and workflow processes, all organized the following lifecycle categories.
+This README provides an overview of the `PubSubDB` runtime engine. The document is intended to serve as a resource for operations and infrastructure teams responsible for PubSubDB's monitoring, exception handling, cleanup procedures, and alarm configurations. 
 
 ## Table of Contents
 1. [Init Engine & Quorum](#init-engine-and-quorum)
@@ -8,8 +8,6 @@ This README provides an overview of the inner workings of the `PubSubDB` runtime
 3. [Deploy Version](#deploy-version)
 4. [Activate Version](#activate-version)
 5. [Run Workflow](#run-workflow)
-
->This document also offers insights into the PubSubDB's monitoring, exception handling, cleanup procedures, and alarm configurations.
 
 ## Init Engine and Quorum
 The engine is the core of the PubSubDB system and is responsible for running activities according to its execution rules. Every engine instance is initialized with a corresponding Quorum instance that serves to coordinate activities with other engines in the network. It is purposefully kept separate from the engine which is focused on workflow processes.
@@ -42,7 +40,7 @@ The following infographic illustrates the PubSubDB engine initialization process
 ![PubSubDB Engine Initialization](./img/lifecycle/init_engine.png)
 
 ## Init Worker
-Workers are initialized similarly to the engine, using the same call to `PubSubDB.init()`. Each worker is initialized with a `topic`, `store`, `stream`, `sub`, and `callback` function. The `topic` is the name of the event that the callback function is subscribed to.
+Workers are initialized similarly to the engine, using the same call to `PubSubDB.init()`. Each worker is initialized with a `topic`, `store`, `stream`, `sub`, and `callback` function. The `topic` is the name of the event that the callback function is subscribed to, serving as a link between the YAML rules and the execution runtime.
 
 ```javascript
 import {
@@ -74,7 +72,7 @@ const pubSubDB = await PubSubDB.init({
 });
 ```
 
-The following infographic illustrates the PubSubDB worker initialization process. It begins with a call to Redis (`HGET`) to get the active app version and wire up subscriptions (Subscribe). The third and final Redis channel (streams) is only enabled if an active app version is returned from `HGET`.
+The worker initialization process begins with a call to Redis (`HGET`) to get the active app version and wire up subscriptions (Subscribe). The third and final Redis channel (streams) is only enabled if an active app version is returned from `HGET`.
 
 ![PubSubDB Worker Initialization](./img/lifecycle/init_worker.png)
 
