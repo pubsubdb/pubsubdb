@@ -196,5 +196,8 @@ Refer to the [Architectural First Principles Overview](./docs/architecture.md) f
 ## Headless Orchestration
 PubSubDB is a headless orchestration engine. Refer to the [Headless Orchestration Guide](./docs/headless_orchestration.md) for more information on the approach.
 
+## System Lifecycle
+Gain insight into the PubSubDB's monitoring, exception handling, and alarm configurations via the [System Lifecycle Guide](./docs/system_lifecycle.md).
+
 ## My First App
 Design a [Network Calculator App](./docs/my_first_app.md) to learn the principles behind statefully orchestrating multi-service workflows.
