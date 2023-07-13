@@ -37,10 +37,10 @@ const pubSubDB = await PubSubDB.init({
 
 The following infographic illustrates the PubSubDB engine initialization process. It begins with an `HGET` call to get the active app version and wire up subscriptions (Subscribe). The third and final Redis channel (streams) is only enabled if an active app version is returned from `HGET`.
 
-![PubSubDB Engine Initialization](./img/lifecycle/init_engine.png)
+<img src="./img/lifecycle/init_engine.png" alt="PubSubDB Engine Initialization" style="max-width:600px;">
 
 ## Init Worker
-Workers are initialized similarly to the engine, using the same call to `PubSubDB.init()`. Each worker is initialized with a `topic`, `store`, `stream`, `sub`, and `callback` function. The `topic` is the name of the event that the callback function is subscribed to, serving as a link between the YAML rules and the execution runtime.
+Workers are initialized similarly to the engine, using the same call to `init`. Each worker is initialized with a `topic`, `store`, `stream`, `sub`, and `callback` function. The `topic` is the name of the event that the callback function is subscribed to, serving as a link between the YAML rules and the execution runtime.
 
 ```javascript
 import {
@@ -72,12 +72,12 @@ const pubSubDB = await PubSubDB.init({
 });
 ```
 
-The worker initialization process begins with a call to Redis (`HGET`) to get the active app version and wire up subscriptions (Subscribe). The third and final Redis channel (streams) is only enabled if an active app version is returned from `HGET`.
+The worker initialization process begins with a call to Redis (`HGET`) to get the active app version and subscribe to worker events. The third Redis channel (streams) is only enabled if an *active app version* is returned from `HGET`.
 
-![PubSubDB Worker Initialization](./img/lifecycle/init_worker.png)
+<img src="./img/lifecycle/init_worker.png" alt="PubSubDB Worker Initialization" style="max-width:600px;">
 
 ## Deploy Version
-When the app YAML file is ready, the `deploy()` function can be called. This function is responsible for merging all referenced YAML source files and writing the JSON output to the file system and to Redis. *The version will not be active until activation is explicitly called.*
+When the app YAML file is ready, the `deploy` function can be called. This function is responsible for merging all referenced YAML source files and writing the JSON output to the file system and to Redis. *The version will not be active until activation is explicitly called.*
 
 ```javascript
 const deploymentStatus = await pubSubDB.deploy('./pubsubdb.yaml');
@@ -86,19 +86,19 @@ const deploymentStatus = await pubSubDB.deploy('./pubsubdb.yaml');
 
 The following infographic illustrates the app version *deployment* process.
 
-![PubSubDB Worker Initialization](./img/lifecycle/deploy_version.png)
+<img src="./img/lifecycle/deploy_version.png" alt="App Version Deployment" style="max-width:600px;">
 
 ## Activate Version
 Once the app YAML file is deployed to Redis, the `activate` function can be called to enable it for the entire quorum at the same moment. The approach is to establish the coordinated health of the system through series of call/response exchanges. Once it is established that the quorum is healthy, the quorum is instructed to run their engine in 'no-cache' mode, ensuring that the Redis backend is consulted for the active app version each time a call is processes. This ensures that all engines are running the same version of the app, switching over at the same moment and then enabling 'cache' mode to improve performance.
 
 ```javascript
-const deploymentStatus = await pubSubDB.deploy('./pubsubdb.yaml');
+const activationStatus = await pubSubDB.activate('1');
 //returns true|false
 ```
 
 The following infographic illustrates the app version *activation* process.
 
-![PubSubDB Worker Initialization](./img/lifecycle/activate_version.png)
+<img src="./img/lifecycle/activate_version.png" alt="App Version Activation" style="max-width:600px;">
 
 ## Run Workflow
 Once the app is active, it's possible to send events and kick off workflows by publishing to known topics. For example, here is a fire-and-forget call to `pub`.
@@ -119,4 +119,4 @@ const jobOutput: JobOutput = await pubSubDB.pubsub(topic, payload);
 ```
 The following infographic illustrates the mechanics of the system and how the headless engine and workers are able to produce complex outcomes using   journaling and CQRS principles. Each time a *worker* or *engine* pulls an item from its assigned Redis Stream, it concludes by writing the outcome to another stream. This simple mechanism of reading from one stream and writing to another is the basis for the entire system and how complex workflows are achieved. Every complex workflow is simply a series of singular activities implicitly stitched together by writing to streams in a sequence.
 
-![PubSubDB Worker Initialization](./img/lifecycle/run_workflow.png)
+<img src="./img/lifecycle/run_workflow.png" alt="PubSubDB Run Workflow" style="max-width:600px;">
