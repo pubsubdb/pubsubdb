@@ -27,7 +27,6 @@ class Deployer {
     this.bindBackRefs();
     this.resolveMappingDependencies(); // :legacy:
     this.resolveJobMapsPaths();
-    this.resolveDataDependencies();
     await this.generateSymKeys();
     await this.generateSymVals();
     await this.deployHookPatterns();
@@ -122,8 +121,8 @@ class Deployer {
         if (graph.publishes) {
           activities[activityKey].publishes = graph.publishes;
         }
-        if (graph.del) {
-          activities[activityKey].del = graph.del;
+        if (graph.expire) {
+          activities[activityKey].expire = graph.expire;
         }
       }
     }
@@ -192,7 +191,7 @@ class Deployer {
       }
       return result;
     }
-  
+
     for (const graph of this.manifest.app.graphs) {
       let results: string[] = [];
       const [, trigger] = this.findTrigger(graph);
@@ -207,7 +206,7 @@ class Deployer {
   resolveMappingDependencies() {
     const dynamicMappingRules: string[] = [];
     //recursive function to descend into the object and find all dynamic mapping rules
-    function traverse(obj: StringAnyType, depends: string[]): void {
+    function traverse(obj: StringAnyType, consumes: string[]): void {
       for (const key in obj) {
         if (typeof obj[key] === 'string') {
           const stringValue = obj[key] as string;
@@ -215,11 +214,11 @@ class Deployer {
           if (dynamicMappingRuleMatch) { 
             if (stringValue.split('.')[1] !== 'input') {
               dynamicMappingRules.push(stringValue);
-              depends.push(stringValue);
+              consumes.push(stringValue);
             }
           }
         } else if (typeof obj[key] === 'object' && obj[key] !== null) {
-          traverse(obj[key], depends);
+          traverse(obj[key], consumes);
         }
       }
     }
@@ -228,18 +227,18 @@ class Deployer {
       const activities = graph.activities;
       for (const activityId in activities) {
         const activity = activities[activityId];
-        activity.depends = [];
-        traverse(activity, activity.depends);
-        activity.depends = this.groupMappingRules(activity.depends);
+        activity.consumes = [];
+        traverse(activity, activity.consumes);
+        activity.consumes = this.groupMappingRules(activity.consumes);
       }
     }
     const groupedRules = this.groupMappingRules(dynamicMappingRules);
-    // Iterate through the graph and add 'dependents' field to each activity
+    // Iterate through the graph and add 'produces' field to each activity
     for (const graph of graphs) {
       const activities = graph.activities;
       for (const activityId in activities) {
         const activity = activities[activityId];
-        activity.dependents = groupedRules[`${activityId}`] || [];
+        activity.produces = groupedRules[`${activityId}`] || [];
       }
     }
   }
@@ -260,48 +259,19 @@ class Deployer {
 
   resolveMappableValue(mappable: string): [string, string] {
     mappable = mappable.substring(1, mappable.length - 1);
-    const [group, type, subtype, ...path] = mappable.split('.');
-    const prefix = {
-      hook: 'h',
-      input: 'i',
-      output: subtype === 'data' ? 'd': 'm'
-    }[type];
-    return [group, `${prefix}/${path.join('/')}`];
-  }
-
-  //single-file unified data format
-  resolveDataDependencies() {
-    for (const graph of this.manifest!.app.graphs) {
-      for (const activity of Object.values(graph.activities)) {
-        this.transformObject(activity);
-      }
-    }
-  }
-
-  transformObject(activity: ActivityType): void {
-    const replacements = { 'd/': 'output/data/', 'm/': 'input/metadata/', 'h/': 'hook/data/', 'i/': 'input/data/' };
-    function replaceInArray(array: string[]): string[] {
-      return array.map(item => {
-        for (const key in replacements) {
-          if (item.startsWith(key)) {
-            return item.replace(key, replacements[key]);
-          }
-        }
-        return item;
-      });
-    }
-    function transformEntry(entry: Record<string, string[]>): any {
-      let result: any = {};
-      for (const key in entry) {
-        result[key] = replaceInArray(entry[key]);
-      }
-      return result;
-    }
-    if (activity.depends) {
-      activity.consumes = transformEntry(activity.depends);
-    }
-    if (activity.dependents) {
-      activity.produces = replaceInArray(activity.dependents);
+    const parts = mappable.split('.');
+    if (parts[0] === '$job') {
+      const [group, ...path] = parts;
+      return [group, path.join('/')];
+    } else {
+      //normalize paths to be relative to the activity
+      const [group, type, subtype, ...path] = parts;
+      const prefix = {
+        hook: 'hook/data',
+        input: 'input/data',
+        output: subtype === 'data' ? 'output/data': 'output/metadata'
+      }[type];
+      return [group, `${prefix}/${path.join('/')}`];
     }
   }
 

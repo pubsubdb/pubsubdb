@@ -55,8 +55,8 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
     return this.isSuccessful(status);
   }
 
-  zAdd(key: string, score: number | string, value: string | number, redisMulti?: RedisMultiType): Promise<any> {
-    return (redisMulti || this.redisClient)[this.commands.zadd](key, { score: score, value: value.toString() } as any);
+  async zAdd(key: string, score: number | string, value: string | number, redisMulti?: RedisMultiType): Promise<any> {
+    return await (redisMulti || this.redisClient)[this.commands.zadd](key, { score: score, value: value.toString() } as any);
   }
 
   async zRangeByScoreWithScores(key: string, score: number | string, value: string | number): Promise<string | null> {

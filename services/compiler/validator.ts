@@ -9,6 +9,8 @@ class Validator {
   mappingStatements: MappingStatements = {};
   store: StoreService<RedisClient, RedisMulti> | null = null;
 
+  static SYS_VARS = ['$app', '$self', '$graph', '$job'];
+
   constructor(manifest: PubSubDBManifest) {
     this.manifest = manifest;
   }
@@ -80,7 +82,7 @@ class Validator {
 
   // 1.2) Validate no activity ids are referenced that don't exist
   validateReferencedActivityIds() {
-    // get list of all mapping statements and make sure first part is an activity id or $app
+    // get list of all mapping statements and validate
     const mappingStatements = this.mappingStatements;
     const activityIds = this.activityIds;
     for (const activity in mappingStatements) {
@@ -90,7 +92,7 @@ class Validator {
           const statementParts = statement.slice(1, -1).split('.');
           const referencedActivityId = statementParts[0];
   
-          if (!(referencedActivityId == '$app' || referencedActivityId == '$self' || activityIds.includes(referencedActivityId) || this.isFunction(statement))) {
+          if (!(Validator.SYS_VARS.includes(referencedActivityId) || activityIds.includes(referencedActivityId) || this.isFunction(statement))) {
             throw new Error(`Mapping statement references non-existent activity: ${statement}`);
           }
         }

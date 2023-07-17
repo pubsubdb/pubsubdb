@@ -8,6 +8,7 @@ import { CollatorService } from "../collator";
 import { EngineService } from "../engine";
 import { ILogger } from "../logger";
 import { MapperService } from '../mapper';
+import { Pipe } from "../pipe";
 import { MDATA_SYMBOLS } from '../serializer';
 import { StoreSignaler } from "../signaler/store";
 import { StoreService } from "../store";
@@ -16,7 +17,7 @@ import {
   ActivityData,
   ActivityMetadata,
   Consumes } from "../../types/activity";
-import { JobState } from "../../types/job";
+import { JobState, JobStatus } from "../../types/job";
 import {
   MultiResponseFlags,
   RedisClient,
@@ -64,12 +65,12 @@ class Activity {
     //try {
       this.setDuplexLeg(1);
       await this.getState();
-      this.mapJobData();
       /////// MULTI: START ///////
       const multi = this.store.getMulti();
       //await this.registerTimeout();
+      const shouldSleep = await this.registerHook(multi);
+      this.mapJobData();
       await this.setState(multi);
-      const shouldSleep = await this.registerExpectedHook(multi);
       const decrementBy = shouldSleep ? 4 : 3;
       await this.setStatus(decrementBy, multi);
       const multiResponse = await multi.exec() as MultiResponseFlags;
@@ -96,15 +97,27 @@ class Activity {
   }
 
   //********  SIGNALER RE-ENTRY POINT (B)  ********//
-  async registerExpectedHook(multi?: RedisMulti): Promise<string | void> {
+  async registerHook(multi?: RedisMulti): Promise<string | void> {
     if (this.config.hook?.topic) {
       const signaler = new StoreSignaler(this.store, this.logger);
-      return await signaler.registerHook(this.config.hook.topic, this.context, multi);
+      return await signaler.registerWebHook(this.config.hook.topic, this.context, multi);
+    } else if (this.config.sleep) {
+      const durationInSeconds = Pipe.resolve(this.config.sleep, this.context);
+      const jobId = this.context.metadata.jid;
+      const activityId = this.metadata.aid;
+      await this.engine.task.registerTimeHook(jobId, activityId, 'sleep', durationInSeconds);
+      return jobId;
     }
   }
-  async processHookSignal(): Promise<number> {
+  async processWebHookEvent(): Promise<JobStatus | void> {
     const signaler = new StoreSignaler(this.store, this.logger);
     const jobId = await signaler.process(this.config.hook.topic, this.data);
+    return await this.processHookEvent(jobId);
+  }
+  async processTimeHookEvent(jobId: string): Promise<JobStatus | void> {
+    return await this.processHookEvent(jobId);
+  }
+  async processHookEvent(jobId?: string): Promise<JobStatus | void> {
     if (jobId) {
       await this.getState(jobId);
       this.bindActivityData('hook');
@@ -243,24 +256,38 @@ class Activity {
 
   async getState(jobId?: string) {
     //assemble list of paths necessary for the activty context (data and metadata)
-    const consumes: Consumes = {};
-    for (const [activityId, paths] of Object.entries(this.config.consumes)) {
-      consumes[activityId] = [];
-      for (const path of paths) {
-        consumes[activityId].push(`${activityId}/${path}`);
+    const jobSymbolHashName = `$${this.config.subscribes}`;
+    const consumes: Consumes = {
+      [jobSymbolHashName]: MDATA_SYMBOLS.JOB.KEYS.map((key) => `metadata/${key}`)
+    };
+    for (let [activityId, paths] of Object.entries(this.config.consumes)) {
+       if(activityId === '$job') {
+        for (const path of paths) {
+          consumes[jobSymbolHashName].push(path);
+        }
+      } else {
+        if (activityId === '$self') {
+          activityId = this.metadata.aid;
+        }
+        if (!consumes[activityId]) {
+          consumes[activityId] = [];
+        }
+        for (const path of paths) {
+          consumes[activityId].push(`${activityId}/${path}`);
+        }
       }
     }
-    consumes[`$${this.config.subscribes}`] = MDATA_SYMBOLS.JOB.KEYS.map((key) => `metadata/${key}`);
     jobId = jobId || this.context.metadata.jid;
     const { id: appId } = await this.engine.getVID();
+    //`state` is a flat hash
     const [state, status] = await this.store.getState(jobId, appId, consumes);
-    const context = restoreHierarchy(state);
-    this.initSelf(context);
-    this.initPolicies(context);
-    this.context = context as JobState;
+    //`context` is a tree
+    this.context = restoreHierarchy(state) as JobState;
+    this.initSelf(this.context);
+    this.initPolicies(this.context);
   }
 
-  initSelf(context: StringAnyType) {
+  initSelf(context: StringAnyType): JobState {
     const activityId = this.metadata.aid;
     if (!context[activityId]) {
       context[activityId] = { };
@@ -276,11 +303,13 @@ class Activity {
       self.hook = { };
     }
     context['$self'] = self;
+    context['$job'] = context; //never call STRINGIFY on this (circular)
+    return context as JobState;
   }
 
-  initPolicies(context) {
-    //`retry` and `del` policies
-    context.metadata.del = this.config.del;
+  initPolicies(context: JobState) {
+    //`retry` and `expire` policies
+    context.metadata.expire = this.config.expire;
   }
 
   bindActivityData(type: 'output' | 'hook'): void {

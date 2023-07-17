@@ -101,7 +101,7 @@ class IORedisStreamService extends StreamService<RedisClientType, RedisMultiType
       try {
         return await this.redisClient.call('XPENDING', ...args) as [string, string, number, number][];
       } catch (err) {
-        console.log('err, args', err, args);
+        this.logger.error('err, args', err, args);
       }
     } catch (err) {
       this.logger.error(`Error in retrieving pending messages for [stream ${key}], [group ${group}]`, err);

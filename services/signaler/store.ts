@@ -18,7 +18,7 @@ class StoreSignaler {
     return rules?.[topic]?.[0] as HookRule;
   }
 
-  async registerHook(topic: string, context: JobState, multi?: RedisMulti): Promise<string> {
+  async registerWebHook(topic: string, context: JobState, multi?: RedisMulti): Promise<string> {
     const hookRule = await this.getHookRule(topic);
     if (hookRule) {
       const jobId = context.metadata.jid;
@@ -30,7 +30,7 @@ class StoreSignaler {
       await this.store.setHookSignal(hook, multi);
       return jobId;
     } else {
-      throw new Error('signaler.registerHook:error: hook rule not found');
+      throw new Error('signaler.registerWebHook:error: hook rule not found');
     }
   }
 

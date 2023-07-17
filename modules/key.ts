@@ -5,8 +5,8 @@
  * psdb:a:<appid> ->                                  {hash}    app profile { "id": "appid", "version": "2", "versions/1": "GMT", "versions/2": "GMT"}
  * psdb:<appid>:e:<engineId> ->                       {string}  setnx to ensure only one engine of given id
  * psdb:<appid>:w: ->                                 {zset}    work items/tasks an engine must do like garbage collect or hook a set of matching records (hookAll)
- * psdb:<appid>:d: ->                                 {zset}    an orders set of time slice lists that have 1+ jobs to delete
- * psdb:<appid>:d:<timeValue?> ->                     {list}    job ids to delete for the slice of time
+ * psdb:<appid>:t: ->                                 {zset}    an ordered set of list (work lists) ids
+ * psdb:<appid>:t:<timeValue?> ->                     {list}    a worklist of `jobId+activityId` items that should be awakened
  * psdb:<appid>:q: ->                                 {hash}    quorum-wide messages
  * psdb:<appid>:q:<ngnid> ->                          {hash}    engine-targeted messages (targeted quorum-oriented message)
  * psdb:<appid>:j:<jobid> ->                          {hash}    job data
@@ -32,7 +32,6 @@ const PSNS = "psdb";
 //these are the entity types that are stored in the key/value store
 enum KeyType {
   APP,
-  DELETE_RANGE,
   ENGINE_ID,
   HOOKS,
   JOB_STATE,
@@ -48,6 +47,7 @@ enum KeyType {
   SUBSCRIPTION_PATTERNS,
   SYMKEYS,
   SYMVALS,
+  TIME_RANGE,
   WORK_ITEMS,
 }
 
@@ -86,8 +86,8 @@ class KeyService {
         return `${namespace}:${params.appId}:e:${params.engineId}`;
       case KeyType.WORK_ITEMS:
         return `${namespace}:${params.appId}:w:`;
-      case KeyType.DELETE_RANGE:
-          return `${namespace}:${params.appId}:d:${params.timeValue || ''}`;
+      case KeyType.TIME_RANGE:
+        return `${namespace}:${params.appId}:t:${params.timeValue || ''}`;
       case KeyType.APP:
         return `${namespace}:a:${params.appId || ''}`;
       case KeyType.QUORUM:

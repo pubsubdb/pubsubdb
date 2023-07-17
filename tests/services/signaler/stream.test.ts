@@ -256,7 +256,7 @@ describe('StreamSignaler', () => {
       };
       //publish a job (sleep for 500, so the test doesn't exit tooo soon)
       jobId = await pubSubDB.pub('calculate', payload) as string;
-      await sleepFor(500); //don't exit before event is received
+      await sleepFor(500);
       await pubSubDB.unsub('calculated');
     });
 

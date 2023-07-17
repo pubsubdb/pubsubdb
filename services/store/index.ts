@@ -132,9 +132,9 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
     return result > 0 || result === 'OK' || result === true;
   }
 
-  zAdd(key: string, score: number | string, value: string | number, redisMulti?: U): Promise<any> {
+  async zAdd(key: string, score: number | string, value: string | number, redisMulti?: U): Promise<any> {
     //default call signature uses 'ioredis' NPM Package format
-    return (redisMulti || this.redisClient)[this.commands.zadd](key, score, value);
+    return await (redisMulti || this.redisClient)[this.commands.zadd](key, score, value);
   }
 
   async zRangeByScoreWithScores(key: string, score: number | string, value: string | number): Promise<string | null> {
@@ -458,6 +458,7 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
   }
 
   async getState(jobId: string, appId: string, consumes: Consumes): Promise<[StringAnyType, number] | undefined> {
+    //todo: refactor into semantic submethods
     const key = this.mintKey(KeyType.JOB_STATE, { appId, jobId });
     const symbolNames = Object.keys(consumes);
     const symbolLookups = [];
@@ -697,31 +698,33 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
     return await this.redisClient[this.commands.lmove](sourceKey, destinationKey, 'LEFT', 'RIGHT');
   }
 
-  //note: this is a future-oriented method in support of manual job cleanup taks; enable zset and processor if desired
-  async registerJobForCleanup(jobId: string, deletionTime: number): Promise<void> {
-    const listKey = this.mintKey(KeyType.DELETE_RANGE, { appId: this.appId, timeValue: deletionTime });
-    const len = await this.redisClient[this.commands.rpush](listKey, jobId);
-    if (len === 1) {
-      const zsetKey = this.mintKey(KeyType.DELETE_RANGE, { appId: this.appId });
-      await this.zAdd(zsetKey, deletionTime.toString(), listKey);
-    }
-  }
-
   async expireJob(jobId: string, inSeconds: number): Promise<void> {
     if (!isNaN(inSeconds) && inSeconds > 0) {
       const jobKey = this.mintKey(KeyType.JOB_STATE, { appId: this.appId, jobId });
       await this.redisClient[this.commands.expire](jobKey, inSeconds);
     }
-}
+  }
 
-  async getNextCleanupJob(listKey?: string): Promise<[listKey: string, jobId: string] | void> {
-    const zsetKey = this.mintKey(KeyType.DELETE_RANGE, { appId: this.appId });
+  async registerTimeHook(jobId: string, activityId: string, type: 'sleep'|'expire'|'cron', deletionTime: number, multi?: U): Promise<void> {
+    const listKey = this.mintKey(KeyType.TIME_RANGE, { appId: this.appId, timeValue: deletionTime });
+    const timeEvent = `${type}::${activityId}::${jobId}`
+    const len = await (multi || this.redisClient)[this.commands.rpush](listKey, timeEvent);
+    if (multi || len === 1) {
+      const zsetKey = this.mintKey(KeyType.TIME_RANGE, { appId: this.appId });
+      await this.zAdd(zsetKey, deletionTime.toString(), listKey, multi);
+    }
+  }
+
+  async getNextTimeJob(listKey?: string): Promise<[listKey: string, jobId: string, activityId: string] | void> {
+    const zsetKey = this.mintKey(KeyType.TIME_RANGE, { appId: this.appId });
     const now = Date.now();
     listKey = listKey || await this.zRangeByScore(zsetKey, 0, now);
     if (listKey) {
-      const jobId = await this.redisClient[this.commands.lpop](listKey);
-      if (jobId) {
-        return [listKey, jobId];
+      const timeEvent = await this.redisClient[this.commands.lpop](listKey);
+      if (timeEvent) {
+        //placeholder: there are 3 time-related event triggers: sleep, expire, cron
+        const [type, activityId, ...jobId] = timeEvent.split('::');
+        return [listKey, jobId.join('::'), activityId];
       }
       await this.redisClient[this.commands.zrem](zsetKey, listKey);
     }

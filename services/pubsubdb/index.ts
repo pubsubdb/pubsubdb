@@ -8,7 +8,8 @@ import { WorkerService } from '../worker';
 import {
   JobState,
   JobData,
-  JobOutput } from '../../types/job';
+  JobOutput, 
+  JobStatus } from '../../types/job';
 import {
   PubSubDBConfig,
   PubSubDBManifest } from '../../types/pubsubdb';
@@ -125,7 +126,7 @@ class PubSubDBService {
   async getStats(topic: string, query: JobStatsInput): Promise<StatsResponse> {
     return await this.engine?.getStats(topic, query);
   }
-  async getStatus(jobId: string) {
+  async getStatus(jobId: string): Promise<JobStatus> {
     return this.engine?.getStatus(jobId);
   }
   async getState(topic: string, jobId: string) {
@@ -144,7 +145,7 @@ class PubSubDBService {
   }
 
   // ****** `HOOK` ACTIVITY RE-ENTRY POINT ******
-  async hook(topic: string, data: JobData): Promise<number> {
+  async hook(topic: string, data: JobData): Promise<JobStatus | void> {
     //return collation int
     return await this.engine?.hook(topic, data);
   }
@@ -154,6 +155,7 @@ class PubSubDBService {
 
   async stop() {
     await StreamSignaler.stopConsuming();
+    this.engine?.task.cancelCleanup();
   }
 
   async compress(terms: string[]): Promise<boolean> {
