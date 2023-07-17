@@ -18,13 +18,15 @@ type JobMetadata = {
   ts: string    //201203120005 (slice of time) //time series
   jc: string;   //GMT created //job_created
   ju: string;   //GMT updated //job_updated
-  js: number;   //job_status 15 digit number used for collation
+  js: JobStatus;
   aid: string;  //activity_id for trigger the spawned the job
   atp: string;  //activity_type
   stp: string;  //activity_subtype
   err?: string; //stringified job error json: {message: string, code: number, error?}
-  del?: number; //process data del policy
+  expire?: number; //process data expire policy
 };
+
+type JobStatus = number; //job_status 15 digit number used for collation
 
 type JobState = {
   metadata: JobMetadata;
@@ -51,4 +53,4 @@ type PartialJobState = {
   data: JobData;
 }
 
-export { JobState, JobData, JobsData, JobMetadata, PartialJobState, JobOutput };
+export { JobState, JobStatus, JobData, JobsData, JobMetadata, PartialJobState, JobOutput };

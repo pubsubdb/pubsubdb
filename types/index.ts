@@ -35,11 +35,12 @@ export {
   RedisMultiType as IORedisMultiType } from './ioredisclient';
 export { ILogger } from './logger';
 export {
-  JobState,
   JobData,
   JobsData,
   JobMetadata,
   JobOutput,
+  JobState,
+  JobStatus,
   PartialJobState } from './job';
 export { MappingStatements } from './map';
 export {

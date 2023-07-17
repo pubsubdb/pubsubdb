@@ -284,6 +284,24 @@ describe('pubsubdb', () => {
     });
   });
 
+  describe('hookTime()', () => {
+    it('should sleep and awaken an activity', async () => {
+      const payload = { duration: 1 };
+      const jobId = await pubSubDB.pub('sleep.do', payload);
+      //get the job status
+      await sleepFor(250);
+      const status1 = await pubSubDB.getStatus(jobId as string);
+      expect(status1).toBe(560000000000000); //sleeping
+      while(await pubSubDB.getStatus(jobId as string) === 560000000000000) {
+        await sleepFor(1000);
+      }
+      const status2 = await pubSubDB.getStatus(jobId as string);
+      expect(status2).toBe(460000000000000); //awake
+      const state = await pubSubDB.getState('sleep.do', jobId as string);
+      expect(state?.data?.done).toBe(true);
+    }, 61_000);
+  });
+
   describe('hook()', () => {
     it('should signal and awaken a sleeping job', async () => {
       const payload = {

@@ -17,14 +17,18 @@ import { StreamService } from '../stream';
 import { SubService } from '../sub';
 import { TaskService } from '../task';
 import { AppVID } from '../../types/app';
-import { ActivityMetadata, ActivityType, Consumes } from '../../types/activity';
+import {
+  ActivityMetadata,
+  ActivityType,
+  Consumes } from '../../types/activity';
 import { CacheMode } from '../../types/cache';
 import {
   JobState,
   JobData,
   JobMetadata,
   JobOutput,
-  PartialJobState } from '../../types/job';
+  PartialJobState,
+  JobStatus } from '../../types/job';
 import {
   PubSubDBApps,
   PubSubDBConfig,
@@ -176,8 +180,12 @@ class EngineService {
     }
   }
 
-  async processWorkItems() {
-    this.task.processWorkItems((this.hook).bind(this));
+  async processWebHooks() {
+    this.task.processWebHooks((this.hook).bind(this));
+  }
+
+  async processTimeHooks() {
+    this.task.processTimeHooks((this.hookTime).bind(this));
   }
 
   async report() {
@@ -348,14 +356,18 @@ class EngineService {
   }
 
   // ****************** `HOOK` ACTIVITY RE-ENTRY POINT *****************
-  async hook(topic: string, data: JobData) {
+  async hook(topic: string, data: JobData): Promise<JobStatus | void> {
     const hookRule = await this.storeSignaler.getHookRule(topic);
     if (hookRule) {
       const activityHandler = await this.initActivity(`.${hookRule.to}`, data);
-      return await activityHandler.processHookSignal();
+      return await activityHandler.processWebHookEvent();
     } else {
       throw new Error(`unable to process hook for topic ${topic}`);
     }
+  }
+  async hookTime(jobId: string, activityId: string): Promise<JobStatus | void> {
+    const activityHandler = await this.initActivity(`.${activityId}`, {});
+    return await activityHandler.processTimeHookEvent(jobId);
   }
   async hookAll(hookTopic: string, data: JobData, query: JobStatsInput, queryFacets: string[] = []): Promise<string[]> {
     const config = await this.getVID();
@@ -377,7 +389,7 @@ class EngineService {
       );
       return workItems;
     } else {
-      throw new Error(`unable to find hook for topic ${hookTopic}`);
+      throw new Error(`unable to find hook rule for topic ${hookTopic}`);
     }
   }
 
@@ -431,6 +443,7 @@ class EngineService {
     });
   }
   async resolveOneTimeSubscription(context: JobState) {
+    //todo: subscriber should query for the job...only publish minimum context needed
     if (this.hasOneTimeSubscription(context)) {
       const jobOutput = await this.getState(context.metadata.tpc, context.metadata.jid);
       const message: JobMessage = {
@@ -486,12 +499,12 @@ class EngineService {
     this.resolveAwait(context);
     this.resolveOneTimeSubscription(context);
     this.resolvePersistentSubscriptions(context);
-    this.task.registerJobForCleanup(context.metadata.jid, context.metadata.del);
+    this.task.registerJobForCleanup(context.metadata.jid, context.metadata.expire);
   }
 
 
   // ****** GET JOB STATE/COLLATION STATUS BY ID *********
-  async getStatus(jobId: string): Promise<number> {
+  async getStatus(jobId: string): Promise<JobStatus> {
     const { id: appId } = await this.getVID();
     return this.store.getStatus(jobId, appId);
   }

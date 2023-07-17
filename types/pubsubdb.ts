@@ -38,7 +38,7 @@ type PubSubDBConfig = {
 type PubSubDBGraph = {
   subscribes: string;
   publishes?: string;
-  del?: number;
+  expire?: number;
   output?: {
     schema: Record<string, any>;
   };

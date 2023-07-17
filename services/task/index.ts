@@ -2,8 +2,11 @@ import { ILogger } from '../logger';
 import { StoreService } from '../store';
 import { RedisClient, RedisMulti } from '../../types/redis';
 import { HookInterface } from '../../types/hook';
+import { XSleepFor, sleepFor } from '../../modules/utils';
 
-const PERSISTENCE_SECONDS = 60;
+//default resolution/fidelity when expiring and awakening
+//system granularity limit
+const FIDELITY_SECONDS = 15;
 
 class TaskService {
   store: StoreService<RedisClient, RedisMulti>;
@@ -18,7 +21,7 @@ class TaskService {
     this.store = store;
   }
 
-  async processWorkItems(hookCallback: HookInterface): Promise<void> {
+  async processWebHooks(hookEventCallback: HookInterface): Promise<void> {
     const workItemKey = await this.store.getActiveTaskQueue();
     if (workItemKey) {
       const [topic, sourceKey, ...sdata] = workItemKey.split('::');
@@ -26,12 +29,12 @@ class TaskService {
       const destinationKey = `${sourceKey}:processed`;
       const jobId = await this.store.processTaskQueue(sourceKey, destinationKey);
       if (jobId) {
-        await hookCallback(topic, { ...data, id: jobId });
+        await hookEventCallback(topic, { ...data, id: jobId });
         //todo: do final checksum count (values are tracked in the stats hash)
       } else {
         await this.store.deleteProcessedTaskQueue(workItemKey, sourceKey, destinationKey);
       }
-      setImmediate(() => this.processWorkItems(hookCallback));
+      setImmediate(() => this.processWebHooks(hookEventCallback));
     }
   }
 
@@ -39,9 +42,42 @@ class TaskService {
     await this.store.addTaskQueues(keys);
   }
 
-  async registerJobForCleanup(jobId: string, del = PERSISTENCE_SECONDS): Promise<void> {
-    if (del > -1) {
-      await this.store.expireJob(jobId, del);
+  async registerJobForCleanup(jobId: string, inSeconds = FIDELITY_SECONDS): Promise<void> {
+    if (inSeconds > -1) {
+      await this.store.expireJob(jobId, inSeconds);
+    }
+  }
+
+  async registerTimeHook(jobId: string, activityId: string, type: 'sleep'|'expire'|'cron', inSeconds = FIDELITY_SECONDS, multi?: RedisMulti): Promise<void> {
+    const awakenTimeSlot = Math.floor((Date.now() + inSeconds * 1000) / (FIDELITY_SECONDS * 1000)) * (FIDELITY_SECONDS * 1000); //n second deletion groups
+    await this.store.registerTimeHook(jobId, activityId, type, awakenTimeSlot, multi);
+  }
+
+  //todo: need 'scout' role in quorum to check for this and then alert the quorum to get to work
+  async processTimeHooks(timeEventCallback: (jobId: string, activityId: string) => Promise<void>, listKey?: string): Promise<void> {
+    try {
+      const job = await this.store.getNextTimeJob(listKey);
+      if (job) {
+        const [listKey, jobId, activityId] = job;
+        await timeEventCallback(jobId, activityId);
+        await sleepFor(0);
+        this.processTimeHooks(timeEventCallback, listKey);
+      } else {
+        let sleep = XSleepFor(FIDELITY_SECONDS * 1000);
+        this.cleanupTimeout = sleep.timerId;
+        await sleep.promise;
+        this.processTimeHooks(timeEventCallback)
+      }
+    } catch (err) {
+      //todo: retry connect to redis
+      this.logger.error('task-process-timehooks-failed', err);
+    }
+  }
+
+  cancelCleanup() {
+    if (this.cleanupTimeout !== undefined) {
+      clearTimeout(this.cleanupTimeout);
+      this.cleanupTimeout = undefined;
     }
   }
 }

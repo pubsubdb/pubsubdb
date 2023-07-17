@@ -71,7 +71,9 @@ class QuorumService {
       //app-specific quorum subscription (used for pubsub one-time request/response)
       await instance.subscribe.subscribe(KeyType.QUORUM, instance.subscriptionHandler(), appId, instance.guid);
       //tell engine to check for open `hook` tasks
-      instance.engine.processWorkItems();
+      instance.engine.processWebHooks();
+      //tell engine to check for time-trigger events (awaken, expire, cron, etc.)
+      instance.engine.processTimeHooks();
       return instance;
     }
   }
@@ -98,7 +100,7 @@ class QuorumService {
       } else if (message.type === 'throttle') {
         self.engine.throttle(message.throttle);
       } else if (message.type === 'work') {
-        self.engine.processWorkItems()
+        self.engine.processWebHooks()
       } else if (message.type === 'job') {
         self.engine.routeToSubscribers(message.topic, message.job)
       }

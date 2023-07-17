@@ -203,27 +203,30 @@ describe('RedisStoreService', () => {
     });
   });
 
-  describe('Job Cleanup', () => {
-    it('should register and get jobs for cleanup correctly', async () => {
-      // Register jobs for cleanup
+  describe('Time Hooks', () => {
+    it('should register job activities for sleep/awake events', async () => {
+      // Register jobs to be awakened/triggered
       const jobId1 = 'job-id-1';
       const jobId2 = 'job-id-2';
-      const deletionTime = Date.now();
-      await redisStoreService.registerJobForCleanup(jobId1, deletionTime);
-      await redisStoreService.registerJobForCleanup(jobId2, deletionTime);
+      const activityId = 'activity-id';
+      const awakenTime = Date.now();
+      const type = 'sleep';
+      await redisStoreService.registerTimeHook(jobId1, activityId, type, awakenTime);
+      await redisStoreService.registerTimeHook(jobId2, activityId, type, awakenTime);
       // Check that the jobs were added to the correct list
-      const listKey = redisStoreService.mintKey(KeyType.DELETE_RANGE, { appId: appConfig.id, timeValue: deletionTime });
+      const listKey = redisStoreService.mintKey(KeyType.TIME_RANGE, { appId: appConfig.id, timeValue: awakenTime });
       const jobList = await redisClient.LRANGE(listKey, 0, -1);
-      expect(jobList).toContain(jobId1);
-      expect(jobList).toContain(jobId2);
-      // Retrieve the next job for cleanup
-      const [nextListKey, nextJobId] = (await redisStoreService.getNextCleanupJob()) as [string, string];
+      expect(jobList?.[0]).toEqual(`${type}::${activityId}::${jobId1}`);
+      expect(jobList?.[1]).toEqual(`${type}::${activityId}::${jobId2}`);
+      // Retrieve the next job to be triggered (to receive a time event)
+      const [nextListKey, nextJobId, nextActivityId] = (await redisStoreService.getNextTimeJob()) as [string, string, string];
       expect(nextListKey).toEqual(listKey);
-      expect(nextJobId).toEqual(jobId1);  // jobId1 should be the next job since it was registered first
+      expect(nextJobId).toEqual(jobId1);
+      expect(nextActivityId).toEqual(activityId);
       // Check that jobId1 was removed from the list
       const updatedJobList = await redisClient.LRANGE(listKey, 0, -1);
-      expect(updatedJobList).not.toContain(jobId1);
-      expect(updatedJobList).toContain(jobId2);
+      expect(updatedJobList.length).toEqual(1);
+      expect(updatedJobList[0]).toEqual(`${type}::${activityId}::${jobId2}`);
     });
   });
 

@@ -14,7 +14,8 @@ interface BaseActivity {
   settings?: Record<string, any>;
   job?: Record<string, any>;
   hook?: Record<string, any>;
-  del?: number;                //compiler (in seconds) -1 forever, 60 default (seconds)
+  sleep?: number;                      //compiler (in seconds)
+  expire?: number;                     //compiler (in seconds) -1 forever, 15|60 default (seconds)
   retry?: StreamRetryPolicy
   collationInt?: number;               //compiler
   dependents?: string[];               //compiler :legacy:
