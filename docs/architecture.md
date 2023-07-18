@@ -42,14 +42,34 @@ Event-driven architectures are known for their high performance and ability to h
 <img src="./img/architecture/eca.png" alt="Limit Execution Scope to ECA" style="max-width: 100%;max-height:300px;width:280px;">
 
 ### Duplex Activity Execution Calls
-To address the need for long-running business processes, including those that support human activities while remaining true to the principles of the ECA pattern, the Distributed Event Bus splits the Action (A) into two parts, executing a single activity in the process flow as a full-duplex data exchange.  When executed by the engine each activity begins with part 2 of the parent activity's call and concludes with part 1 of the child activity's call. This enables the Async/Await pattern, making it possible to pause any high-throughput execution and interleave human activities like reviews and approvals (again, without performance cost).
+The conventional ECA (Event-Condition-Action) model treats the *Action* as a single atomic operation, primarily because it does not inherently support state retention. Therefore, in order to handle long-running business processes and ensure uninterrupted data exchange, it becomes necessary to divide the *Action* into two distinct components. This division forms the basis for a full-duplex system, where each activity comprises two legs, "beginning" and "conclusion," bridged by an asynchronous wait state. Importantly, this transformation adheres to the fundamental principles of ECA by giving rise to two distinct ECA sequences for initiating and concluding the activity.
 
 <img src="./img/architecture/duplex.png" alt="Duplex Activity Execution Calls" style="max-width: 100%;max-height:300px;width:280px;">
 
+The duplexing principle is fundamental to the operation of the engine (the quorum), which interprets an activity's execution as two interconnected yet standalone actions. The following pseudo-code representation provides an insight into the engine's role in processing an activity:
+
+```
+On EVENT (PARENT ACTIVITY COMPLETED):
+  If CONDITION:
+    EXECUTE ACTION-BEGIN (Duplex Leg 1)
+
+--------------- EXTERNAL SYSTEM PROCESSING ----------------
+
+On EVENT (WORKER COMPLETED):
+  If CONDITION (JOB STILL ACTIVE):
+    EXECUTE ACTION-END (Duplex Leg 2)
+```
+
+In this context, **ACTION BEGIN** marks the commencement of a process, such as dispatching a request or launching a long-running operation. **EXTERNAL SYSTEM PROCESSING** symbolizes the asynchronous event that the engine awaits, like user approval or the completion of a complex calculation. Upon fulfilling this condition, **ACTION END** is executed, finalizing the results.
+
+Importantly, this dual-action approach spawns a seemingly perpetual chain of activities. The engine consistently finds itself processing either the concluding leg of a previous activity or the initiating leg of the subsequent one. This method of duplexing serves as the linchpin in accomplishing fluid, responsive, and efficient orchestration of long-running processes in a headless system. It adheres to the ECA pattern, restricts the execution scope to one unit at a time, and critically, allows the system to maintain high throughput by optimally managing its computational resources.
+
 ### Mediate Duplexed Calls with EAI
-[Enterprise Application Integration](https://en.wikipedia.org/wiki/Enterprise_application_integration) (EAI) is considered the defining standard for integration architectures due to its universal ability to coordinate data exchange between service endpoints. It was chosen for this reason to serve as the glue between the ECA units of execution and convert the event stream into meaningful business processes. The architecture is rigorous and requires strict adherence to schemas and types when transmitting data. Key features include a uniform data model and a pluggable connector/adapter model.
+The transformation of isolated event-driven operations, or ECA units, into cohesive business processes calls for an intermediary abstraction layer to direct and synchronize these individual units. [Enterprise Application Integration](https://en.wikipedia.org/wiki/Enterprise_application_integration) (EAI) plays this pivotal role, acting as a crucial orchestrator.
 
 <img src="./img/architecture/eai.png" alt="Mediate Duplexed Calls with EAI" style="max-width: 100%;max-height:300px;width:580px;">
+
+EAI serves as a principal scheme for unification, amalgamating separate ECA units into a comprehensive network of business processes. It ensures that the transmitted data complies with predetermined schemas and data types, thereby enhancing interoperability and ensuring data consistency across the headless system.
 
 ### Leverage CQRS for Self-Perpetuation
 In the orchestration of business processes, *operational continuity* emerges as a critical aspect. This is where Command Query Responsibility Segregation (CQRS) has a pivotal role to play by decoupling the read (query) and write (command) operations in a system. Consider a sequence of tasks: `A`, `B`, and `C`. In a conventional execution flow, the completion of `A` directly initiates `B`, which in turn sets off `C`:
@@ -89,6 +109,20 @@ The collation key structure is conceived with explicit numeric values designated
 - 0: N/A (the flow has fewer activities than the collation key)
 
 This structured approach empowers a quick understanding of the job's current state from a mere glance at the collation key. Moreover, two special digits, 1 and 2, are designated for 'bookending' subordinated workflows, a design decision that streamlines the expression of a composite job state. For example, a composite state of `36636146636626` tells us that two separate workflows, Flow A and Flow B, have concluded successfully, where Activity 5 in Flow A spawned Flow B, and the latter returned its response successfully.
+
+The Collation Service employs an ascending string sorting methodology to counter the absence of a sibling node order guarantee in a Directed Acyclic Graph (DAG). Despite the trigger being the first element in the graph, it could be placed fifth alphabetically, as seen in the following sequence:
+
+ `quick => brown => fox => (jumped|(slept => ate))`
+
+The sorted ids for this chain of activities would translate to:
+
+ `["ate", "brown", "fox", "jumped", "quick", "slept"]`
+
+Consequently, the collation key updates to `999969000000000` upon the trigger activity's completion.
+
+With this foundational understanding, we can explore a few examples. Consider the collation key `968969000000000`, which signifies that the `quick` and `brown` activities have *completed* and `fox` is currently *started*. The collation key undergoes continual updates as the job progresses, mirroring the state changes of the activities until the job's completion.
+
+Conversely, a collation key like `766366000000000` symbolizes an *error* state. The `ate` activity returned an error, and the `jumped` activity was *skipped*, with all other activities concluding normally. The system, aware of no other active activity, completes the job, albeit in an error state.
 
 ## Scalability Benefits
 ### Fan-out Scalability

@@ -1,3 +1,4 @@
+import { KeyStoreParams, KeyType } from "../../modules/key";
 import { getSymKey } from "../../modules/utils";
 import { CollatorService } from "../collator";
 import { SerializerService } from "../serializer";
@@ -33,6 +34,7 @@ class Deployer {
     await this.deployActivitySchemas();
     await this.deploySubscriptions(); 
     await this.deployTransitions();
+    await this.deployConsumerGroups();
   }
 
   getVID() {
@@ -365,6 +367,33 @@ class Deployer {
       }
     }
     await this.store.setHookRules(hookRules);
+  }
+
+  async deployConsumerGroups() {
+    //create one engine group
+    const params: KeyStoreParams = { appId: this.manifest.app.id }
+    const key = this.store.mintKey(KeyType.STREAMS, params);
+    await this.deployConsumerGroup(key, 'ENGINE');
+    for (const graph of this.manifest.app.graphs) {
+      const activities = graph.activities;
+      for (const activityKey in activities) {
+        const activity = activities[activityKey];
+        if (activity.type === 'worker') {
+          params.topic = activity.subtype;
+          const key = this.store.mintKey(KeyType.STREAMS, params);
+          //create one worker group per unique activity subtype (the topic)
+          await this.deployConsumerGroup(key, 'WORKER');
+        }
+      }
+    }
+  }
+
+  async deployConsumerGroup(stream: string, group: string) {
+    try {
+      await this.store.xgroup('CREATE', stream, group, '$', 'MKSTREAM');
+    } catch (err) {
+      this.store.logger.info('consumer-group-exists', { stream, group });
+    }
   }
 }
 
