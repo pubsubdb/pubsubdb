@@ -44,17 +44,7 @@ const pubSubDB = await PubSubDB.init({
 ```
 
 ## Design
-PubSubDB apps are modeled using YAML. These are the *execution instructions* for the app, describing its activity and data flow. Consider the following example flow that checks if there is a customer discount available for a given product. Note the following:
-
-1. **Subscribe and Publish**: Each YAML file represents a flow of activities within your application, subscribing to and publishing events. In this example, the flow subscribes to `discount.requested` and publishes to `discount.responded`.
-
-2. **Input\/Output Schemas**: Each YAML file defines input and output schemas. These schemas describe the structure of data that the flow expects sends and receives. Each activity can likewise define a custom schema, separate from the input and output schemas for the overall flow.
-
-3. **Activities**: Activities are the building blocks of your workflow. Each activity, such as `get_discount` in the example, represents a single step in the process. Flows are composable and can be connected using an `await` activity.
-
-4. **Data Mapping**: The mapping syntax, referred to as [@pipes](./docs/data_mapping.md), allows you to navigate the JSON data generated and exchanged between activities as the flow is run.
-
-5. **Conditional Transitions**: Design flows with sophisticated `and`/`or` conditions that branch based upon upstream activity data.
+PubSubDB apps are modeled using YAML. These are the *execution instructions* for the app, describing its activity and data flow. Consider the following example flow that checks if there is a customer discount available for a given product.
 
 ```yaml
 subscribes: discount.requested
@@ -86,8 +76,19 @@ transitions:
       conditions:
         ...
 ```
+Note the following:
 
-## Inter-service Orchestration
+1. **Subscribe and Publish**: Each YAML file represents a flow of activities within your application, subscribing to and publishing events. In this example, the flow subscribes to `discount.requested` and publishes to `discount.responded`.
+
+2. **Input\/Output Schemas**: Each YAML file defines input and output schemas. These schemas describe the structure of data that the flow expects to send and receive. Each activity can likewise define a custom schema, separate from the input and output schemas for the overall flow.
+
+3. **Activities**: Activities are the building blocks of the flow. Each activity, such as `get_discount` in the example, represents a single step in the process. Flows are composable and can be connected using an `await` activity.
+
+4. **Data Mapping**: The mapping syntax, referred to as [@pipes](./docs/data_mapping.md), allows you to navigate the JSON data generated and exchanged between activities as the flow is run.
+
+5. **Conditional Transitions**: Design flows with sophisticated `and`/`or` conditions that branch based upon upstream activity data.
+
+## Orchestration
 Once your YAML spec is deployed and activated, you can trigger workflows and track their progress. PubSubDB provides three methods: 
 
 * *pub* for one-way (fire-and-forget) workflows
@@ -137,7 +138,7 @@ const jobOutput: JobOutput = await pubSubDB.pubsub(topic, payload);
 No matter where in the network the calculation is performed (no matter the microservice that is subscribed as the official *worker* to perform the calculation...or even if multiple microservices are invoked during the workflow execution), the answer will always be published back to the originating caller the moment it's ready.
 
 ## Workers
-Deploy workers by associating functions with a named topic of your choosing. Thereafter, any time PubSubDB runs a `worker` activity that specifies this topic, it will call invoke the function, passing all data described by its schema. Return a response to automatically resume the workflow.
+Deploy workers by associating functions with a named topic of your choosing. Thereafter, any time PubSubDB runs a `worker` activity that specifies this topic, it will call the function, passing all data described by its schema. Return a response to automatically resume the workflow.
 
 In the following example, a worker function has been registered to respond to the `discounts.enumerate` topic.
 
