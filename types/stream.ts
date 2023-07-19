@@ -19,13 +19,19 @@ export enum StreamStatus {
   PENDING = 'pending',
 }
 
+export enum StreamDataType {
+  TIMEHOOK = 'timehook',
+  WEBHOOK = 'webhook',
+}
+
 export interface StreamData {
   metadata: {
-    topic: string;
-    jid: string;
+    topic?: string;
+    jid?: string; //is optonal if type is WEBHOOK
     aid: string;
     try?: number; //current try count
   };
+  type?: StreamDataType;
   data: Record<string, unknown>;
   policies?: {
     retry?: StreamRetryPolicy;

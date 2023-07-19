@@ -656,11 +656,14 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
 
   async getHookSignal(topic: string, resolved: string): Promise<string | undefined> {
     const key = this.mintKey(KeyType.SIGNALS, { appId: this.appId });
-    const multi = this.getMulti();
-    multi[this.commands.hget](key, `${topic}:${resolved}`);
-    multi[this.commands.hdel](key, `${topic}:${resolved}`);
-    const response = await multi.exec();
-    return response[0] ? response[0].toString() : undefined;
+    const response = await this.redisClient[this.commands.hget](key, `${topic}:${resolved}`);
+    return response ? response.toString() : undefined;
+  }
+
+  async deleteHookSignal(topic: string, resolved: string): Promise<number | undefined> {
+    const key = this.mintKey(KeyType.SIGNALS, { appId: this.appId });
+    const response = await this.redisClient[this.commands.hdel](key, `${topic}:${resolved}`);
+    return response ? Number(response) : undefined;
   }
 
   async addTaskQueues(keys: string[]): Promise<void> {

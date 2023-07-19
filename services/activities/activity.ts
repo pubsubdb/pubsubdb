@@ -110,11 +110,21 @@ class Activity {
     }
   }
   async processWebHookEvent(): Promise<JobStatus | void> {
+    this.logger.debug('engine-process-web-hook-event', {
+      topic: this.config.hook.topic,
+      aid: this.metadata.aid
+    });
     const signaler = new StoreSignaler(this.store, this.logger);
-    const jobId = await signaler.process(this.config.hook.topic, this.data);
-    return await this.processHookEvent(jobId);
+    const data = { ...this.data };
+    const jobId = await signaler.processWebHookSignal(this.config.hook.topic, data);
+    await this.processHookEvent(jobId);
+    await signaler.deleteWebHookSignal(this.config.hook.topic, data);
   }
   async processTimeHookEvent(jobId: string): Promise<JobStatus | void> {
+    this.logger.debug('engine-process-time-hook-event', {
+      jid: jobId,
+      aid: this.metadata.aid
+    });
     return await this.processHookEvent(jobId);
   }
   async processHookEvent(jobId?: string): Promise<JobStatus | void> {
@@ -129,7 +139,7 @@ class Activity {
       const multiResponse = await multi.exec() as MultiResponseFlags;
       const activityStatus = multiResponse[multiResponse.length - 1];
       const isComplete = CollatorService.isJobComplete(activityStatus as number);
-      this.transition(isComplete);
+      await this.transition(isComplete);
       return Number(activityStatus);
       /////// MULTI: END ///////
     }
@@ -337,7 +347,7 @@ class Activity {
     //if any descendant activity is skipped, toDecrement will be negative
     const toDecrement = await this.transitionActivity(isComplete);
     //this is an extra call to the db and is job-specific
-    this.engine.setStatus(this.context, toDecrement);
+    await this.engine.setStatus(this.context, toDecrement);
   }
 
   //todo: most efficient path is to count all skipped and decrement with self (just one call to db)

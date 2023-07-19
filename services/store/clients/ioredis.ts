@@ -35,15 +35,6 @@ class IORedisStoreService extends StoreService<RedisClientType, RedisMultiType> 
     await multi.exec();
   }
 
-  async getHookSignal(topic: string, resolved: string): Promise<string | undefined> {
-    const key = this.mintKey(KeyType.SIGNALS, { appId: this.appId });
-    const multi = this.getMulti();
-    multi.hget(key, `${topic}:${resolved}`);
-    multi.hdel(key, `${topic}:${resolved}`);
-    const results = await multi.exec();
-    return results[0][1] as unknown as string;
-  }
-
   async publish(keyType: KeyType.QUORUM, message: Record<string, any>, appId: string, engineId?: string): Promise<boolean> {
     const topic = this.mintKey(keyType, { appId, engineId });
     const status: number = await this.redisClient.publish(topic, JSON.stringify(message));

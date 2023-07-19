@@ -111,6 +111,7 @@ export {
   StreamCode,
   StreamConfig,
   StreamData,
+  StreamDataType,
   StreamError,
   StreamDataResponse,
   StreamRetryPolicy,

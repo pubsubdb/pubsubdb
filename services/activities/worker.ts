@@ -76,17 +76,17 @@ class Worker extends Activity {
       };
     }
     const key = this.store?.mintKey(KeyType.STREAMS, { appId: this.engine.appId, topic: this.config.subtype });
-    this.engine.streamSignaler?.publishMessage(key, streamData);
+    await this.engine.streamSignaler?.publishMessage(key, streamData);
   }
 
 
-  //********  `WORKER RESPONSE` RE-ENTRY POINT (B)  ********//
-  async processWorkerResponse(status: StreamStatus = StreamStatus.SUCCESS, code: StreamCode = 200): Promise<void> {
+  //********  RE-ENTRY POINT (DUPLEX LEG 2 of 2)  ********//
+  async processWorkerEvent(status: StreamStatus = StreamStatus.SUCCESS, code: StreamCode = 200): Promise<void> {
     const jid = this.context.metadata.jid;
     const aid = this.metadata.aid;
-    this.logger.debug('worker-onresponse-started', { jid, aid, status, code });
     this.status = status;
     this.code = code;
+    this.logger.debug('engine-process-worker-event', { jid, aid, topic: this.config.subtype });
     await this.getState();
     let isComplete = CollatorService.isActivityComplete(this.context.metadata.js, this.config.collationInt as number);
     if (isComplete) {
