@@ -47,7 +47,9 @@ import {
   StatsResponse
 } from '../../types/stats';
 import {
+  StreamData,
   StreamDataResponse,
+  StreamDataType,
   StreamError,
   StreamRole,
   StreamStatus } from '../../types/stream';
@@ -130,7 +132,7 @@ class EngineService {
         key,
         'ENGINE',
         instance.guid,
-        instance.processWorkerResponse.bind(instance)
+        instance.processStreamMessage.bind(instance)
       );
 
       //the storeSignaler sets and resolves external webhooks
@@ -304,8 +306,14 @@ class EngineService {
     } as GetStatsOptions;
   }
 
-  // ****************** `EXEC` ACTIVITY RE-ENTRY POINT *****************
-  async processWorkerResponse(streamData: StreamDataResponse): Promise<void> {
+  // ****************** STREAM RE-ENTRY POINT *****************
+  async processStreamMessage(streamData: StreamDataResponse): Promise<void> {
+    this.logger.debug('engine-process-stream-message-started', {
+      jid: streamData.metadata.jid,
+      aid: streamData.metadata.aid,
+      status: streamData.status || StreamStatus.SUCCESS,
+      code: streamData.code || 200,
+    });
     const context: PartialJobState = {
       metadata: {
         jid: streamData.metadata.jid,
@@ -313,12 +321,22 @@ class EngineService {
       },
       data: streamData.data,
     };
-    const activityHandler = await this.initActivity(`.${streamData.metadata.aid}`, context.data, context as JobState) as Worker;
-    //return void; it is a signal to the
-    await activityHandler.processWorkerResponse(streamData.status, streamData.code);
+    if (streamData.type === StreamDataType.TIMEHOOK || streamData.type === StreamDataType.WEBHOOK) {
+      const activityHandler = await this.initActivity(`.${streamData.metadata.aid}`, context.data, context as JobState) as Activity;
+      if (streamData.type === StreamDataType.TIMEHOOK) {
+        await activityHandler.processTimeHookEvent(streamData.metadata.jid);
+      } else {
+        await activityHandler.processWebHookEvent();
+      }
+    } else {
+      const activityHandler = await this.initActivity(`.${streamData.metadata.aid}`, context.data, context as JobState) as Worker;
+      await activityHandler.processWorkerEvent(streamData.status, streamData.code);
+    }
+    this.logger.debug('engine-process-stream-message-stopped');
+    //NOTE: returning `void` says: ack/delete/stop-ponging
   }
 
-  // ***************** `ASYNC` ACTIVITY RE-ENTRY POINT ****************
+  // ***************** `AWAIT` ACTIVITY RE-ENTRY POINT ****************
   hasParentJob(context: JobState): boolean {
     return Boolean(context.metadata.pj && context.metadata.pa);
   }
@@ -358,16 +376,28 @@ class EngineService {
   // ****************** `HOOK` ACTIVITY RE-ENTRY POINT *****************
   async hook(topic: string, data: JobData): Promise<JobStatus | void> {
     const hookRule = await this.storeSignaler.getHookRule(topic);
-    if (hookRule) {
-      const activityHandler = await this.initActivity(`.${hookRule.to}`, data);
-      return await activityHandler.processWebHookEvent();
-    } else {
-      throw new Error(`unable to process hook for topic ${topic}`);
-    }
+    const streamData: StreamData = {
+      type: StreamDataType.WEBHOOK,
+      metadata: {
+        aid: `${hookRule.to}`,
+        topic,
+      },
+      data,
+    };
+    const key = this.store.mintKey(KeyType.STREAMS, { appId: this.appId });
+    await this.streamSignaler.publishMessage(key, streamData);
   }
   async hookTime(jobId: string, activityId: string): Promise<JobStatus | void> {
-    const activityHandler = await this.initActivity(`.${activityId}`, {});
-    return await activityHandler.processTimeHookEvent(jobId);
+    const streamData: StreamData = {
+      type: StreamDataType.TIMEHOOK,
+      metadata: {
+        jid: jobId,
+        aid: activityId,
+      },
+      data: { timestamp: Date.now() },
+    };
+    const key = this.store.mintKey(KeyType.STREAMS, { appId: this.appId });
+    await this.streamSignaler.publishMessage(key, streamData);
   }
   async hookAll(hookTopic: string, data: JobData, query: JobStatsInput, queryFacets: string[] = []): Promise<string[]> {
     const config = await this.getVID();

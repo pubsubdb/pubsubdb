@@ -21,7 +21,7 @@ The PubSubDB model is a modern, JSON-based alternative to WSDL/SOAP, offering a 
     - [4.1.3. Await](#413-await)
     - [4.1.4. Worker](#414-worker)
     - [4.1.5. Iterate](#415-iterate)
-    - [4.1.6. Request](#416-request)
+    - [4.1.6. Emit](#416-emit)
   - [4.2. Input and Output Schemas](#42-input-and-output-schemas)
   - [4.3. Activity Mapping](#43-activity-mapping)
 - [5. Transitions](#5-transitions)
@@ -60,6 +60,8 @@ The model is represented as a JSON object by the engine once compiled (although 
   - `graphs`: An array of graph objects that define the application's logic and data flow.
     - `subscribes`: The event or message that the graph listens to, which triggers the graph's execution.
     - `publishes`: The event or message that the graph emits upon completion.
+    - `input`: The input data model.
+    - `output`: The output data model.
     - `activities`: An object that contains the activities (nodes) within the graph. Each activity has a unique key and consists of properties such as title, type, input, output, and job.
     - `transitions`: An object that defines the flow between activities based on specified conditions. Each key in the transitions object corresponds to an activity key, and its value is an array of transition objects.
     - `hooks`: An event or message that a sleeping activity is subscribed to, which will awaken the it
@@ -283,9 +285,9 @@ Activities are the core building blocks of a graph, representing individual task
 
 #### 4.1.1. Activity
 
-An `activity` represents an abstract task or operation that is executed by the engine but does not invoke outside services. It can use the output of upstream activities as input, map job data and even be configured to support the `hook/signal` pattern. It can be used to "test the pipes" of a flow, mapping incoming information and verifying activity flow. And it can be used to resolve complex mapping values that would be too expensive to resolve more than once.
+An `activity` represents an abstract task or operation that is executed by the engine but does not invoke outside services. It can use the output of upstream activities as input, map job data and even be configured to support the `hook/signal` and `sleep` patterns. It can be used to "test the pipes" of a flow, mapping incoming information and verifying activity flow. And it can be used to resolve complex mapping values that would be too expensive to resolve more than once.
 
-Example of a job activity in YAML:
+Example of an `activity` in YAML:
 
 ```yaml
 a3:
@@ -304,7 +306,7 @@ These types of activities, when combined, allow for the creation of versatile an
 #### 4.1.2. Trigger
 A `trigger` activity is the starting point of a graph. It is executed when the graph is triggered by an event that it subscribes to. A trigger activity is typically used to receive and process data from the triggering event, and its output can be used as input for subsequent activities.
 
-Example of a trigger activity in YAML:
+Example of a `trigger` in YAML:
 
 ```yaml
 a1:
@@ -324,7 +326,7 @@ a1:
 
 An `await` activity is used to wait for an external event or a specific condition to be met before proceeding with the execution of the graph. This can be useful when the workflow depends on data or events from other components in the application.
 
-Example of an await activity in YAML:
+Example of an `await` in YAML:
 
 ```yaml
 a2:
@@ -353,7 +355,7 @@ a2:
 
 A `worker` activity is used to call a method in a service where PubSubDB has a presence. The typical workflow would be to instantiate an instance of PubSubDB and provide/register callback methods to handle the desired topics. As the engine orchestrates worflows, it will invoke the callback handler, providing a payload with the request. Registered callbacks are expected to return a data payload in the exact shape as what was received (with `data`, `metadata`, and `status` fields). 
 
-Example of a `worker` activity in YAML:
+Example of a `worker` in YAML:
 
 ```yaml
 my_calculator_activity:
@@ -374,7 +376,7 @@ my_calculator_activity:
 #### 4.1.5. Iterate
 TODO
 
-#### 4.1.6. Request
+#### 4.1.6. Emit
 TODO
 
 ### 4.2. Input and Output Schemas

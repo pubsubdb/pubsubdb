@@ -1,14 +1,9 @@
-# PubSubDB
+# PubSubDB: A Process Database
 ![alpha release](https://img.shields.io/badge/release-alpha-yellow)
 
+
 ## Overview
-In a microservices environment, each service has its own unique capacity and throughput, leading to asymmetry when one service calls another. It\'s a significant challenge that solutions like Kafka were designed to address. The core principle behind these solutions is [CQRS](https://learn.microsoft.com/en-us/azure/architecture/patterns/cqrs), which separates the responsibility of *producing* events and *consuming* them.
-
-PubSubDB adheres to CQRS principles, using Redis streams to buffer the handoff between producers and consumers. If your services are running slowly or are unavailable, PubSubDB will inflate Redis to absorb the disruption and then deflate automatically as service is restored. While some workflows might take a little longer when the network has disruptions, every workflow inevitably runs to completion.
-
-## Video
-Designing for Resilience with PubSubDB
-[![video](https://cdn.loom.com/sessions/thumbnails/e02593806783449f9ff84e222bdb8289-with-play.gif)](https://www.loom.com/share/e02593806783449f9ff84e222bdb8289)
+PubSubDB embraces the fluid nature of data, offering a native way to model changes to data as it flows from activity to activity. With PubSubDB, you're not just storing data; you're managing process. Define schemas and rules that naturally map to your business logic, while PubSubDB handles the implementation.
 
 ## Install
 [![npm version](https://badge.fury.io/js/%40pubsubdb%2Fpubsubdb.svg)](https://badge.fury.io/js/%40pubsubdb%2Fpubsubdb)
@@ -18,7 +13,7 @@ npm install @pubsubdb/pubsubdb
 ```
 
 ## Initialize
-Pass a Redis client (`redis` and `ioredis` are supported) to serve as the backend when initializing PubSubDB.
+Pass a Redis client (`redis` or `ioredis`) when initializing PubSubDB.
 
 ```ts
 import {
@@ -44,7 +39,7 @@ const pubSubDB = await PubSubDB.init({
 ```
 
 ## Design
-PubSubDB apps are modeled using YAML. These are the *execution instructions* for the app, describing its activity and data flow. Consider the following example flow that checks if there is a customer discount available for a given product.
+PubSubDB flows are modeled using YAML. These are the *execution instructions*, describing the activity and data flow. Consider the following flow that checks for a customer discount.
 
 ```yaml
 subscribes: discount.requested
@@ -76,24 +71,25 @@ transitions:
       conditions:
         ...
 ```
+
 Note the following:
 
-1. **Subscribe and Publish**: Each YAML file represents a flow of activities within your application, subscribing to and publishing events. In this example, the flow subscribes to `discount.requested` and publishes to `discount.responded`.
+1. **Subscribe and Publish**: Each YAML file represents a flow of activities, subscribing to and publishing events. In this example, the flow subscribes to `discount.requested` and publishes to `discount.responded`.
 
-2. **Input\/Output Schemas**: Each YAML file defines input and output schemas. These schemas describe the structure of data that the flow expects to send and receive. Each activity can likewise define a custom schema, separate from the input and output schemas for the overall flow.
+2. **Input\/Output Schemas**: Flows may define top-level inputs and outputs, while each activity in a flow may likewise define its own unique inputs and outputs.
 
-3. **Activities**: Activities are the building blocks of the flow. Each activity, such as `get_discount` in the example, represents a single step in the process. Flows are composable and can be connected using an `await` activity.
+3. **Activities**: Activities are the building blocks of the flow. Each activity (like `get_discount`) represents a single step in the process. Flows are composable and can be connected using an `await` activity.
 
-4. **Data Mapping**: The mapping syntax, referred to as [@pipes](./docs/data_mapping.md), allows you to navigate the JSON data generated and exchanged between activities as the flow is run.
+4. **Data Mapping**: The mapping syntax, referred to as [@pipes](./docs/data_mapping.md), standardizes how data is mapped and shared between activities.
 
-5. **Conditional Transitions**: Design flows with sophisticated `and`/`or` conditions that branch based upon upstream activity data.
+5. **Conditional Transitions**: Design flows with sophisticated `and`/`or` conditions that branch based upon the state of the data.
 
-## Orchestration
-Once your YAML spec is deployed and activated, you can trigger workflows and track their progress. PubSubDB provides three methods: 
+## Orchestrate
+Once the YAML is deployed and activated, trigger workflows and track their progress using familiar pub/sub semantics.
 
 * *pub* for one-way (fire-and-forget) workflows
 * *sub* for global subscriptions for all workflow output
-* *pubsub* for stateful, one-time request/response exchanges
+* *pubsub* for replacing brittle HTTP calls [![video](https://cdn.loom.com/sessions/thumbnails/e02593806783449f9ff84e222bdb8289-with-play.gif)](https://www.loom.com/share/e02593806783449f9ff84e222bdb8289)
 
 ### Pub
 Kick off a one-way workflow if the answer isn't relevant at this time. Optionally await the response (the job ID) to confirm that the request was received, but otherwise, this is a fire-and-forget call that will always complete in milliseconds.
@@ -140,7 +136,7 @@ No matter where in the network the calculation is performed (no matter the micro
 ## Workers
 Deploy workers by associating functions with a named topic of your choosing. Thereafter, any time PubSubDB runs a `worker` activity that specifies this topic, it will call the function, passing all data described by its schema. Return a response to automatically resume the workflow.
 
-In the following example, a worker function has been registered to respond to the `discounts.enumerate` topic.
+This worker function has been registered to respond to the `discounts.enumerate` topic.
 
 ```javascript
 import {
@@ -180,18 +176,18 @@ const pubSubDB = await PubSubDB.init({
 ```
 
 ## Developer Guide
-Refer to the [Developer Guide](./docs/developer_guide.md) for more information on the full end-to-end development process, including details about schemas and APIs.
+Refer to the [Developer Guide](./docs/developer_guide.md) for more information on the full end-to-end development process, including details about schemas, APIs, and the full deployment lifecycle.
 
 ## Model Driven Development
-[Model Driven Development](./docs/model_driven_development.md) is a proven approach to managing process-oriented tasks. Refer this guide for an overview of key features.
+[Model Driven Development](./docs/model_driven_development.md) is a proven approach to managing process-oriented tasks. Refer this guide for an overview of key principles.
 
 ## Data Mapping
 Sharing data between activities is central to PubSubDB. Refer to the [Data Mapping Overview](./docs/data_mapping.md) for more information about supported functions and syntax.
 
 ## Composition
-The simplest graphs are linear, defining a predictable sequence of non cyclical activities. But graphs can be composed to model complex business scenarios and can even be designed to support long-running workflows months (or longer). Refer to the [Composable Workflow Guide](./docs/composable_workflow.md) for more information.
+The simplest graphs are linear, defining a predictable sequence of non cyclical activities. But graphs can be composed to model complex business scenarios and can even be designed to support long-running workflows lasting for months. Refer to the [Composable Workflow Guide](./docs/composable_workflow.md) for more information.
 
-## First Principles
+## Architectural First Principles
 Refer to the [Architectural First Principles Overview](./docs/architecture.md) for details on PubSubDB's approach to headless network orchestration.
 
 ## Headless Orchestration

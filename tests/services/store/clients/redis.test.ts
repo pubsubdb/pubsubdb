@@ -417,9 +417,9 @@ describe('RedisStoreService', () => {
       expect(value).toEqual(hook.jobId);
     });
   });
-  
+
   describe('getHookSignal', () => {
-    it('should get and remove the hook correctly', async () => {
+    it('should set and get the hook', async () => {
       const hook: HookSignal = {
         topic: 'test-topic',
         resolved: 'test-resolved',
@@ -430,7 +430,26 @@ describe('RedisStoreService', () => {
       expect(retrievedSignal).toEqual(hook.jobId);
       const key = redisStoreService.mintKey(KeyType.SIGNALS, { appId: appConfig.id });
       const remainingValue = await redisClient.HGET(key, `${hook.topic}:${hook.resolved}`);
-      expect(remainingValue).toBeNull();
+      expect(remainingValue).toEqual(hook.jobId);
+    });
+  });
+
+  describe('deleteHookSignal', () => {
+    it('should delete the hook', async () => {
+      const hook: HookSignal = {
+        topic: 'test-topic',
+        resolved: 'test-resolved',
+        jobId: 'test-job-id',
+      };
+      await redisStoreService.setHookSignal(hook);
+      let retrievedSignal = await redisStoreService.getHookSignal(hook.topic, hook.resolved);
+      expect(retrievedSignal).not.toBeNull();
+      let deletedCount = await redisStoreService.deleteHookSignal(hook.topic, hook.resolved);
+      expect(deletedCount).toEqual(1);
+      retrievedSignal = await redisStoreService.getHookSignal(hook.topic, hook.resolved);
+      expect(retrievedSignal).toBeUndefined();
+      deletedCount = await redisStoreService.deleteHookSignal(hook.topic, hook.resolved);
+      expect(deletedCount).toBeUndefined();
     });
   });
 });

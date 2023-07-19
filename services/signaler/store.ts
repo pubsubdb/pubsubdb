@@ -34,13 +34,24 @@ class StoreSignaler {
     }
   }
 
-  async process(topic: string, data: Record<string, unknown>): Promise<string> {
+  async processWebHookSignal(topic: string, data: Record<string, unknown>): Promise<string> {
     const hookRule = await this.getHookRule(topic);
     if (hookRule) {
       //todo: use the rule to generate `resolved`
       const resolved = (data as { id: string}).id;
       const jobId = await this.store.getHookSignal(topic, resolved);
       return jobId;
+    } else {
+      throw new Error('signaler.process:error: hook rule not found');
+    }
+  }
+
+  async deleteWebHookSignal(topic: string, data: Record<string, unknown>): Promise<number> {
+    const hookRule = await this.getHookRule(topic);
+    if (hookRule) {
+      //todo: use the rule to generate `resolved`
+      const resolved = (data as { id: string}).id;
+      return await this.store.deleteHookSignal(topic, resolved);
     } else {
       throw new Error('signaler.process:error: hook rule not found');
     }
