@@ -1,10 +1,9 @@
-// import { RestoreJobContextError, 
-//          MapInputDataError, 
-//          SubscribeToResponseError, 
-//          RegisterTimeoutError, 
-//          ExecActivityError, 
-//          DuplicateActivityError} from '../../../modules/errors';
-import { KeyType } from "../../modules/key";
+// import {
+//   GetStateError, 
+//   SetStateError, 
+//   MapDataError, 
+//   RegisterTimeoutError, 
+//   ExecActivityError } from '../../../modules/errors';
 import { Activity } from "./activity";
 import { CollatorService } from "../collator";
 import { EngineService } from "../engine";
@@ -38,6 +37,7 @@ class Worker extends Activity {
     //try {
       this.setDuplexLeg(1);
       await this.getState();
+      const span = this.startSpan();
       this.mapInputData();
       /////// MULTI: START ///////
       const multi = this.store.getMulti();
@@ -47,13 +47,13 @@ class Worker extends Activity {
       await multi.exec();
       /////// MULTI: END ///////
       await this.execActivity(); //todo: store a backref to the spawned stream id?
+      this.endSpan(span);
       return this.context.metadata.aid;
     //} catch (error) {
       //this.logger.error('exec-process-failed', error);
-      // if (error instanceof DuplicateActivityError) {
-      // } else if (error instanceof RestoreJobContextError) {
-      // } else if (error instanceof MapInputDataError) {
-      // } else if (error instanceof SubscribeToResponseError) {
+      // if (error instanceof GetStateError) {
+      // } else if (error instanceof SetStateError) {
+      // } else if (error instanceof MapDataError) {
       // } else if (error instanceof RegisterTimeoutError) {
       // } else if (error instanceof ExecActivityError) {
       // } else {
@@ -75,23 +75,25 @@ class Worker extends Activity {
         retry: this.config.retry
       };
     }
-    const key = this.store?.mintKey(KeyType.STREAMS, { appId: this.engine.appId, topic: this.config.subtype });
-    await this.engine.streamSignaler?.publishMessage(key, streamData);
+    await this.engine.streamSignaler?.publishMessage(this.config.subtype, streamData);
   }
 
 
   //********  RE-ENTRY POINT (DUPLEX LEG 2 of 2)  ********//
   async processWorkerEvent(status: StreamStatus = StreamStatus.SUCCESS, code: StreamCode = 200): Promise<void> {
+    this.setDuplexLeg(2);
     const jid = this.context.metadata.jid;
     const aid = this.metadata.aid;
     this.status = status;
     this.code = code;
     this.logger.debug('engine-process-worker-event', { jid, aid, topic: this.config.subtype });
     await this.getState();
+    const span = this.startSpan();
     let isComplete = CollatorService.isActivityComplete(this.context.metadata.js, this.config.collationInt as number);
     if (isComplete) {
       this.logger.warn('worker-onresponse-duplicate', { jid, aid, status, code });
       this.logger.debug('worker-onresponse-duplicate-resolution', { resolution: 'Increase PubSubDB config `xclaim` timeout.' });
+      this.endSpan(span);
       return; //ok to return early here (due to xclaimed intercept completing first)
     }
     let multiResponse: MultiResponseFlags = [];
@@ -105,6 +107,7 @@ class Worker extends Activity {
       isComplete = CollatorService.isJobComplete(activityStatus as number);
       this.transition(isComplete);
     }
+    this.endSpan(span);
   }
 
   async processPending(): Promise<MultiResponseFlags> {

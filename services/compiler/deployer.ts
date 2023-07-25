@@ -26,7 +26,9 @@ class Deployer {
     CollatorService.compile(this.manifest.app.graphs);
     this.copyJobSchemas();
     this.bindBackRefs();
-    this.resolveMappingDependencies(); // :legacy:
+    this.bindParents();
+    this.resolveMappingDependencies();
+    //todo: this is likely not needed anymore; remove
     this.resolveJobMapsPaths();
     await this.generateSymKeys();
     await this.generateSymVals();
@@ -130,6 +132,22 @@ class Deployer {
     }
   }
 
+  async bindParents() {
+    const graphs = this.manifest.app.graphs;
+    for (const graph of graphs) {  
+      if (graph.transitions) {
+        for (const fromActivity in graph.transitions) {
+          const toTransitions = graph.transitions[fromActivity];
+          for (const transition of toTransitions) {
+            const to = transition.to;
+            //DAGs have one parent; easy to optimize for
+            graph.activities[to].parent = fromActivity;
+          }
+        }
+      }
+    }
+  }
+
   collectValues(schema: Record<string, any>, values: Set<string>) {
     for (const [key, value] of Object.entries(schema)) {
       if (key === 'enum' || key === 'examples' || key === 'default') {
@@ -172,6 +190,7 @@ class Deployer {
     await this.store.addSymbolValues(newSymbols);
   }
 
+  //todo: this is likely not needed anymore; remove
   resolveJobMapsPaths() {
     function parsePaths(obj: StringAnyType): string[] {
       let result = [];

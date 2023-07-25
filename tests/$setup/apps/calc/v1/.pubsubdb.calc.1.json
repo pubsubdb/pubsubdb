@@ -15,6 +15,7 @@
       {
         "subscribes": "calculate",
         "publishes": "calculated",
+        "expire": 120,
         "input": {
           "schema": {
             "type": "object",
@@ -124,6 +125,7 @@
       {
         "subscribes": "calculation.execute",
         "publishes": "calculation.executed",
+        "expire": 120,
         "input": {
           "schema": {
             "type": "object",

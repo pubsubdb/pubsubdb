@@ -1,9 +1,8 @@
-# PubSubDB: A Process Database
+# PubSubDB
 ![alpha release](https://img.shields.io/badge/release-alpha-yellow)
 
-
 ## Overview
-PubSubDB embraces the fluid nature of data, offering a native way to model changes to data as it flows from activity to activity. With PubSubDB, you're not just storing data; you're managing process. Define schemas and rules that naturally map to your business logic, while PubSubDB handles the implementation.
+PubSubDB is a *Process Database* that manages changes to data over time. With PubSubDB, you describe activity flow using YAML models. PubSubDB then orchestrates the execution of those activities, coordinating data flow as it moves through the network. Backed by a [headless orchestration engine](./docs/architecture.md), PubSubDB delivers sophisticated event orchestration at scale using standard infrastructure you already own.
 
 ## Install
 [![npm version](https://badge.fury.io/js/%40pubsubdb%2Fpubsubdb.svg)](https://badge.fury.io/js/%40pubsubdb%2Fpubsubdb)
@@ -39,7 +38,7 @@ const pubSubDB = await PubSubDB.init({
 ```
 
 ## Design
-PubSubDB flows are modeled using YAML. These are the *execution instructions*, describing the activity and data flow. Consider the following flow that checks for a customer discount.
+PubSubDB models serve as *execution instructions*, describing activity and data flow. Consider the following flow that checks for a customer discount.
 
 ```yaml
 subscribes: discount.requested
@@ -76,23 +75,23 @@ Note the following:
 
 1. **Subscribe and Publish**: Each YAML file represents a flow of activities, subscribing to and publishing events. In this example, the flow subscribes to `discount.requested` and publishes to `discount.responded`.
 
-2. **Input\/Output Schemas**: Flows may define top-level inputs and outputs, while each activity in a flow may likewise define its own unique inputs and outputs.
+2. **Input\/Output Schemas**: Flows may define top-level schemas, while each activity in a flow may likewise define its own unique schemas.
 
-3. **Activities**: Activities are the building blocks of the flow. Each activity (like `get_discount`) represents a single step in the process. Flows are composable and can be connected using an `await` activity.
+3. **Activities**: Activities are the building blocks of the flow. Each activity (like `get_discount`) represents a single step in the process. Flows are composable and can be connected using an `await` activity. The `worker` activity in this example will invoke a function, bridging the activity flow defined in the model with legacy IP/functions on your network.
 
 4. **Data Mapping**: The mapping syntax, referred to as [@pipes](./docs/data_mapping.md), standardizes how data is mapped and shared between activities.
 
 5. **Conditional Transitions**: Design flows with sophisticated `and`/`or` conditions that branch based upon the state of the data.
 
 ## Orchestrate
-Once the YAML is deployed and activated, trigger workflows and track their progress using familiar pub/sub semantics.
+Once the YAML is deployed and activated, call PubSubDB to trigger workflows and track their progress using familiar pub/sub semantics.
 
 * *pub* for one-way (fire-and-forget) workflows
 * *sub* for global subscriptions for all workflow output
 * *pubsub* for replacing brittle HTTP calls [![video](https://cdn.loom.com/sessions/thumbnails/e02593806783449f9ff84e222bdb8289-with-play.gif)](https://www.loom.com/share/e02593806783449f9ff84e222bdb8289)
 
 ### Pub
-Kick off a one-way workflow if the answer isn't relevant at this time. Optionally await the response (the job ID) to confirm that the request was received, but otherwise, this is a fire-and-forget call that will always complete in milliseconds.
+Kick off a one-way workflow and await the response (the job ID) to confirm that the request was received.
 
 ```javascript
 const topic = 'discount.requested';
@@ -101,7 +100,7 @@ const jobId = await pubSubDB.pub(topic, payload);
 //jobId => `ord123`
 ```
 
-Fetch the job `data`, `metadata`, and `status` at a later time by calling `getState`.
+Call `getState` to fetch the job `data`, `metadata`, and `status`.
 
 ```javascript
 const job = await pubSubDB.getState(topic, jobId);
@@ -109,7 +108,7 @@ const job = await pubSubDB.getState(topic, jobId);
 ```   
 
 ### Sub
-Use the `sub` method to listen in on the results of all computations on a particular topic. This is useful when monitoring global computation results, performing some action based on them, or even just logging them for auditing purposes.
+Call `sub` to listen in on the results of all running flows for a particular topic. This is useful when monitoring global computation results, performing some action based on them, or even just logging for auditing purposes.
 
 ```javascript
 await pubSubDB.sub('discount.responded', (topic: string, jobOutput: JobOutput) => {
@@ -122,7 +121,7 @@ const jobId = await pubSubDB.pub('discount.requested', payload);
 ```
 
 ### PubSub
-For traditional request/response use cases where one service calls another, use the `pubsub` method. PubSubDB will create a one-time subscription, brokering the exchange using a standard `await`.
+Replace brittle inter-service HTTP calls with calls to `pubsub`. PubSubDB will create a one-time subscription, brokering the data exchange between services without back-pressure risk.
 
 ```javascript
 const topic = 'discount.requested';
@@ -134,9 +133,7 @@ const jobOutput: JobOutput = await pubSubDB.pubsub(topic, payload);
 No matter where in the network the calculation is performed (no matter the microservice that is subscribed as the official *worker* to perform the calculation...or even if multiple microservices are invoked during the workflow execution), the answer will always be published back to the originating caller the moment it's ready.
 
 ## Workers
-Deploy workers by associating functions with a named topic of your choosing. Thereafter, any time PubSubDB runs a `worker` activity that specifies this topic, it will call the function, passing all data described by its schema. Return a response to automatically resume the workflow.
-
-This worker function has been registered to respond to the `discounts.enumerate` topic.
+Associate worker functions with a *topic* of your choosing. When PubSubDB runs a `worker` activity in your YAML descriptor that matches this *topic*, it will invoke your function. In this example, the handler is registered to respond to the `discounts.enumerate` topic.
 
 ```javascript
 import {
@@ -155,14 +152,14 @@ const pubSubDB = await PubSubDB.init({
   appId: "myapp",
   workers: [
     { 
-      //specify the worker topic
-      topic: 'discounts.enumerate',
       store: new RedisStore(redisClient1),
       stream: new RedisStream(redisClient2),
       sub: new RedisSub(redisClient3),
 
+      //the topic to listen for
+      topic: 'discounts.enumerate',
 
-      //register the worker function
+      //the handler function to invoke
       callback: async (data: StreamData) => {
         return {
           status: 'success',
@@ -175,8 +172,11 @@ const pubSubDB = await PubSubDB.init({
 };
 ```
 
+## FAQ
+Refer to the [FAQ](./docs/faq.md) for terms, definitions, and an overview of how a Process Database simplifies worflow type use cases.
+
 ## Developer Guide
-Refer to the [Developer Guide](./docs/developer_guide.md) for more information on the full end-to-end development process, including details about schemas, APIs, and the full deployment lifecycle.
+Refer to the [Developer Guide](./docs/developer_guide.md) for more information on the full end-to-end development process, including details about schemas, APIs, and deployment.
 
 ## Model Driven Development
 [Model Driven Development](./docs/model_driven_development.md) is a proven approach to managing process-oriented tasks. Refer this guide for an overview of key principles.

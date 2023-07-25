@@ -1,6 +1,8 @@
 subscribes: calculate
 publishes: calculated
 
+expire: 120
+
 input:
   schema:
     $ref: '../schemas/calculate.yaml#/input'

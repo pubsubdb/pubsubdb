@@ -1,9 +1,9 @@
-// import { RestoreJobContextError, 
-//          MapInputDataError, 
-//          SubscribeToResponseError, 
+// import { GetStateError, 
+//          SetStateError,
+//          MapDataError, 
 //          RegisterTimeoutError, 
-//          ExecActivityError, 
-//          DuplicateActivityError} from '../../../modules/errors';
+//          ExecActivityError } from '../../../modules/errors';
+import packageJson from '../../package.json';
 import { CollatorService } from "../collator";
 import { EngineService } from "../engine";
 import { ILogger } from "../logger";
@@ -25,6 +25,7 @@ import {
 import { StringAnyType } from "../../types/serializer";
 import { StreamCode, StreamStatus } from "../../types/stream";
 import { TransitionRule, Transitions } from "../../types/transition";
+import { Span, SpanContext, SpanKind, trace, Context, context } from "../../types/telemetry";
 import { formatISODate, getValueByPath, restoreHierarchy } from "../../modules/utils";
 
 /**
@@ -65,6 +66,7 @@ class Activity {
     //try {
       this.setDuplexLeg(1);
       await this.getState();
+      const span = this.startSpan();
       /////// MULTI: START ///////
       const multi = this.store.getMulti();
       //await this.registerTimeout();
@@ -78,13 +80,13 @@ class Activity {
       const activityStatus = multiResponse[multiResponse.length - 1];
       const isComplete = CollatorService.isJobComplete(activityStatus as number);
       !shouldSleep && this.transition(isComplete);
+      this.endSpan(span);
       return this.context.metadata.aid;
     //} catch (error) {
       //this.logger.error('activity-process-failed', error);
-      // if (error instanceof DuplicateActivityError) {
-      // } else if (error instanceof RestoreJobContextError) {
-      // } else if (error instanceof MapInputDataError) {
-      // } else if (error instanceof SubscribeToResponseError) {
+      // if (error instanceof GetStateError) {
+      // } else if (error instanceof SetStateError) {
+      // } else if (error instanceof MapDataError) {
       // } else if (error instanceof RegisterTimeoutError) {
       // } else if (error instanceof ExecActivityError) {
       // } else {
@@ -94,6 +96,78 @@ class Activity {
 
   setDuplexLeg(leg: number): void {
     this.leg = leg;
+  }
+
+  getParentSpanId(leg: number): string | undefined {
+    if (leg === 1) {
+      //the parent span for leg1 of this activity is leg2 of the parent activity
+      return this.context[this.config.parent].output.metadata.l2s;
+    } else {
+      //the parent span for leg2 of this activity is leg1 of this activity
+      return this.context['$self'].output.metadata.l1s;
+    }
+  }
+
+  getTraceId(): string | undefined {
+    return this.context.metadata.trc;
+  }
+
+  startSpan(leg = this.leg): Span {
+    const tracer = trace.getTracer(packageJson.name, packageJson.version);
+    const traceId = this.getTraceId();
+    const spanId = this.getParentSpanId(leg);
+    let parentContext: Context;
+    let root = true;
+    //restore the parent context if it exists (triggers can create new context)
+    if (traceId && spanId) {
+      root = false;
+      const restoredSpanContext: SpanContext = {
+        traceId,
+        spanId,
+        isRemote: true,
+        traceFlags: 0, // sampled (todo: revisit sampling strategy/config)
+      };
+      parentContext = trace.setSpanContext(context.active(), restoredSpanContext);
+    }
+    //create the span
+    const span = tracer.startSpan(
+      `${this.engine.appId}.${this.config.type}.${this.metadata.aid}`,
+      { kind: SpanKind.INTERNAL,
+        root,
+        attributes: {
+          ...Object.keys(this.context.metadata).reduce((result, key) => {
+            result[`job/${key}`] = this.context.metadata[key];
+            return result;
+          }, {}),
+          ...Object.keys(this.metadata).reduce((result, key) => {
+            result[`activity/${key}`] = this.metadata[key];
+            return result;
+          }, {}),
+          'activity/leg': leg,
+        },
+      },
+      parentContext
+    );
+    //bind the `span` id, so it can be serialized (and used as a parent span)
+    if (!this.context.metadata.trc) {
+      this.context.metadata.trc = span.spanContext().traceId;
+    }
+    if (leg === 1) {
+      if (!this.context['$self'].output.metadata) {
+        this.context['$self'].output.metadata = {};
+      }
+      this.context['$self'].output.metadata.l1s = span.spanContext().spanId;
+    } else {
+      if (!this.context['$self'].output.metadata) {
+        this.context['$self'].output.metadata = {};
+      }
+      this.context['$self'].output.metadata.l2s = span.spanContext().spanId;
+    }
+    return span;
+  }
+
+  endSpan(span: Span): void {
+    span.end();
   }
 
   //********  SIGNALER RE-ENTRY POINT (B)  ********//
@@ -117,8 +191,10 @@ class Activity {
     const signaler = new StoreSignaler(this.store, this.logger);
     const data = { ...this.data };
     const jobId = await signaler.processWebHookSignal(this.config.hook.topic, data);
-    await this.processHookEvent(jobId);
-    await signaler.deleteWebHookSignal(this.config.hook.topic, data);
+    if (jobId) {
+      await this.processHookEvent(jobId);
+      await signaler.deleteWebHookSignal(this.config.hook.topic, data);
+    } //else already resolved
   }
   async processTimeHookEvent(jobId: string): Promise<JobStatus | void> {
     this.logger.debug('engine-process-time-hook-event', {
@@ -127,22 +203,23 @@ class Activity {
     });
     return await this.processHookEvent(jobId);
   }
-  async processHookEvent(jobId?: string): Promise<JobStatus | void> {
-    if (jobId) {
-      await this.getState(jobId);
-      this.bindActivityData('hook');
-      this.mapJobData();
-      /////// MULTI: START ///////
-      const multi = this.engine.store.getMulti();
-      await this.setState(multi);
-      await this.setStatus(1, multi);
-      const multiResponse = await multi.exec() as MultiResponseFlags;
-      const activityStatus = multiResponse[multiResponse.length - 1];
-      const isComplete = CollatorService.isJobComplete(activityStatus as number);
-      await this.transition(isComplete);
-      return Number(activityStatus);
-      /////// MULTI: END ///////
-    }
+  async processHookEvent(jobId: string): Promise<JobStatus | void> {
+    this.setDuplexLeg(2);
+    await this.getState(jobId);
+    const span = this.startSpan();
+    this.bindActivityData('hook');
+    this.mapJobData();
+    /////// MULTI: START ///////
+    const multi = this.engine.store.getMulti();
+    await this.setState(multi);
+    await this.setStatus(1, multi);
+    const multiResponse = await multi.exec() as MultiResponseFlags;
+    const activityStatus = multiResponse[multiResponse.length - 1];
+    const isComplete = CollatorService.isJobComplete(activityStatus as number);
+    await this.transition(isComplete);
+    this.endSpan(span);
+    return Number(activityStatus);
+    /////// MULTI: END ///////
   }
 
   mapJobData(): void {
@@ -197,7 +274,7 @@ class Activity {
     this.bindActivityMetadata();
     let state: StringAnyType = {};
     await this.bindJobState(state);
-    await this.bindActivityState(state);
+    this.bindActivityState(state);
     const symbolNames = [`$${this.config.subscribes}`, this.metadata.aid];
     return await this.store.setState(state, this.getJobStatus(), jobId, appId, symbolNames, multi);
   }
@@ -207,6 +284,7 @@ class Activity {
     this.context.metadata.ju = formatISODate(new Date());
   }
 
+  //todo: save l1s or l2s (depending on leg)
   bindActivityMetadata(): void {
     const self: StringAnyType = this.context['$self'];
     if (!self.output.metadata) {
@@ -215,7 +293,6 @@ class Activity {
     if (this.status === StreamStatus.ERROR) {
       self.output.metadata.err = JSON.stringify(this.data);
     }
-    //todo: only bind ju and err if an activity update
     self.output.metadata.ac = 
       self.output.metadata.au = formatISODate(new Date());
     self.output.metadata.atp = this.config.type;
@@ -237,9 +314,14 @@ class Activity {
         state[path] = value;
       }
     }
+    this.bindJobTelemetryToState(state);
   }
 
-  async bindActivityState(state: StringAnyType,): Promise<void> {
+  bindJobTelemetryToState(state: StringAnyType): void {
+    //no-op
+  }
+
+  bindActivityState(state: StringAnyType,): void {
     const produces = [
       ...this.config.produces,
       ...this.bindActivityMetadataPaths()
@@ -251,21 +333,25 @@ class Activity {
         state[prefixedPath] = value;
       } 
     }
+    this.bindActivityTelemetryToState(state);
+  }
+
+  bindActivityTelemetryToState(state: StringAnyType): void {
+    const target = `l${this.leg}s`;
+    state[`${this.metadata.aid}/output/metadata/${target}`] = this.context['$self'].output.metadata[target];
   }
 
   bindJobMetadataPaths(): string[] {
-    const keys_to_save = this.config.type === 'trigger' ? 'JOB': 'JOB_UPDATE';
-    return MDATA_SYMBOLS[keys_to_save].KEYS.map((key) => `metadata/${key}`);
+    return MDATA_SYMBOLS.JOB_UPDATE.KEYS.map((key) => `metadata/${key}`);
   }
 
   bindActivityMetadataPaths(): string[] {
-    const isFirstLegToRun = this.leg === 1 || this.config.type === 'trigger';
-    const keys_to_save = isFirstLegToRun ? 'ACTIVITY': 'ACTIVITY_UPDATE'
+    const keys_to_save = this.leg === 1 ? 'ACTIVITY': 'ACTIVITY_UPDATE'
     return MDATA_SYMBOLS[keys_to_save].KEYS.map((key) => `output/metadata/${key}`);
   }
 
   async getState(jobId?: string) {
-    //assemble list of paths necessary for the activty context (data and metadata)
+    //assemble list of paths necessary to create 'job state'
     const jobSymbolHashName = `$${this.config.subscribes}`;
     const consumes: Consumes = {
       [jobSymbolHashName]: MDATA_SYMBOLS.JOB.KEYS.map((key) => `metadata/${key}`)
@@ -287,6 +373,7 @@ class Activity {
         }
       }
     }
+    this.addTargetTelemetryPaths(consumes);
     jobId = jobId || this.context.metadata.jid;
     const { id: appId } = await this.engine.getVID();
     //`state` is a flat hash
@@ -295,6 +382,21 @@ class Activity {
     this.context = restoreHierarchy(state) as JobState;
     this.initSelf(this.context);
     this.initPolicies(this.context);
+  }
+
+  addTargetTelemetryPaths(consumes: Consumes): void {
+    //restore the telemetry parent span context (query for the parent span id)
+    if (this.leg === 1) {
+      if (!(this.config.parent in consumes)) {
+        consumes[this.config.parent] = [];
+      }
+      consumes[this.config.parent].push(`${this.config.parent}/output/metadata/l2s`);
+    } else {
+      if (!(this.metadata.aid in consumes)) {
+        consumes[this.metadata.aid] = [];
+      }
+      consumes[this.metadata.aid].push(`${this.metadata.aid}/output/metadata/l1s`);
+    }
   }
 
   initSelf(context: StringAnyType): JobState {
@@ -313,22 +415,17 @@ class Activity {
       self.hook = { };
     }
     context['$self'] = self;
-    context['$job'] = context; //never call STRINGIFY on this (circular)
+    context['$job'] = context; //NEVER call STRINGIFY! (circular)
     return context as JobState;
   }
 
   initPolicies(context: JobState) {
-    //`retry` and `expire` policies
     context.metadata.expire = this.config.expire;
   }
 
   bindActivityData(type: 'output' | 'hook'): void {
-    if (type === 'output') {
-      this.context[this.metadata.aid].output.data = this.data;
-    } else {
-      this.context[this.metadata.aid].hook.data = this.data;
-    }
-  }
+    this.context[this.metadata.aid][type].data = this.data;
+  }  
 
   async skipDescendants(activityId: string, transitions: Transitions, toDecrement: number): Promise<number> {
     const config = await this.engine.getVID();

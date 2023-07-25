@@ -84,7 +84,7 @@ const deploymentStatus = await pubSubDB.deploy('./pubsubdb.yaml');
 //returns true|false
 ```
 
-The following infographic illustrates the app version *deployment* process.
+The following illustrates the app version *deployment* process.
 
 <img src="./img/lifecycle/deploy_version.png" alt="App Version Deployment" style="max-width:600px;width:600px;">
 
@@ -96,7 +96,7 @@ const activationStatus = await pubSubDB.activate('1');
 //returns true|false
 ```
 
-The following infographic illustrates the app version *activation* process.
+The following illustrates the app version *activation* process.
 
 <img src="./img/lifecycle/activate_version.png" alt="App Version Activation" style="max-width:600px;width:600px;">
 
@@ -117,6 +117,6 @@ const payload = { id: 'ord123', price: 55.99 };
 const jobOutput: JobOutput = await pubSubDB.pubsub(topic, payload);
 //`jobOutput.data.discount` is `5.00`
 ```
-The following infographic illustrates the mechanics of the system and how the headless engine and workers are able to produce complex outcomes using   journaling and CQRS principles. Each time a *worker* or *engine* pulls an item from its assigned Redis Stream, it concludes by writing the outcome to another stream. This simple mechanism of reading from one stream and writing to another is the basis for the entire system and how complex workflows are achieved. Every complex workflow is simply a series of singular activities implicitly stitched together by writing to streams in a sequence.
+The following infographic illustrates the mechanics of the system and how the headless engine and workers are able to produce complex outcomes using journaling and CQRS principles. Each time a *worker* or *engine* pulls an item from its assigned Redis Stream, it concludes by writing the outcome to another stream. This simple mechanism of reading from one stream and writing to another is the basis for the entire system and how complex workflows are achieved. Every complex workflow is simply a series of singular activities implicitly stitched together by writing to streams in a sequence.
 
 <img src="./img/lifecycle/run_workflow.png" alt="PubSubDB Run Workflow" style="max-width:600px;width:600px;">

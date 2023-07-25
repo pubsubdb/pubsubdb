@@ -7,9 +7,9 @@ export {
   Consumes,
   AwaitActivity,
   BaseActivity,
+  EmitActivity,
   WorkerActivity,
   IterateActivity,
-  RequestActivity,
   TriggerActivity,
   TriggerActivityStats } from './activity';
 export {
@@ -117,6 +117,19 @@ export {
   StreamRetryPolicy,
   StreamRole,
   StreamStatus } from './stream';
+export {
+  context,
+  Context,
+  Counter,
+  Meter,
+  metrics,
+  propagation,
+  SpanContext,
+  Span,
+  SpanKind,
+  trace,
+  Tracer,
+  ValueType } from './telemetry';
 export {
   TransitionMatch,
   TransitionRule,

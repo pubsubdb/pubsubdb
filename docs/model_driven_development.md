@@ -48,7 +48,7 @@ A standard `graph` serves as the foundational building block--essentially a coll
 
 One of the key features of this model is the functional mapper called '@pipes', which provides an expressive and versatile way to manipulate and transform data between activities. Using '@pipes', developers can create complex data mappings and conditional flows without the need for extensive scripting or programming.
 
-The model is highly adaptable and can be used to define a wide range of applications, from simple data processing tasks to sophisticated business processes. By using this modern JSON-based model, developers can create more maintainable, scalable, and efficient applications that are easy to understand and adapt as the environment changes.
+The model is highly adaptable and can be used to define a wide range of applications, from simple data processing tasks to sophisticated business processes. From a cost of ownership perspective, it represents a more maintainable, scalable, and efficient approach.
 
 ### 1.2. JSON Structure
 The model is represented as a JSON object by the engine once compiled (although YAML can be interchangeably used for authoring given its better readability). The structure is comprised of various nested properties that define the application's settings, and execution behavior. The primary components of the JSON model are as follows:
@@ -64,7 +64,7 @@ The model is represented as a JSON object by the engine once compiled (although 
     - `output`: The output data model.
     - `activities`: An object that contains the activities (nodes) within the graph. Each activity has a unique key and consists of properties such as title, type, input, output, and job.
     - `transitions`: An object that defines the flow between activities based on specified conditions. Each key in the transitions object corresponds to an activity key, and its value is an array of transition objects.
-    - `hooks`: An event or message that a sleeping activity is subscribed to, which will awaken the it
+    - `hooks`: An event or message that a sleeping activity is subscribed to, which will awaken it
 - `@pipes`: A functional mapper that allows for data transformation and manipulation between activities using various functions.
 
 The JSON structure of the model is designed to be easy to read and modify, allowing developers to understand the application's logic and behavior at a glance. By using a JSON-based format, the model can be easily shared, versioned, and integrated into various programming languages and platforms.
@@ -253,12 +253,10 @@ In this example, the graph subscribes to the `order.approval.requested` event an
 By structuring graphs in this manner, developers can create flexible and efficient workflows that model various processes within their applications.
 
 ### 3.2. Subscription and Publishing Mechanism
-The subscription and publishing mechanism in the graph model allows for the communication and coordination between different graphs or components within the application. This mechanism is based on event-driven architecture, enabling the decoupling of components and making the system more modular and maintainable.
+The subscription and publishing mechanism in the graph represent entry and exit points for connecting to *external* event systems.
 
-Here's a brief overview of the subscription and publishing mechanism:
-
-1. `subscribes`: A graph subscribes to an event by specifying the event name in the subscribes property. When this event is emitted by another graph or component in the application, the subscribing graph will be triggered to execute its activities.
-2. `publishes`: A graph can publish an event by specifying the event name in the publishes property. When the graph completes its execution, it will emit the specified event, which can be subscribed to by other graphs or components in the application.
+1. `subscribes`: A graph subscribes to outside triggers by specifying the topic name in the subscribes property. Outside callers can trigger the workflow by publishing a payload to this topic (e.g, `pubSubDB.pub(topic, payload)`).
+2. `publishes`: A graph will publish an event only if there is a publishes property with a topcic. When the graph completes its execution, it will emit the specified event. Outside callers can subscribe to the outcome of all associated graphs by subscribing to this topic (e.g, `pubSubDB.sub(topic, handlerFn)`).
 
 Here's an example of a subscription and publishing mechanism in YAML:
 
@@ -274,10 +272,6 @@ graphs:
     activities: #...
     transitions: #...
 ```
-
-In this example, the first graph subscribes to the "order.approval.requested" event and publishes the "order.approval.responded" event. The second graph subscribes to the "order.approval.price.requested" event and publishes the "order.approval.price.responded" event. When the first graph completes its execution, it will emit the "order.approval.responded" event, which can be subscribed to by other graphs or components.
-
-The subscription and publishing mechanism allows developers to create loosely-coupled systems where individual components can function independently, yet still communicate and coordinate with one another when necessary. This promotes flexibility, modularity, and maintainability within the application.
 
 ## 4. Activities
 ### 4.1. Types of Activities
@@ -297,7 +291,8 @@ a3:
     maps:
       id: "{a1.output.data.id}"
       price: "{a1.output.data.price}"
-      approvals/price: "{a2.output.data.approved}"
+      approvals:
+        price: "{a2.output.data.approved}"
       approved: true
 ```
 
@@ -353,7 +348,7 @@ a2:
 
 #### 4.1.4. Worker
 
-A `worker` activity is used to call a method in a service where PubSubDB has a presence. The typical workflow would be to instantiate an instance of PubSubDB and provide/register callback methods to handle the desired topics. As the engine orchestrates worflows, it will invoke the callback handler, providing a payload with the request. Registered callbacks are expected to return a data payload in the exact shape as what was received (with `data`, `metadata`, and `status` fields). 
+A `worker` activity is used to call a registered worker function where PubSubDB has a presence. The typical workflow would be to instantiate an instance of PubSubDB and register a callback function to handle the associated topic. As the engine orchestrates worflows, it will invoke the callback handler, providing the defined payload (the `input`) with the invocation. Handler functions are expected to return a data payload as defined by the activity's YAML definition (the `output`). The handler function may return a `status` field in the payload with a value of `pending` (`success` is implied) in order to emit state updates back to the caller. This is useful when the worker function is long-running and the parent flow/graph needs to be notified of progress incrementally.
 
 Example of a `worker` in YAML:
 

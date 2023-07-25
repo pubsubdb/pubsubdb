@@ -1,16 +1,17 @@
 // import {
-//   RestoreJobContextError, 
-//   MapInputDataError, 
-//   SubscribeToResponseError, 
+//   GetStateError, 
+//   SetStateError, 
+//   MapDataError, 
 //   RegisterTimeoutError, 
 //   ExecActivityError, 
-//   DuplicateActivityError} from '../../../modules/errors';
+//   DuplicateActivityError } from '../../../modules/errors';
 import { formatISODate, getGuid, getTimeSeries } from '../../modules/utils';
 import { Activity } from "./activity";
 import { CollatorService } from '../collator';
 import { EngineService } from '../engine';
 import { Pipe } from "../pipe";
 import { ReporterService } from '../reporter';
+import { MDATA_SYMBOLS } from '../serializer';
 import {
   ActivityData,
   ActivityMetadata,
@@ -18,6 +19,8 @@ import {
   TriggerActivity } from "../../types/activity";
 import { JobState } from '../../types/job';
 import { RedisMulti } from '../../types/redis';
+import { StringAnyType } from '../../types/serializer';
+import { Span, context } from "../../types/telemetry";
 
 class Trigger extends Activity {
   config: TriggerActivity;
@@ -33,9 +36,13 @@ class Trigger extends Activity {
   }
 
   async process(): Promise<string> {
+    let jobSpan: Span;
+    let span: Span;
     try {
       this.setDuplexLeg(2);
-      await this.createContext();
+      await this.getState();
+      jobSpan = this.startSpan(1);
+      span = this.startSpan(2);
       this.mapJobData();
       await this.setStateNX();
       /////// MULTI:START ///////
@@ -44,16 +51,19 @@ class Trigger extends Activity {
       await this.setStats(multi);
       await multi.exec();
       /////// MULTI:END ///////
-      const activityStatus = this.context.metadata.js;
-      const isComplete = CollatorService.isJobComplete(activityStatus);
-      this.transition(isComplete);
+      const complete = CollatorService.isJobComplete(this.context.metadata.js);
+      this.transition(complete);
+      this.endSpan(span);
+      this.endSpan(jobSpan);
       return this.context.metadata.jid;
     } catch (error) {
       this.logger.error('trigger-process-failed', error);
+      span && this.endSpan(span);
+      jobSpan && this.endSpan(jobSpan);
       // if (error instanceof DuplicateActivityError) {
-      // } else if (error instanceof RestoreJobContextError) {
-      // } else if (error instanceof MapInputDataError) {
-      // } else if (error instanceof SubscribeToResponseError) {
+      // } else if (error instanceof GetStateError) {
+      // } else if (error instanceof SetStateError) {
+      // } else if (error instanceof MapDataError) {
       // } else if (error instanceof RegisterTimeoutError) {
       // } else if (error instanceof ExecActivityError) {
       // } else {
@@ -75,7 +85,7 @@ class Trigger extends Activity {
     return input
   }
 
-  async createContext(): Promise<void> {
+  async getState(): Promise<void> {
     const inputContext = this.createInputContext();
     const jobId = this.resolveJobId(inputContext);
     const jobKey = this.resolveJobKey(inputContext);
@@ -93,6 +103,8 @@ class Trigger extends Activity {
         app: id,
         vrs: version,
         tpc: this.config.subscribes,
+        trc: this.context.metadata.trc,
+        spn: this.context.metadata.spn,
         jid: jobId,
         key: jobKey,
         jc: utc,
@@ -115,6 +127,32 @@ class Trigger extends Activity {
        },
     };
     this.context['$self'] = this.context[this.metadata.aid];
+  }
+
+  getParentSpanId(leg: number): string | undefined {
+    if (leg === 1) {
+      return this.context.metadata.spn;
+    } else {
+      return this.context['$self'].output.metadata.l1s;
+    }
+  }
+
+  bindJobTelemetryToState(state: StringAnyType): void {
+    state['metadata/trc'] = this.context.metadata.trc;
+  }
+
+  bindActivityTelemetryToState(state: StringAnyType): void {
+    //trigger persists 2 spans when created (`l1s` is the job span, `l2s` is the trigger/activity span)
+    state[`${this.metadata.aid}/output/metadata/l1s`] = this.context['$self'].output.metadata.l1s;
+    state[`${this.metadata.aid}/output/metadata/l2s`] = this.context['$self'].output.metadata.l2s;
+  }
+
+  bindJobMetadataPaths(): string[] {
+    return MDATA_SYMBOLS.JOB.KEYS.map((key) => `metadata/${key}`);
+  }
+
+  bindActivityMetadataPaths(): string[] {
+    return MDATA_SYMBOLS.ACTIVITY.KEYS.map((key) => `output/metadata/${key}`);
   }
 
   resolveGranularity(): string {

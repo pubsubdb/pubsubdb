@@ -1,7 +1,7 @@
 import { MetricTypes } from "./stats";
 import { StreamRetryPolicy } from "./stream";
 
-type ActivityExecutionType = 'trigger' | 'await' | 'worker' | 'activity' | 'request' | 'iterate';
+type ActivityExecutionType = 'trigger' | 'await' | 'worker' | 'activity' | 'emit' | 'iterate';
 
 type Consumes = Record<string, string[]>;
 
@@ -14,18 +14,17 @@ interface BaseActivity {
   settings?: Record<string, any>;
   job?: Record<string, any>;
   hook?: Record<string, any>;
-  sleep?: number;                      //compiler (in seconds)
-  expire?: number;                     //compiler (in seconds) -1 forever, 15|60 default (seconds)
+  sleep?: number;                      //@pipe /in seconds
+  expire?: number;                     //-1 forever, 15 seconds default
   retry?: StreamRetryPolicy
   collationInt?: number;               //compiler
-  dependents?: string[];               //compiler :legacy:
-  depends?: Record<string, string[]>;  //compiler :legacy:
-  consumes?: Consumes;                 //compiler :new:
-  PRODUCES?: string[];                 //compiler :new:
-  produces?: string[];                 //compiler :new:
+  consumes?: Consumes;                 //compiler
+  PRODUCES?: string[];                 //compiler
+  produces?: string[];                 //compiler
   publishes?: string;                  //compiler 
   subscribes?: string;                 //compiler
   trigger?: string;                    //compiler
+  parent?: string;                     //compiler
 }
 
 interface Measure {
@@ -57,15 +56,15 @@ interface WorkerActivity extends BaseActivity {
   timeout: number;
 }
 
-interface RequestActivity extends BaseActivity {
-  type: 'request';
+interface EmitActivity extends BaseActivity {
+  type: 'emit';
 }
 
 interface IterateActivity extends BaseActivity {
   type: 'iterate';
 }
 
-type ActivityType = BaseActivity | TriggerActivity | AwaitActivity | WorkerActivity | RequestActivity | IterateActivity;
+type ActivityType = BaseActivity | TriggerActivity | AwaitActivity | WorkerActivity | EmitActivity | IterateActivity;
 
 type ActivityData = Record<string, any>;
 type ActivityMetadata = {
@@ -75,8 +74,8 @@ type ActivityMetadata = {
   ac: string;   //GMT created //activity_created
   au: string;   //GMT updated //activity_updated
   err?: string; //stringified error json: {message: string, code: number, error?}
-  jid?: string; //job_id :legacy:
-  key?: string; //job_key :legacy:
+  l1s?: string; //open telemetry span context (leg 1)
+  l2s?: string; //open telemetry span context (leg 2)
 };
 
 type ActivityContext = {
@@ -101,8 +100,8 @@ export {
   TriggerActivityStats,
   AwaitActivity,
   BaseActivity,
+  EmitActivity,
   IterateActivity,
-  RequestActivity,
   TriggerActivity,
   WorkerActivity
 };

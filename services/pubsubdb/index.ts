@@ -1,6 +1,7 @@
 import { PSNS } from '../../modules/key';
 import { getGuid } from '../../modules/utils';
 import { EngineService } from '../engine';
+import { setupTelemetry } from '../tracer';
 import { LoggerService, ILogger } from '../logger';
 import { StreamSignaler } from '../signaler/stream';
 import { QuorumService } from '../quorum';
@@ -55,6 +56,7 @@ class PubSubDBService {
     instance.verifyAndSetNamespace(config.namespace);
     instance.verifyAndSetAppId(config.appId);
     instance.logger = new LoggerService(config.appId, instance.guid, config.name || '', config.logLevel);
+    setupTelemetry(config.enableTelemetryConsoleLogger);
     await instance.initEngine(config, instance.logger);
     await instance.initQuorum(config, instance.engine, instance.logger);
     await instance.initWorkers(config, instance.logger);

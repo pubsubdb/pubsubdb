@@ -8,12 +8,12 @@ type ActivityData = {
 
 type JobMetadata = {
   ngn?: string; //engine guid (one time subscriptions)
-  tpc: string;  //subscription topic
   pj?: string;  //parent_job_id
   pa?: string;  //parent_activity_id
   key?: string; //job_key
   app: string;  //app_id
   vrs: string;  //app version
+  tpc: string;  //subscription topic
   jid: string;  //job_id
   ts: string    //201203120005 (slice of time) //time series
   jc: string;   //GMT created //job_created
@@ -22,6 +22,8 @@ type JobMetadata = {
   aid: string;  //activity_id for trigger the spawned the job
   atp: string;  //activity_type
   stp: string;  //activity_subtype
+  spn: string;  //open telemetry span context
+  trc: string;  //open telemetry trace context
   err?: string; //stringified job error json: {message: string, code: number, error?}
   expire?: number; //process data expire policy
 };
