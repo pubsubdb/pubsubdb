@@ -6,14 +6,10 @@ A process database provides tools and models for describing and orchestrating ac
 A Process Database performs the same work as a traditional orchestration bus (and delivers the same benefits one would expect from a centralized integration server). However, the "server" itself doesn’t exist and is an emergent property of the data journaling process. The act of reading and writing to the journal is what drives the perpetual behavior of engines and workers. It's a database that behaves like a process engine.
 
 ## What is PubSubDB?
-PubSubDB is a wrapper for Redis that exposes a higher level set of domain constructs like ‘activities’, ‘jobs’, ‘flows’, etc. Behind the scenes, it uses *Redis Data* (Hash, ZSet, and List); *Redis Streams* (XReadGroup, XAdd, XLen) and *Redis Publish/Subscribe*. 
-
-The architectural principles that drive PubSubDB are a combination of my [Ajax/Single Page Application patent](https://patents.google.com/patent/US8136109) from 2002 and various engines I build using Redis over the years. A lightbulb went off in early 2023 that if I combined architectures I could reverse the relationship between Redis and the Microservices it supports. Instead of controlling Redis, the Microservices fleet would be controlled by Redis. 
-
-It does seem odd that reversing the relationship would have a significant impact on operations, but some use cases (particularly service-to-service orchestration use cases) show reductions in the microservices fleet by up to 75%.
+PubSubDB (a process database) is a wrapper for Redis that exposes a higher level set of domain constructs like ‘activities’, ‘jobs’, ‘flows’, etc. Behind the scenes, it uses *Redis Data* (Hash, ZSet, and List); *Redis Streams* (XReadGroup, XAdd, XLen) and *Redis Publish/Subscribe*.
 
 ## What gets installed?
-PubSubDB is a lightweight NPM package (500KB) that gets installed anywhere a connection is needed. PubSubDB reuses any existing Redis connection and simply reverses the information flow. The entire process is invisible, and it’s easy to set up, as you’re reusing existing Redis connections already proven to work.
+PubSubDB is a lightweight NPM package (500KB) that gets installed anywhere a connection to Redis is needed. PubSubDB reuses any existing Redis connection and simply reverses the information flow. The entire process is invisible, and it’s easy to set up, as you’re reusing existing Redis connections already proven to work.
 
 ## Is PubSubDB an Orchestration Hub/Bus?
 Yes and No. PubSubDB was designed to deliver the functionality of an orchestration server but without the additional infrastructure demands of a traditional server. Only the outcome (process orchestration) exists. The server itself is an emergent property of the data journaling process.
