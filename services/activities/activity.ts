@@ -4,6 +4,10 @@
 //          RegisterTimeoutError, 
 //          ExecActivityError } from '../../../modules/errors';
 import packageJson from '../../package.json';
+import {
+  formatISODate,
+  getValueByPath,
+  restoreHierarchy } from "../../modules/utils";
 import { CollatorService } from "../collator";
 import { EngineService } from "../engine";
 import { ILogger } from "../logger";
@@ -24,9 +28,14 @@ import {
   RedisMulti } from "../../types/redis";
 import { StringAnyType } from "../../types/serializer";
 import { StreamCode, StreamStatus } from "../../types/stream";
+import {
+  Span,
+  SpanContext,
+  SpanKind,
+  trace,
+  Context,
+  context } from "../../types/telemetry";
 import { TransitionRule, Transitions } from "../../types/transition";
-import { Span, SpanContext, SpanKind, trace, Context, context } from "../../types/telemetry";
-import { formatISODate, getValueByPath, restoreHierarchy } from "../../modules/utils";
 
 /**
  * The base class for all activities
@@ -98,13 +107,43 @@ class Activity {
     this.leg = leg;
   }
 
+  startSpan(leg = this.leg, spanName?: string): Span {
+    const tracer = trace.getTracer(packageJson.name, packageJson.version);
+    let parentContext = this.getParentSpanContext(leg);
+    spanName = spanName || `${this.config.type.toUpperCase()}/${this.engine.appId}/${this.metadata.aid}`;
+    const span = tracer.startSpan(
+      spanName,
+      { kind: SpanKind.CLIENT, attributes: this.getSpanAttrs(leg), root: !parentContext },
+      parentContext
+    );
+    this.setTelemetryContext(span, leg);
+    return span;
+  }
+
+  endSpan(span: Span): void {
+    span.end();
+  }
+
+  getParentSpanContext(leg: number): undefined | Context {
+    const traceId = this.getTraceId();
+    const spanId = this.getParentSpanId(leg);
+    if (traceId && spanId) {
+      const restoredSpanContext: SpanContext = {
+        traceId,
+        spanId,
+        isRemote: true,
+        traceFlags: 1, // (todo: revisit sampling strategy/config)
+      };
+      const parentContext = trace.setSpanContext(context.active(), restoredSpanContext);
+      return parentContext;
+    }
+  }
+
   getParentSpanId(leg: number): string | undefined {
     if (leg === 1) {
-      //the parent span for leg1 of this activity is leg2 of the parent activity
-      return this.context[this.config.parent].output.metadata.l2s;
+      return this.context[this.config.parent].output?.metadata?.l2s;
     } else {
-      //the parent span for leg2 of this activity is leg1 of this activity
-      return this.context['$self'].output.metadata.l1s;
+      return this.context['$self'].output?.metadata?.l1s;
     }
   }
 
@@ -112,43 +151,21 @@ class Activity {
     return this.context.metadata.trc;
   }
 
-  startSpan(leg = this.leg): Span {
-    const tracer = trace.getTracer(packageJson.name, packageJson.version);
-    const traceId = this.getTraceId();
-    const spanId = this.getParentSpanId(leg);
-    let parentContext: Context;
-    let root = true;
-    //restore the parent context if it exists (triggers can create new context)
-    if (traceId && spanId) {
-      root = false;
-      const restoredSpanContext: SpanContext = {
-        traceId,
-        spanId,
-        isRemote: true,
-        traceFlags: 0, // sampled (todo: revisit sampling strategy/config)
-      };
-      parentContext = trace.setSpanContext(context.active(), restoredSpanContext);
-    }
-    //create the span
-    const span = tracer.startSpan(
-      `${this.engine.appId}.${this.config.type}.${this.metadata.aid}`,
-      { kind: SpanKind.INTERNAL,
-        root,
-        attributes: {
-          ...Object.keys(this.context.metadata).reduce((result, key) => {
-            result[`job/${key}`] = this.context.metadata[key];
-            return result;
-          }, {}),
-          ...Object.keys(this.metadata).reduce((result, key) => {
-            result[`activity/${key}`] = this.metadata[key];
-            return result;
-          }, {}),
-          'activity/leg': leg,
-        },
-      },
-      parentContext
-    );
-    //bind the `span` id, so it can be serialized (and used as a parent span)
+  getSpanAttrs(leg: number): StringAnyType {
+    return {
+      ...Object.keys(this.context.metadata).reduce((result, key) => {
+        result[`job/${key}`] = this.context.metadata[key];
+        return result;
+      }, {}),
+      ...Object.keys(this.metadata).reduce((result, key) => {
+        result[`activity/${key}`] = this.metadata[key];
+        return result;
+      }, {}),
+      'activity/leg': leg,
+    };
+  };
+
+  setTelemetryContext(span: Span, leg: number) {
     if (!this.context.metadata.trc) {
       this.context.metadata.trc = span.spanContext().traceId;
     }
@@ -163,11 +180,6 @@ class Activity {
       }
       this.context['$self'].output.metadata.l2s = span.spanContext().spanId;
     }
-    return span;
-  }
-
-  endSpan(span: Span): void {
-    span.end();
   }
 
   //********  SIGNALER RE-ENTRY POINT (B)  ********//
@@ -284,7 +296,6 @@ class Activity {
     this.context.metadata.ju = formatISODate(new Date());
   }
 
-  //todo: save l1s or l2s (depending on leg)
   bindActivityMetadata(): void {
     const self: StringAnyType = this.context['$self'];
     if (!self.output.metadata) {
