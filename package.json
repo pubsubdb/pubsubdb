@@ -1,6 +1,6 @@
 {
   "name": "@pubsubdb/pubsubdb",
-  "version": "0.0.34",
+  "version": "0.0.35",
   "description": "The PubSubDB Process Database",
   "main": "build/index.js",
   "types": "build/index.d.ts",
@@ -40,6 +40,10 @@
   "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
     "@apidevtools/json-schema-ref-parser": "^10.1.0",
+    "@opentelemetry/api": "^1.4.1",
+    "@opentelemetry/auto-instrumentations-node": "^0.38.0",
+    "@opentelemetry/sdk-metrics": "^1.15.0",
+    "@opentelemetry/sdk-node": "^0.41.0",
     "winston": "^3.8.2"
   },
   "devDependencies": {

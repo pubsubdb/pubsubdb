@@ -1,24 +1,17 @@
-class RestoreJobContextError extends Error {
+class GetStateError extends Error {
   constructor() {
-    super("Error occurred while restoring job context");
+    super("Error occurred while getting job state");
+  }
+}
+class SetStateError extends Error {
+  constructor() {
+    super("Error occurred while setting job state");
   }
 }
 
-class DuplicateActivityError extends Error {
+class MapDataError extends Error {
   constructor() {
-    super("Error occurred while creating duplicate activity");
-  }
-}
-
-class MapInputDataError extends Error {
-  constructor() {
-    super("Error occurred while mapping input data");
-  }
-}
-
-class SubscribeToResponseError extends Error {
-  constructor() {
-    super("Error occurred while subscribing to activity response");
+    super("Error occurred while mapping data");
   }
 }
 
@@ -34,4 +27,4 @@ class ExecActivityError extends Error {
   }
 }
 
-export { RestoreJobContextError, DuplicateActivityError, MapInputDataError, SubscribeToResponseError, RegisterTimeoutError, ExecActivityError };
+export { GetStateError, SetStateError, MapDataError, RegisterTimeoutError, ExecActivityError };

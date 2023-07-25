@@ -49,7 +49,7 @@ class TaskService {
   }
 
   async registerTimeHook(jobId: string, activityId: string, type: 'sleep'|'expire'|'cron', inSeconds = FIDELITY_SECONDS, multi?: RedisMulti): Promise<void> {
-    const awakenTimeSlot = Math.floor((Date.now() + inSeconds * 1000) / (FIDELITY_SECONDS * 1000)) * (FIDELITY_SECONDS * 1000); //n second deletion groups
+    const awakenTimeSlot = Math.floor((Date.now() + inSeconds * 1000) / (FIDELITY_SECONDS * 1000)) * (FIDELITY_SECONDS * 1000); //n second awaken groups
     await this.store.registerTimeHook(jobId, activityId, type, awakenTimeSlot, multi);
   }
 

@@ -30,6 +30,7 @@ type PubSubDBConfig = {
   namespace?: string;
   name?: string;
   logger?: ILogger;
+  enableTelemetryConsoleLogger?: boolean;
   logLevel?: 'silly' | 'debug' | 'info' | 'warn' | 'error' | 'silent';
   engine?: PubSubDBEngine;
   workers?: PubSubDBWorker[];

@@ -1,5 +1,8 @@
 import { KeyType } from '../../modules/key';
-import { formatISODate, getSubscriptionTopic, restoreHierarchy } from '../../modules/utils';
+import {
+  formatISODate,
+  getSubscriptionTopic,
+  restoreHierarchy } from '../../modules/utils';
 import Activities from '../activities';
 import { Activity } from '../activities/activity';
 import { Await } from '../activities/await';
@@ -295,7 +298,7 @@ class EngineService {
   }
   async resolveQuery(topic: string, query: JobStatsInput): Promise<GetStatsOptions> {
     const trigger = await this.initActivity(topic, query.data) as Trigger;
-    await trigger.createContext();
+    await trigger.getState();
     return {
       end: query.end,
       start: query.start,
@@ -384,8 +387,7 @@ class EngineService {
       },
       data,
     };
-    const key = this.store.mintKey(KeyType.STREAMS, { appId: this.appId });
-    await this.streamSignaler.publishMessage(key, streamData);
+    await this.streamSignaler.publishMessage(null, streamData);
   }
   async hookTime(jobId: string, activityId: string): Promise<JobStatus | void> {
     const streamData: StreamData = {
@@ -396,8 +398,7 @@ class EngineService {
       },
       data: { timestamp: Date.now() },
     };
-    const key = this.store.mintKey(KeyType.STREAMS, { appId: this.appId });
-    await this.streamSignaler.publishMessage(key, streamData);
+    await this.streamSignaler.publishMessage(null, streamData);
   }
   async hookAll(hookTopic: string, data: JobData, query: JobStatsInput, queryFacets: string[] = []): Promise<string[]> {
     const config = await this.getVID();

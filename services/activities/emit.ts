@@ -3,10 +3,10 @@ import { Activity, ActivityType } from './activity';
 import {
   ActivityData,
   ActivityMetadata,
-  RequestActivity } from '../../types/activity';
+  EmitActivity } from '../../types/activity';
 
-class Request extends Activity {
-  config: RequestActivity;
+class Emit extends Activity {
+  config: EmitActivity;
 
   constructor(
     config: ActivityType,
@@ -18,8 +18,8 @@ class Request extends Activity {
   }
 
   async mapInputData(): Promise<void> {
-    this.logger.info('request-map-input-data');
+    this.logger.info('emit-map-input-data');
   }
 }
 
-export { Request };
+export { Emit };

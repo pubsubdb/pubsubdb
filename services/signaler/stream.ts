@@ -65,7 +65,8 @@ class StreamSignaler {
     }
   }
 
-  async publishMessage(stream: string, streamData: StreamData|StreamDataResponse) {
+  async publishMessage(topic: string, streamData: StreamData|StreamDataResponse) {
+    const stream = this.store.mintKey(KeyType.STREAMS, { appId: this.store.appId, topic });
     await this.store.xadd(stream, '*', 'message', JSON.stringify(streamData));
   }
 
@@ -159,8 +160,7 @@ class StreamSignaler {
         const [shouldRetry, timeout] = this.shouldRetry(input, output);
         if (shouldRetry) {
           await sleepFor(timeout);
-          const key = this.stream.mintKey(KeyType.STREAMS, { appId: this.appId, topic: input.metadata.topic  });
-          return await this.publishMessage(key, { 
+          return await this.publishMessage(input.metadata.topic, { 
             data: input.data,
             metadata: { ...input.metadata, try: (input.metadata.try || 0) + 1 },
             policies: input.policies,
@@ -169,8 +169,7 @@ class StreamSignaler {
           output = this.structureError(input, output);
         }
       }
-      const key = this.stream.mintKey(KeyType.STREAMS, { appId: this.appId });
-      return await this.publishMessage(key, output as StreamDataResponse);
+      return await this.publishMessage(null, output as StreamDataResponse);
     }
   }
 

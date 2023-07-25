@@ -1,9 +1,9 @@
-// import { RestoreJobContextError, 
-//          MapInputDataError, 
-//          SubscribeToResponseError, 
-//          RegisterTimeoutError, 
-//          ExecActivityError, 
-//          DuplicateActivityError} from '../../../modules/errors';
+// import {
+//   GetStateError, 
+//   SetStateError, 
+//   MapDataError, 
+//   RegisterTimeoutError, 
+//   ExecActivityError } from '../../../modules/errors';
 import { Activity } from "./activity";
 import { CollatorService } from "../collator";
 import { EngineService } from "../engine";
@@ -34,6 +34,7 @@ class Await extends Activity {
     //try {
       this.setDuplexLeg(1);
       await this.getState();
+      const span = this.startSpan();
       this.mapInputData();
       /////// MULTI: START ///////
       const multi = this.store.getMulti();
@@ -43,13 +44,13 @@ class Await extends Activity {
       await multi.exec();
       /////// MULTI: END ///////
       await this.execActivity(); //todo: store a back-ref to the spawned jobid
+      this.endSpan(span);
       return this.context.metadata.aid;
     //} catch (error) {
       //this.logger.error('await-process-failed', error);
-      // if (error instanceof DuplicateActivityError) {
-      // } else if (error instanceof RestoreJobContextError) {
-      // } else if (error instanceof MapInputDataError) {
-      // } else if (error instanceof SubscribeToResponseError) {
+      // if (error instanceof GetStateError) {
+      // } else if (error instanceof SetStateError) {
+      // } else if (error instanceof MapDataError) {
       // } else if (error instanceof RegisterTimeoutError) {
       // } else if (error instanceof ExecActivityError) {
       // } else {
@@ -64,7 +65,9 @@ class Await extends Activity {
         ...this.context.metadata,
         ngn: undefined,
         pj: this.context.metadata.jid,
-        pa: this.metadata.aid
+        pa: this.metadata.aid,
+        trc: this.context.metadata.trc,
+        spn: this.context['$self'].output.metadata.l1s,
       }
     };
     await this.engine.pub(
@@ -79,6 +82,7 @@ class Await extends Activity {
   //this method is invoked when the job spawned by this job ends;
   //`this.data` is the job data produced by the spawned job
   async resolveAwait(status: StreamStatus = StreamStatus.SUCCESS, code: StreamCode = 200): Promise<void> {
+    this.setDuplexLeg(2);
     const jid = this.context.metadata.jid;
     const aid = this.metadata.aid;
     if (!jid) {
@@ -88,6 +92,7 @@ class Await extends Activity {
     this.status = status;
     this.code = code;
     await this.getState();
+    const span = this.startSpan();
     let multiResponse: MultiResponseFlags = [];
     if (status === StreamStatus.SUCCESS) {
       multiResponse = await this.processSuccess();
@@ -97,6 +102,7 @@ class Await extends Activity {
     const activityStatus = multiResponse[multiResponse.length - 1];
     const isComplete = CollatorService.isJobComplete(activityStatus as number);
     this.transition(isComplete);
+    this.endSpan(span);
   }
 
   async processSuccess(): Promise<MultiResponseFlags> {
