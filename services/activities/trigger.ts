@@ -20,7 +20,7 @@ import {
 import { JobState } from '../../types/job';
 import { RedisMulti } from '../../types/redis';
 import { StringAnyType } from '../../types/serializer';
-import { Span, context } from "../../types/telemetry";
+import { Span } from "../../types/telemetry";
 
 class Trigger extends Activity {
   config: TriggerActivity;
@@ -41,7 +41,8 @@ class Trigger extends Activity {
     try {
       this.setDuplexLeg(2);
       await this.getState();
-      jobSpan = this.startSpan(1);
+      const spanName = `JOB/${this.engine.appId}/${this.config.subscribes}`;
+      jobSpan = this.startSpan(1, spanName);
       span = this.startSpan(2);
       this.mapJobData();
       await this.setStateNX();
@@ -53,13 +54,13 @@ class Trigger extends Activity {
       /////// MULTI:END ///////
       const complete = CollatorService.isJobComplete(this.context.metadata.js);
       this.transition(complete);
-      this.endSpan(span);
       this.endSpan(jobSpan);
+      this.endSpan(span);
       return this.context.metadata.jid;
     } catch (error) {
       this.logger.error('trigger-process-failed', error);
-      span && this.endSpan(span);
       jobSpan && this.endSpan(jobSpan);
+      span && this.endSpan(span);
       // if (error instanceof DuplicateActivityError) {
       // } else if (error instanceof GetStateError) {
       // } else if (error instanceof SetStateError) {

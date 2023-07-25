@@ -1,12 +1,10 @@
 # PubSubDB FAQ
 
 ## What is a Process Database?
-A process database provides tools and models for describing and orchestrating activities in a sequence (processes). Define flows using YAML models, while the process database shepherds it through completion.
-
-A Process Database performs the same work as a traditional orchestration bus (and delivers the same benefits one would expect from a centralized integration server). However, the "server" itself doesn’t exist and is an emergent property of the data journaling process. The act of reading and writing to the journal is what drives the perpetual behavior of engines and workers. It's a database that behaves like a process engine.
+Similar to how a relational database provides tools for modeling *tables* and  *relationships*, a process database provides tools for modeling *activities* and *transitions*. Constructs like "reading" and "writing" data still remain; however, instead of reading and writing to *tables*, the targets are *jobs* and *flows*. Importantly, the act of reading and writing data drives the perpetual behavior of the system, delivering process orchestration through the simple act of journaling state.
 
 ## What is PubSubDB?
-PubSubDB (a process database) is a wrapper for Redis that exposes a higher level set of domain constructs like ‘activities’, ‘jobs’, ‘flows’, etc. Behind the scenes, it uses *Redis Data* (Hash, ZSet, and List); *Redis Streams* (XReadGroup, XAdd, XLen) and *Redis Publish/Subscribe*.
+PubSubDB (a Process Database) is a wrapper for Redis that exposes a higher level set of domain constructs like ‘activities’, ‘jobs’, ‘flows’, etc. Behind the scenes, it uses *Redis Data* (Hash, ZSet, and List); *Redis Streams* (XReadGroup, XAdd, XLen) and *Redis Publish/Subscribe*.
 
 ## What gets installed?
 PubSubDB is a lightweight NPM package (500KB) that gets installed anywhere a connection to Redis is needed. PubSubDB reuses any existing Redis connection and simply reverses the information flow. The entire process is invisible, and it’s easy to set up, as you’re reusing existing Redis connections already proven to work.
