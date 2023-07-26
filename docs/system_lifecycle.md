@@ -139,11 +139,12 @@ const jobId = await pubSubDB.pub(topic, payload, context);
 PubSubDB emits the `trace` (trc) and `span` (spn) IDs to registered worker functions. Add telemetry logging to your worker functions (perhaps it's already there) for a full, system-wide view of the running workflow as a connected graph of activities.
 
 ### Dashboards and Alerts
-PubSubDB tracks all *span* relationships, emitting them to the telemetry system as a set of nested activities that naturally reform into the original workflow graph. Meter critical activities with alarms and alerts; use the telemetry data to drive your own custom dashboards.
+PubSubDB tracks telemetry *spans* and *traces*, emitting them to the telemetry backend as a set of nested activities that naturally reform into the original workflow graph. Meter critical activities with alarms and alerts; use the telemetry data to drive your own custom dashboards.
 
-In the following workflow, a sequence of 4 duplexed activities ran in succession over the span of 255ms.
+In the following dashboard (HoneyComb), a sequence of 4 duplexed activities are displayed along with the worker functions they orchestrate. The full duration was 160ms with the bulk of the processing time spent executing the `sforcecloud` worker function (57.93ms).
 
 **HoneyComb Trace UI**
+
 <img src="./img/telemetry.png" alt="Open Telemetry" style="max-width:600px;width:600px;">
 
 
