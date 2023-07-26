@@ -107,7 +107,7 @@ class StreamSignaler {
         setImmediate(consume.bind(this));
       } catch (err) {
         if (this.shouldConsume && process.env.NODE_ENV !== 'test') {
-        this.logger.error(`stream-consume-message-failed`, { err, stream, group, consumer });
+        this.logger.error(`stream-consume-message-error`, { err, stream, group, consumer });
           this.errorCount++;
           const timeout = Math.min(GRADUATED_INTERVAL_MS * (2 ** this.errorCount), MAX_TIMEOUT_MS);
           setTimeout(consume.bind(this), timeout);
@@ -129,7 +129,7 @@ class StreamSignaler {
       output = await this.execStreamLeg(input, stream, id, callback.bind(this));
       this.errorCount = 0;
     } catch (err) {
-      this.logger.error(`stream-consume-one-message-failed`, { err, id, stream, group });
+      this.logger.error(`stream-consume-one-message-error`, { err, id, stream, group });
     }
     await this.publishResponse(input, output);
     await this.ackAndDelete(stream, group, id);
@@ -141,7 +141,7 @@ class StreamSignaler {
     try {
       output = await callback(input);
     } catch (err) {
-      this.logger.error(`stream-call-function-failed`, { err, id, stream });
+      this.logger.error(`stream-call-function-error`, { err, id, stream });
       output = this.structureUnhandledError(input, err);
     }
     return output as StreamDataResponse;

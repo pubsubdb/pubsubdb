@@ -1,23 +1,19 @@
-// import {
-//   GetStateError, 
-//   SetStateError, 
-//   MapDataError, 
-//   RegisterTimeoutError, 
-//   ExecActivityError } from '../../../modules/errors';
-import { Activity } from "./activity";
-import { CollatorService } from "../collator";
-import { EngineService } from "../engine";
+import { GetStateError } from '../../modules/errors';
+import { Activity } from './activity';
+import { CollatorService } from '../collator';
+import { EngineService } from '../engine';
 import {
   ActivityData,
   ActivityMetadata,
   WorkerActivity,
-  ActivityType } from "../../types/activity";
-import { JobState } from "../../types/job";
-import { MultiResponseFlags } from "../../types/redis";
+  ActivityType } from '../../types/activity';
+import { JobState } from '../../types/job';
+import { MultiResponseFlags } from '../../types/redis';
 import {
   StreamCode,
   StreamData,
-  StreamStatus } from "../../types/stream";
+  StreamStatus } from '../../types/stream';
+import { Span } from '../../types/telemetry';
 
 class Worker extends Activity {
   config: WorkerActivity;
@@ -34,31 +30,31 @@ class Worker extends Activity {
 
   //********  INITIAL ENTRY POINT (A)  ********//
   async process(): Promise<string> {
-    //try {
+    let span: Span
+    try {
       this.setDuplexLeg(1);
       await this.getState();
-      const span = this.startSpan();
+      span = this.startSpan();
       this.mapInputData();
-      /////// MULTI: START ///////
+
       const multi = this.store.getMulti();
-      //todo: await this.registerTimeout();
+      //await this.registerTimeout();
       await this.setState(multi);
       await this.setStatus(1, multi);
       await multi.exec();
-      /////// MULTI: END ///////
-      await this.execActivity(); //todo: store a backref to the spawned stream id?
-      this.endSpan(span);
+
+      await this.execActivity();
       return this.context.metadata.aid;
-    //} catch (error) {
-      //this.logger.error('exec-process-failed', error);
-      // if (error instanceof GetStateError) {
-      // } else if (error instanceof SetStateError) {
-      // } else if (error instanceof MapDataError) {
-      // } else if (error instanceof RegisterTimeoutError) {
-      // } else if (error instanceof ExecActivityError) {
-      // } else {
-      // }
-    //}
+    } catch (error) {
+      if (error instanceof GetStateError) {
+        this.logger.error('worker-get-state-error', error);
+      } else {
+        this.logger.error('worker-process-error', error);
+      }
+    } finally {
+      //todo: inject attribute with the stream message id
+      this.endSpan(span);
+    }
   }
 
   async execActivity(): Promise<void> {
@@ -113,32 +109,26 @@ class Worker extends Activity {
   async processPending(): Promise<MultiResponseFlags> {
     this.bindActivityData('output');
     this.mapJobData();
-    //******      MULTI: START      ******//
     const multi = this.store.getMulti();
     await this.setState(multi);
     return await multi.exec() as MultiResponseFlags;
-    //******       MULTI: END       ******//
   }
 
   async processSuccess(): Promise<MultiResponseFlags> {
     this.bindActivityData('output');
     this.mapJobData();
-    //******      MULTI: START      ******//
     const multi = this.store.getMulti();
     await this.setState(multi);
     await this.setStatus(2, multi);
     return await multi.exec() as MultiResponseFlags;
-    //******       MULTI: END       ******//
   }
 
   async processError(): Promise<MultiResponseFlags> {
     this.bindActivityError(this.data);
-    //******      MULTI: START      ******//
     const multi = this.store.getMulti();
     await this.setState(multi);
     await this.setStatus(1, multi);
     return await multi.exec() as MultiResponseFlags;
-    //******       MULTI: END       ******//
   }
 }
 

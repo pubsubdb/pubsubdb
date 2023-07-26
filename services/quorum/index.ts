@@ -173,11 +173,11 @@ class QuorumService {
         const compiler = new CompilerService(this.store, this.logger);
         return await compiler.activate(id, version);
       } else {
-        this.logger.error('quorum-activation-failed', { version });
+        this.logger.error('quorum-activation-error', { version });
         throw new Error(`UntilVersion Not Received. Version ${version} not activated`);
       }
     } else {
-      this.logger.info('quorum-rollcall-failed', { q1, q2, q3 });
+      this.logger.info('quorum-rollcall-error', { q1, q2, q3 });
       throw new Error(`Quorum not reached. Version ${version} not activated.`);
     }
   }

@@ -1,41 +1,37 @@
-// import { GetStateError, 
-//          SetStateError,
-//          MapDataError, 
-//          RegisterTimeoutError, 
-//          ExecActivityError } from '../../../modules/errors';
+import { GetStateError } from '../../modules/errors';
 import packageJson from '../../package.json';
 import {
   formatISODate,
   getValueByPath,
-  restoreHierarchy } from "../../modules/utils";
-import { CollatorService } from "../collator";
-import { EngineService } from "../engine";
-import { ILogger } from "../logger";
+  restoreHierarchy } from '../../modules/utils';
+import { CollatorService } from '../collator';
+import { EngineService } from '../engine';
+import { ILogger } from '../logger';
 import { MapperService } from '../mapper';
-import { Pipe } from "../pipe";
+import { Pipe } from '../pipe';
 import { MDATA_SYMBOLS } from '../serializer';
-import { StoreSignaler } from "../signaler/store";
-import { StoreService } from "../store";
+import { StoreSignaler } from '../signaler/store';
+import { StoreService } from '../store';
 import { 
   ActivityType,
   ActivityData,
   ActivityMetadata,
-  Consumes } from "../../types/activity";
-import { JobState, JobStatus } from "../../types/job";
+  Consumes } from '../../types/activity';
+import { JobState, JobStatus } from '../../types/job';
 import {
   MultiResponseFlags,
   RedisClient,
-  RedisMulti } from "../../types/redis";
-import { StringAnyType } from "../../types/serializer";
-import { StreamCode, StreamStatus } from "../../types/stream";
+  RedisMulti } from '../../types/redis';
+import { StringAnyType } from '../../types/serializer';
+import { StreamCode, StreamStatus } from '../../types/stream';
 import {
   Span,
   SpanContext,
   SpanKind,
   trace,
   Context,
-  context } from "../../types/telemetry";
-import { TransitionRule, Transitions } from "../../types/transition";
+  context } from '../../types/telemetry';
+import { TransitionRule, Transitions } from '../../types/transition';
 
 /**
  * The base class for all activities
@@ -72,11 +68,12 @@ class Activity {
 
   //********  INITIAL ENTRY POINT (A)  ********//
   async process(): Promise<string> {
-    //try {
+    let span: Span;
+    try {
       this.setDuplexLeg(1);
       await this.getState();
-      const span = this.startSpan();
-      /////// MULTI: START ///////
+      span = this.startSpan();
+
       const multi = this.store.getMulti();
       //await this.registerTimeout();
       const shouldSleep = await this.registerHook(multi);
@@ -85,22 +82,20 @@ class Activity {
       const decrementBy = shouldSleep ? 4 : 3;
       await this.setStatus(decrementBy, multi);
       const multiResponse = await multi.exec() as MultiResponseFlags;
-      /////// MULTI: END ///////
+
       const activityStatus = multiResponse[multiResponse.length - 1];
       const isComplete = CollatorService.isJobComplete(activityStatus as number);
       !shouldSleep && this.transition(isComplete);
-      this.endSpan(span);
       return this.context.metadata.aid;
-    //} catch (error) {
-      //this.logger.error('activity-process-failed', error);
-      // if (error instanceof GetStateError) {
-      // } else if (error instanceof SetStateError) {
-      // } else if (error instanceof MapDataError) {
-      // } else if (error instanceof RegisterTimeoutError) {
-      // } else if (error instanceof ExecActivityError) {
-      // } else {
-      // }
-    //}
+    } catch (error) {
+      if (error instanceof GetStateError) {
+        this.logger.error('activity-get-state-error', error);
+      } else {
+        this.logger.error('activity-process-error', error);
+      }
+    } finally {
+      this.endSpan(span);
+    }
   }
 
   setDuplexLeg(leg: number): void {
@@ -110,7 +105,7 @@ class Activity {
   startSpan(leg = this.leg, spanName?: string): Span {
     const tracer = trace.getTracer(packageJson.name, packageJson.version);
     let parentContext = this.getParentSpanContext(leg);
-    spanName = spanName || `${this.config.type.toUpperCase()}/${this.engine.appId}/${this.metadata.aid}`;
+    spanName = spanName || `${this.config.type.toUpperCase()}/${this.engine.appId}/${this.metadata.aid}/${leg}`;
     const span = tracer.startSpan(
       spanName,
       { kind: SpanKind.CLIENT, attributes: this.getSpanAttrs(leg), root: !parentContext },
@@ -120,8 +115,8 @@ class Activity {
     return span;
   }
 
-  endSpan(span: Span): void {
-    span.end();
+  endSpan(span?: Span): void {
+    span && span.end();
   }
 
   getParentSpanContext(leg: number): undefined | Context {
@@ -154,14 +149,14 @@ class Activity {
   getSpanAttrs(leg: number): StringAnyType {
     return {
       ...Object.keys(this.context.metadata).reduce((result, key) => {
-        result[`job/${key}`] = this.context.metadata[key];
+        result[`app.job.${key}`] = this.context.metadata[key];
         return result;
       }, {}),
       ...Object.keys(this.metadata).reduce((result, key) => {
-        result[`activity/${key}`] = this.metadata[key];
+        result[`app.activity.${key}`] = this.metadata[key];
         return result;
       }, {}),
-      'activity/leg': leg,
+      'app.activity.leg': leg,
     };
   };
 
@@ -206,7 +201,7 @@ class Activity {
     if (jobId) {
       await this.processHookEvent(jobId);
       await signaler.deleteWebHookSignal(this.config.hook.topic, data);
-    } //else already resolved
+    } //else => already resolved
   }
   async processTimeHookEvent(jobId: string): Promise<JobStatus | void> {
     this.logger.debug('engine-process-time-hook-event', {
@@ -216,22 +211,28 @@ class Activity {
     return await this.processHookEvent(jobId);
   }
   async processHookEvent(jobId: string): Promise<JobStatus | void> {
-    this.setDuplexLeg(2);
-    await this.getState(jobId);
-    const span = this.startSpan();
-    this.bindActivityData('hook');
-    this.mapJobData();
-    /////// MULTI: START ///////
-    const multi = this.engine.store.getMulti();
-    await this.setState(multi);
-    await this.setStatus(1, multi);
-    const multiResponse = await multi.exec() as MultiResponseFlags;
-    const activityStatus = multiResponse[multiResponse.length - 1];
-    const isComplete = CollatorService.isJobComplete(activityStatus as number);
-    await this.transition(isComplete);
-    this.endSpan(span);
-    return Number(activityStatus);
-    /////// MULTI: END ///////
+    this.logger.debug('activity-process-hook-event', { jobId });
+    let span: Span;
+    try {
+      this.setDuplexLeg(2);
+      await this.getState(jobId);
+      span = this.startSpan();
+      this.bindActivityData('hook');
+      this.mapJobData();
+      const multi = this.engine.store.getMulti();
+      await this.setState(multi);
+      await this.setStatus(1, multi);
+      const multiResponse = await multi.exec() as MultiResponseFlags;
+      const activityStatus = multiResponse[multiResponse.length - 1];
+      const isComplete = CollatorService.isJobComplete(activityStatus as number);
+      await this.transition(isComplete);
+      return Number(activityStatus);
+    } catch (error) {
+      this.logger.error('engine-process-hook-event-error', error);
+      throw error;
+    } finally {
+      this.endSpan(span);
+    }
   }
 
   mapJobData(): void {

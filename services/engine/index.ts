@@ -216,7 +216,7 @@ class EngineService {
         setTimeout(this.reportNow.bind(this), REPORT_INTERVAL);
       }
     } catch (err) {
-      this.logger.error('engine-report-now-failed', err);
+      this.logger.error('engine-report-now-error', err);
     }
   }
 

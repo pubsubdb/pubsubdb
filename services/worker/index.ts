@@ -145,7 +145,7 @@ class WorkerService {
         setTimeout(this.reportNow.bind(this), REPORT_INTERVAL);
       }
     } catch (err) {
-      this.logger.error('worker-report-now-failed', err);
+      this.logger.error('worker-report-now-error', err);
     }
   }
 
