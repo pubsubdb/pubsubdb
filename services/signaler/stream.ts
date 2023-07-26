@@ -1,10 +1,11 @@
+import packageJson from '../../package.json';
 import { KeyType } from '../../modules/key';
 import { XSleepFor, sleepFor } from '../../modules/utils';
 import { ILogger } from '../logger';
 import { StoreService } from '../store';
 import { StreamService } from '../stream';
-import { QuorumProcessed, QuorumProfile } from '../../types/quorum';
 import { RedisClient, RedisMulti } from '../../types/redis';
+import { StringAnyType } from '../../types/serializer';
 import {
   StreamConfig,
   StreamData,
@@ -13,6 +14,14 @@ import {
   StreamRole,
   StreamStatus
 } from '../../types/stream';
+import {
+  context,
+  Context,
+  Span,
+  SpanContext,
+  SpanKind,
+  SpanStatusCode,
+  trace } from '../../types/telemetry';
 
 const MAX_RETRIES = 4; //max delay (10s using exponential backoff);
 const MAX_TIMEOUT_MS = 60000;
@@ -39,9 +48,6 @@ class StreamSignaler {
   logger: ILogger;
   throttle = 0;
   errorCount = 0;
-  currentSlot: number | null = null;
-  currentBucket: QuorumProcessed | null = null;
-  auditData: QuorumProcessed[] = [];
   currentTimerId: NodeJS.Timeout | null = null;
   shouldConsume: boolean;
 
@@ -65,9 +71,9 @@ class StreamSignaler {
     }
   }
 
-  async publishMessage(topic: string, streamData: StreamData|StreamDataResponse) {
+  async publishMessage(topic: string, streamData: StreamData|StreamDataResponse): Promise<string> {
     const stream = this.store.mintKey(KeyType.STREAMS, { appId: this.store.appId, topic });
-    await this.store.xadd(stream, '*', 'message', JSON.stringify(streamData));
+    return await this.store.xadd(stream, '*', 'message', JSON.stringify(streamData));
   }
 
   async consumeMessages(stream: string, group: string, consumer: string, callback: (streamData: StreamData) => Promise<StreamDataResponse|void>): Promise<void> {
@@ -95,7 +101,7 @@ class StreamSignaler {
           }
         }
 
-        // Check for pending messages now and then (Redis 6.2 syntax option!)
+        // Check for pending messages (note: Redis 6.2 simplifies)
         const now = Date.now();
         if (now - lastCheckedPendingMessagesAt > this.xclaim) {
           lastCheckedPendingMessagesAt = now;
@@ -124,16 +130,23 @@ class StreamSignaler {
   async consumeOne(stream: string, group: string, id: string, message: string[], callback: (streamData: StreamData) => Promise<StreamDataResponse|void>) {
     this.logger.debug(`stream-consume-one-message-starting`, { id, stream, group });
     const input: StreamData = JSON.parse(message[1]);
+    const leg = group === 'WORKER' ? 1 : 2;
+    const span = this.startSpan(leg, input);
     let output: StreamDataResponse | void;
     try {
       output = await this.execStreamLeg(input, stream, id, callback.bind(this));
+      if (output?.status === StreamStatus.ERROR) {
+        span.setStatus({ code: SpanStatusCode.ERROR, message: `Function Status Code ${ output.code || UNKNOWN_STATUS_CODE }` });
+      }
       this.errorCount = 0;
     } catch (err) {
       this.logger.error(`stream-consume-one-message-error`, { err, id, stream, group });
+      span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
     }
-    await this.publishResponse(input, output);
+    const messageId = await this.publishResponse(input, output);
+    span.setAttribute('app.worker.mid', messageId);
     await this.ackAndDelete(stream, group, id);
-    this.audit(message[1], output ? JSON.stringify(output) : '', !(output && output.status === 'error'));
+    this.endSpan(span);
   }
 
   async execStreamLeg(input: StreamData, stream: string, id: string, callback: (streamData: StreamData) => Promise<StreamDataResponse|void>) {
@@ -154,7 +167,7 @@ class StreamSignaler {
     await multi.exec();
   }
 
-  async publishResponse(input: StreamData, output: StreamDataResponse | void) {
+  async publishResponse(input: StreamData, output: StreamDataResponse | void): Promise<string> {
     if (output && typeof output === 'object') {
       if (output.status === 'error') {
         const [shouldRetry, timeout] = this.shouldRetry(input, output);
@@ -243,59 +256,6 @@ class StreamSignaler {
     }
   }
 
-  audit(input: string, output: string, success: boolean) {
-    const bytesIn = Buffer.byteLength(input, 'utf8');
-    const bytesOut = Buffer.byteLength(output, 'utf8');
-    const currentSlot = Math.floor(Date.now() / REPORT_INTERVAL);
-    if (this.currentSlot !== currentSlot) {
-      this.currentSlot = currentSlot;
-      this.currentBucket = { t: 0, i: 0, o: 0, p: 0, f: 0, s: 0 };
-      this.auditData.push(this.currentBucket);
-    }
-    this.updateCurrentBucket(currentSlot, bytesIn, bytesOut, success);
-    this.cleanStaleData();
-  }
-  
-  updateCurrentBucket(currentSlot: number, bytesIn: number, bytesOut: number, success: boolean) {
-    this.currentBucket.t = currentSlot * REPORT_INTERVAL;
-    this.currentBucket.i += bytesIn;
-    this.currentBucket.o += bytesOut;
-    this.currentBucket.p += 1;
-    this.currentBucket.f += success ? 0 : 1;
-    this.currentBucket.s += success ? 1 : 0;
-  }
-
-  cleanStaleData() {
-    const oneHourAgo = Date.now() - 3600000;
-    this.auditData = this.auditData.filter(data => data.t >= oneHourAgo);
-  }  
-
-  report(): QuorumProfile {
-    this.cleanStaleData();
-    return { ...this.getReportHeader(), d: this.auditData };
-  }
-
-  reportNow(): QuorumProfile {
-    const currentTimestamp = Date.now();
-    const fiveSecondsAgo = currentTimestamp - REPORT_INTERVAL;
-      const currentWindowData = this.auditData.filter((data) => {
-      return data.t >= fiveSecondsAgo && data.t <= currentTimestamp;
-    });
-    return { ...this.getReportHeader(), d: currentWindowData };
-  }
-
-  getReportHeader(): QuorumProfile {
-    return {
-      status: this.shouldConsume ? 'active' : 'inactive',
-      namespace: this.namespace,
-      appId: this.appId,
-      guid: this.guid,
-      topic: this.topic,
-      role: this.role,
-      throttle: this.throttle,
-    } as QuorumProfile;
-  }
-
   setThrottle(delayInMillis: number) {
     if (!Number.isInteger(delayInMillis) || delayInMillis < 0) {
       throw new Error('Throttle must be a non-negative integer');
@@ -318,6 +278,44 @@ class StreamSignaler {
     }
     return pendingMessages;
   }
+
+  startSpan(leg: number, input: StreamData): Span {
+    const tracer = trace.getTracer(packageJson.name, packageJson.version);
+    let parentContext = this.getParentSpanContext(input);
+    const spanName = `FUNCTION/${this.appId}/${input.metadata.aid}/${input.metadata.topic}/${leg}`;
+    const span = tracer.startSpan(
+      spanName,
+      { kind: SpanKind.CLIENT, attributes: this.getSpanAttrs(input), root: !parentContext },
+      parentContext
+    );
+    return span;
+  }
+
+  endSpan(span?: Span): void {
+    span && span.end();
+  }
+
+  getParentSpanContext(input: StreamData): undefined | Context {
+    const restoredSpanContext: SpanContext = {
+      traceId: input.metadata.trc,
+      spanId: input.metadata.spn,
+      isRemote: true,
+      traceFlags: 1, // (todo: revisit sampling strategy/config)
+    };
+    const parentContext = trace.setSpanContext(context.active(), restoredSpanContext);
+    return parentContext;
+  }
+
+  getSpanAttrs(input: StreamData): StringAnyType {
+    return {
+      ...Object.keys(input.metadata).reduce((result, key) => {
+        if (key !== 'trc' && key !== 'spn') {
+          result[`app.worker.${key}`] = input.metadata[key];
+        }
+        return result;
+      }, {})
+    };
+  };
 }
 
 export { StreamSignaler };

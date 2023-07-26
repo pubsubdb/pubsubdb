@@ -28,7 +28,6 @@ class Deployer {
     this.bindBackRefs();
     this.bindParents();
     this.resolveMappingDependencies();
-    //todo: this is likely not needed anymore; remove
     this.resolveJobMapsPaths();
     await this.generateSymKeys();
     await this.generateSymVals();
@@ -190,7 +189,6 @@ class Deployer {
     await this.store.addSymbolValues(newSymbols);
   }
 
-  //todo: this is likely not needed anymore; remove
   resolveJobMapsPaths() {
     function parsePaths(obj: StringAnyType): string[] {
       let result = [];

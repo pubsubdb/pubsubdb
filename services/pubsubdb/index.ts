@@ -161,7 +161,6 @@ class PubSubDBService {
   async compress(terms: string[]): Promise<boolean> {
     return await this.engine?.compress(terms);
   }
-
 }
 
 export { PubSubDBService };

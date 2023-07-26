@@ -7,15 +7,15 @@ Similar to how a relational database provides tools for modeling *tables* and  *
 PubSubDB (a Process Database) is a wrapper for Redis that exposes a higher level set of domain constructs like ‘activities’, ‘jobs’, ‘flows’, etc. Behind the scenes, it uses *Redis Data* (Hash, ZSet, and List); *Redis Streams* (XReadGroup, XAdd, XLen) and *Redis Publish/Subscribe*.
 
 ## What gets installed?
-PubSubDB is a lightweight NPM package (500KB) that gets installed anywhere a connection to Redis is needed. PubSubDB reuses any existing Redis connection and simply reverses the information flow. The entire process is invisible, and it’s easy to set up, as you’re reusing existing Redis connections already proven to work.
+PubSubDB is a lightweight NPM package (500KB) that gets installed anywhere a connection to Redis is needed. The entire process is invisible, and it’s easy to set up, as you’re reusing existing Redis connections. Essentially you call higher-level methods provided by PubSubDB (pub, sub, pubsub, etc) instead of the lower-level Redis commands (hset, xadd, etc).
 
 ## Is PubSubDB an Orchestration Hub/Bus?
 Yes and No. PubSubDB was designed to deliver the functionality of an orchestration server but without the additional infrastructure demands of a traditional server. Only the outcome (process orchestration) exists. The server itself is an emergent property of the data journaling process.
 
 ## How does PubSubDB operate without a central controller?
-PubSubDB is designed as a [distributed headless engine](./architecture.md) based upon the principles of CQRS. According to CQRS, *consumers* are instructed to read events from assigned topic queues while *producers* write to said queues. This division of labor is essential to the smooth running of the system. PubSubDB leverages this principle to drive the perpetual behavior of engines and workers. 
+PubSubDB is designed as a [distributed headless engine](./architecture.md) based upon the principles of CQRS. According to CQRS, *consumers* are instructed to read events from assigned topic queues while *producers* write to said queues. This division of labor is essential to the smooth running of the system. PubSubDB leverages this principle to drive the perpetual behavior of engines and workers (along with other strategies described [here](./architecture.md)). 
 
-According to the rules of the system, as long as there are items in a topic queue, consumers should process exactly one item, journal the result to another queue, and move on to the next item. As long as all consumers (engines and workers) follow this one simple rule, complex, composable, multi-system workflows emerge from the system. The “secret” to the process is to model the desired process using a DAG and then compile it into singular, stateless events that are just the right shape to be processed according to CQRS principles.
+As long as a topic queue has items, consumers will read exactly one and then journal the result to another queue. As long as all consumers (engines and workers) follow this one rule, complex, composable, multi-system workflows emerge. The "secret" to the process is to model the desired process using a DAG and then compile it into singular, stateless events that are just the right shape to be processed according to CQRS principles.
 
 ## Why not use Kafka?
 Kafka (Kinesis, etc) were designed with CQRS in mind. They are journaling technologies with write guarantees baked in. The logs produced are immutable allowing for tail compaction and append-only writes to the head. Consumers are separate from Producers in this system and can be installed separately to consume the log data in a manner that makes sense for the use case at hand.
@@ -25,7 +25,7 @@ The use case provided by PubSubDB is fully in-memory and provides a level of rea
 It is important to note that PubSubDB is complementary to Kafka. It requires less change to implement, using existing legacy hardware and infrastructure (it’s just an NPM package). PubSubDB can serve as the glue between legacy systems and Kafka as its event-driven approach is complementary to both systems.
 
 ## Does Redis Support Kafka-like features (single producer, etc)?
-Yes, Redis streams are very advanced and provide much of what Kafka does out of the box. There are slight differences, but the core principle of sequence and order serve to organize events into topics, so they can be processed by consumer groups. Blocking, one-time-delivery and similar concepts are supported.
+Yes, Redis streams provide much of what Kafka does out of the box. There are slight differences, but the core principle of sequence and order serve to organize events into topics, so they can be processed by consumer groups. Blocking, one-time-delivery and similar concepts are supported.
 
 ## What is the purpose of pubSubDB.pub?
 Call `pub` to kick off a workflow. It’s a one-way fire-and-forget call. The job id is returned but otherwise there is nothing to track.
