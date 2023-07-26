@@ -7,6 +7,8 @@ export {
   propagation,
   SpanContext,
   Span,
+  SpanStatus,
+  SpanStatusCode,
   SpanKind,
   trace,
   Tracer,

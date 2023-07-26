@@ -48,9 +48,6 @@ describe('StreamSignaler', () => {
   //PubSubDB instance
   let pubSubDB: PubSubDB;
 
-  //audit
-  let timestampAfterAudit: number;
-
   //worker callback function
   const callback =  async (streamData: StreamData): Promise<StreamDataResponse> => {
     const values = JSON.parse(streamData.data.values as string) as number[];
@@ -277,63 +274,6 @@ describe('StreamSignaler', () => {
         expect(jobMetaData?.metadata.err).not.toBeNull();
         expect(jobMetaData?.metadata.err).toBe('{"message":"unrecoverable error","code":403}');
       }
-    });
-  });
-
-  describe('audit', () => {
-    it('should correctly aggregate data for the same 10s slot', () => {
-      if (pubSubDB.engine?.streamSignaler?.currentBucket) {
-        pubSubDB.engine.streamSignaler.currentBucket = null;
-        pubSubDB.engine.streamSignaler.auditData.length = 0;
-        pubSubDB.engine.streamSignaler.currentSlot = null;
-      }
-      pubSubDB.engine?.streamSignaler?.audit('1111111111', '22222222222222222222', true);
-      pubSubDB.engine?.streamSignaler?.audit('22222222222222222222', '333333333333333333333333333333', false);
-      timestampAfterAudit = Math.floor(Date.now() / REPORT_INTERVAL) * REPORT_INTERVAL; // floor to nearest 10s
-      const auditData = pubSubDB.engine?.streamSignaler?.auditData;
-      const auditDataForCurrentSlot = auditData?.find(data => data.t === timestampAfterAudit);
-      expect(auditDataForCurrentSlot?.i).toBe(30);
-      expect(auditDataForCurrentSlot?.o).toBe(50);
-      expect(auditDataForCurrentSlot?.p).toBe(2);
-      expect(auditDataForCurrentSlot?.f).toBe(1);
-      expect(auditDataForCurrentSlot?.s).toBe(1);
-    });
-  });
-
-  describe('cleanStaleData', () => {
-    it('should correctly remove items older than one hour', () => {
-      if (pubSubDB.engine?.streamSignaler?.currentBucket) {
-        const twoHoursAgo = Date.now() - 7200000;  // timestamp for two hours ago
-        pubSubDB.engine.streamSignaler.currentBucket = {
-          t: twoHoursAgo,
-          i: 10,
-          o: 20,
-          p: 1,
-          f: 0,
-          s: 1,
-        };
-        pubSubDB.engine.streamSignaler.auditData = [pubSubDB.engine.streamSignaler.currentBucket];
-      }
-      pubSubDB.engine?.streamSignaler?.cleanStaleData();
-      expect(pubSubDB.engine?.streamSignaler?.auditData.length).toBe(0);
-    });
-  });
-
-  describe('report', () => {
-    it('should correctly return a report after auditing', () => {
-      if (pubSubDB.engine?.streamSignaler?.currentBucket) {
-        pubSubDB.engine.streamSignaler.currentBucket = null;
-        pubSubDB.engine.streamSignaler.auditData.length = 0;
-        pubSubDB.engine.streamSignaler.currentSlot = null;
-      }
-      pubSubDB.engine?.streamSignaler?.audit('1111111111', '22222222222222222222', true);
-      pubSubDB.engine?.streamSignaler?.audit('22222222222222222222', '333333333333333333333333333333', false);
-      const report = pubSubDB.engine?.streamSignaler?.report();
-      expect(report?.namespace).toBe(pubSubDB.engine?.streamSignaler?.namespace);
-      expect(report?.appId).toBe(pubSubDB.engine?.streamSignaler?.appId);
-      expect(report?.guid).toBe(pubSubDB.engine?.streamSignaler?.guid);
-      expect(report?.status).toBe('active');
-      expect(report?.d.length).toBeGreaterThan(0);
     });
   });
 });

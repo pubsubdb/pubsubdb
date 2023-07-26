@@ -40,7 +40,6 @@ import {
 import { 
   JobMessage,
   JobMessageCallback,
-  ReportMessage,
   SubscriptionCallback } from '../../types/quorum';
 import { RedisClient, RedisMulti } from '../../types/redis';
 import {
@@ -191,33 +190,6 @@ class EngineService {
 
   async processTimeHooks() {
     this.task.processTimeHooks((this.hookTime).bind(this));
-  }
-
-  async report() {
-    const message: ReportMessage = {
-      type: 'report',
-      profile: this.streamSignaler.report(),
-    };
-    await this.store.publish(KeyType.QUORUM, message, this.appId);
-    if (!this.reporting) {
-      this.reporting = true;
-      setTimeout(this.reportNow.bind(this), REPORT_INTERVAL);
-    }
-  }
-
-  async reportNow(once: boolean = false) {
-    try {
-      const message: ReportMessage = {
-        type: 'report',
-        profile: this.streamSignaler.reportNow(),
-      };
-      await this.store.publish(KeyType.QUORUM, message, this.appId);
-      if (!once) {
-        setTimeout(this.reportNow.bind(this), REPORT_INTERVAL);
-      }
-    } catch (err) {
-      this.logger.error('engine-report-now-error', err);
-    }
   }
 
   async throttle(delayInMillis: number) {
@@ -443,7 +415,6 @@ class EngineService {
     return await this.subscribe.subscribe(KeyType.QUORUM, subscriptionCallback, this.appId, topic);
   }
   //unsubscribe to all jobs for a topic
-  //todo: verify proper garbage collection/dereferencing
   async unsub(topic: string): Promise<void> {
     return await this.subscribe.unsubscribe(KeyType.QUORUM, this.appId, topic);
   }

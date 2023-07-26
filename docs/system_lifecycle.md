@@ -8,6 +8,7 @@ This README provides an overview of the `PubSubDB` runtime engine. The document 
 3. [Deploy Version](#deploy-version)
 4. [Activate Version](#activate-version)
 5. [Run Workflow](#run-workflow)
+6. [Telemetry](#telemetry)
 
 ## Init Engine and Quorum
 The engine is the core of the PubSubDB system and is responsible for running activities according to its execution rules. Every engine instance is initialized with a corresponding Quorum instance that serves to coordinate activities with other engines in the network. It is purposefully kept separate from the engine which is focused on workflow processes.
@@ -109,7 +110,7 @@ const payload = { id: 'ord123', price: 55.99 };
 const jobId = await pubSubDB.pub(topic, payload);
 //`jobId` will be `ord123`
 ```
-And here is a call to `pubsub` which awaits the response like a typical fetch call but without the risk of backpressure due to the CQRS architecture.
+And here is a call to `pubsub` which awaits the response like a typical fetch call.
 
 ```javascript
 const topic = 'discount.requested';
@@ -120,3 +121,30 @@ const jobOutput: JobOutput = await pubSubDB.pubsub(topic, payload);
 The following infographic illustrates the mechanics of the system and how the headless engine and workers are able to produce complex outcomes using journaling and CQRS principles. Each time a *worker* or *engine* pulls an item from its assigned Redis Stream, it concludes by writing the outcome to another stream. This simple mechanism of reading from one stream and writing to another is the basis for the entire system and how complex workflows are achieved. Every complex workflow is simply a series of singular activities implicitly stitched together by writing to streams in a sequence.
 
 <img src="./img/lifecycle/run_workflow.png" alt="PubSubDB Run Workflow" style="max-width:600px;width:600px;">
+
+## Telemetry
+PubSubDB includes instrumentation for [Open Telemetry](https://opentelemetry.io/). The PubSubDB service name will appear in the telemetry output as `@pubsubdb/pubsubdb` and will include details about the activities in the running flow, including their sequence and relationships.
+
+### Upstream Continuity
+It is possible to pass `trace` and `span` IDs from your existing telemetry implementation to the `pub` and `pubsub` method calls to provide trace continuity with your legacy systems.
+
+```javascript
+const topic = 'discount.requested';
+const payload = { id: 'ord123', price: 55.99 };
+const context = { metadata: { trc: '123456', spn: '001' }};
+const jobId = await pubSubDB.pub(topic, payload, context);
+```
+
+### Process Handoff Continuity
+PubSubDB emits the `trace` (trc) and `span` (spn) IDs to registered worker functions. Add telemetry logging to your worker functions (perhaps it's already there) for a full, system-wide view of the running workflow as a connected graph of activities.
+
+### Dashboards and Alerts
+PubSubDB tracks all *span* relationships, emitting them to the telemetry system as a set of nested activities that naturally reform into the original workflow graph. Meter critical activities with alarms and alerts; use the telemetry data to drive your own custom dashboards.
+
+In the following workflow, a sequence of 4 duplexed activities ran in succession over the span of 255ms.
+
+**HoneyComb Trace UI**
+<img src="./img/telemetry.png" alt="Open Telemetry" style="max-width:600px;width:600px;">
+
+
+>PubSubDB's duplex communication pattern can be seen in the trace output, with legs 1 and 2 of each activity described in the logs.

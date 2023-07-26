@@ -30,7 +30,8 @@ import {
   SpanKind,
   trace,
   Context,
-  context } from '../../types/telemetry';
+  context, 
+  SpanStatusCode} from '../../types/telemetry';
 import { TransitionRule, Transitions } from '../../types/transition';
 
 /**
@@ -93,6 +94,8 @@ class Activity {
       } else {
         this.logger.error('activity-process-error', error);
       }
+      span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+      throw error;
     } finally {
       this.endSpan(span);
     }
@@ -229,6 +232,7 @@ class Activity {
       return Number(activityStatus);
     } catch (error) {
       this.logger.error('engine-process-hook-event-error', error);
+      span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
       throw error;
     } finally {
       this.endSpan(span);

@@ -29,6 +29,8 @@ export interface StreamData {
     topic?: string;
     jid?: string; //is optonal if type is WEBHOOK
     aid: string;
+    trc?: string; //trace id
+    spn?: string; //span id
     try?: number; //current try count
   };
   type?: StreamDataType;

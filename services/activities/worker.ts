@@ -13,7 +13,7 @@ import {
   StreamCode,
   StreamData,
   StreamStatus } from '../../types/stream';
-import { Span } from '../../types/telemetry';
+import { Span, SpanStatusCode } from '../../types/telemetry';
 
 class Worker extends Activity {
   config: WorkerActivity;
@@ -43,7 +43,8 @@ class Worker extends Activity {
       await this.setStatus(1, multi);
       await multi.exec();
 
-      await this.execActivity();
+      const messageId = await this.execActivity();
+      span.setAttribute('app.activity.mid', messageId);
       return this.context.metadata.aid;
     } catch (error) {
       if (error instanceof GetStateError) {
@@ -51,18 +52,21 @@ class Worker extends Activity {
       } else {
         this.logger.error('worker-process-error', error);
       }
+      span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+      throw error;
     } finally {
-      //todo: inject attribute with the stream message id
       this.endSpan(span);
     }
   }
 
-  async execActivity(): Promise<void> {
+  async execActivity(): Promise<string> {
     const streamData: StreamData = {
       metadata: {
         jid: this.context.metadata.jid,
         aid: this.metadata.aid,
         topic: this.config.subtype,
+        spn: this.context['$self'].output.metadata.l1s,
+        trc: this.context.metadata.trc,
       },
       data: this.context.data
     };
@@ -71,7 +75,7 @@ class Worker extends Activity {
         retry: this.config.retry
       };
     }
-    await this.engine.streamSignaler?.publishMessage(this.config.subtype, streamData);
+    return await this.engine.streamSignaler?.publishMessage(this.config.subtype, streamData);
   }
 
 
@@ -83,27 +87,33 @@ class Worker extends Activity {
     this.status = status;
     this.code = code;
     this.logger.debug('engine-process-worker-event', { jid, aid, topic: this.config.subtype });
-    await this.getState();
-    const span = this.startSpan();
-    let isComplete = CollatorService.isActivityComplete(this.context.metadata.js, this.config.collationInt as number);
-    if (isComplete) {
-      this.logger.warn('worker-onresponse-duplicate', { jid, aid, status, code });
-      this.logger.debug('worker-onresponse-duplicate-resolution', { resolution: 'Increase PubSubDB config `xclaim` timeout.' });
+    let span: Span;
+    try {
+      await this.getState();
+      span = this.startSpan();
+      let isComplete = CollatorService.isActivityComplete(this.context.metadata.js, this.config.collationInt as number);
+      if (isComplete) {
+        this.logger.warn('worker-onresponse-duplicate', { jid, aid, status, code });
+        this.logger.debug('worker-onresponse-duplicate-resolution', { resolution: 'Increase PubSubDB config `xclaim` timeout.' });
+        return; //ok to return early here (due to xclaimed intercept completing first)
+      }
+      let multiResponse: MultiResponseFlags = [];
+      if (status === StreamStatus.PENDING) {
+        await this.processPending();
+      } else {
+        multiResponse = status === StreamStatus.SUCCESS ?
+          await this.processSuccess():
+          await this.processError();
+        const activityStatus = multiResponse[multiResponse.length - 1];
+        isComplete = CollatorService.isJobComplete(activityStatus as number);
+        this.transition(isComplete);
+      }
+    } catch (error) {
+      this.logger.error('worker-process-worker-event-error', error);
+      throw error;
+    } finally {
       this.endSpan(span);
-      return; //ok to return early here (due to xclaimed intercept completing first)
     }
-    let multiResponse: MultiResponseFlags = [];
-    if (status === StreamStatus.PENDING) {
-      await this.processPending();
-    } else {
-      multiResponse = status === StreamStatus.SUCCESS ?
-        await this.processSuccess():
-        await this.processError();
-      const activityStatus = multiResponse[multiResponse.length - 1];
-      isComplete = CollatorService.isJobComplete(activityStatus as number);
-      this.transition(isComplete);
-    }
-    this.endSpan(span);
   }
 
   async processPending(): Promise<MultiResponseFlags> {

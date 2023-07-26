@@ -14,11 +14,7 @@ import {
   StreamData,
   StreamDataResponse,
   StreamStatus } from '../../../types/stream';
-import {
-  ReportMessage,
-  QuorumMessage,
-  RollCallMessage,
-  ThrottleMessage } from '../../../types/quorum';
+import { QuorumMessage, ThrottleMessage } from '../../../types/quorum';
 import { QuorumService } from '../../../services/quorum';
 
 describe('QuorumService', () => {
@@ -109,7 +105,6 @@ describe('QuorumService', () => {
 
   describe('Run', () => {
     it('should run synchronous calls in parallel', async () => {
-      //this test should seed some audit data when rollcall is run
       const payload = {
         operation: 'divide',
         values: JSON.stringify([200, 4, 5]),
@@ -162,7 +157,7 @@ describe('QuorumService', () => {
       pubSubDB.quorum?.unsub(callback);
     });
 
-    it('sends a `throttle` message targeting everyone', async () => {
+    it('sends a `throttle` message to ALL quorum members', async () => {
       const callback = (topic: string, message: QuorumMessage) => {
         expect(['throttle', 'job'].includes(message.type)).toBeTruthy();
         expect((message as ThrottleMessage).guid).toBeUndefined();
@@ -179,69 +174,7 @@ describe('QuorumService', () => {
       pubSubDB.quorum?.unsub(callback);
     });
 
-    it('sends a `rollcall` message targeting an engine (guid)', async () => {
-      const callback = (topic: string, message: QuorumMessage) => {
-        //will see both messages (the call and response)
-        expect(['report', 'rollcall'].includes(message.type)).toBeTruthy();
-        if (message.type === 'report') {
-          expect((message as ReportMessage).profile?.d).not.toBeUndefined();
-        } else {
-          expect(message.type).toBe('rollcall');
-          expect((message as RollCallMessage).guid).toBe(pubSubDB.quorum?.guid);
-        }
-      };
-      pubSubDB.quorum?.sub(callback);
-      const rollcallMessage: RollCallMessage = {
-        type: 'rollcall',
-        guid: pubSubDB.quorum?.guid,
-      };
-      await pubSubDB.quorum?.pub(rollcallMessage);
-      await sleepFor(250);
-      pubSubDB.quorum?.unsub(callback);
-    });
-
-    it('sends a `rollcall` message targeting a worker (topic)', async () => {
-      const callback = (topic: string, message: QuorumMessage) => {
-        //will see both messages (the call and response)
-        expect(['report', 'rollcall'].includes(message.type)).toBeTruthy();
-        if (message.type === 'report') {
-          expect((message as ReportMessage).profile?.d).not.toBeUndefined();
-        } else {
-          expect(message.type).toBe('rollcall');
-          expect((message as RollCallMessage).topic).toBe('calculation.execute');
-        }
-      };
-      pubSubDB.quorum?.sub(callback);
-      const rollcallMessage: RollCallMessage = {
-        type: 'rollcall',
-        topic: 'calculation.execute',
-      };
-      await pubSubDB.quorum?.pub(rollcallMessage);
-      await sleepFor(250);
-      pubSubDB.quorum?.unsub(callback);
-    });
-
-    it('sends a `rollcall` message targeting everyone', async () => {
-      const callback = (topic: string, message: QuorumMessage) => {
-        //will see both messages (the call and response)
-        expect(['report', 'rollcall'].includes(message.type)).toBeTruthy();
-        if (message.type === 'report') {
-          expect((message as ReportMessage).profile?.d).not.toBeUndefined();
-        } else {
-          expect(message.type).toBe('rollcall');
-          expect((message as RollCallMessage).guid).toBeUndefined();
-        }
-      };
-      pubSubDB.quorum?.sub(callback);
-      const rollcallMessage: RollCallMessage = {
-        type: 'rollcall',
-      };
-      await pubSubDB.quorum?.pub(rollcallMessage);
-      await sleepFor(250);
-      pubSubDB.quorum?.unsub(callback);
-    });
-
-    it('request quorum', async () => {
+    it('requests a quorum rollcall count', async () => {
       (pubSubDB.quorum as QuorumService).quorum = 0;
       await pubSubDB.quorum?.requestQuorum(1000);
       expect(pubSubDB.quorum?.quorum).toBe(1);

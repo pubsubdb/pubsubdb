@@ -6,7 +6,7 @@ import { JobOutput } from "./job";
  * These messages serve to coordinate the cache invalidation and switch-over
  * to the new version without any downtime and a coordinating parent server.
  */
-export type QuorumMessage = PingMessage | PongMessage | ActivateMessage | WorkMessage | JobMessage | RollCallMessage | ReportMessage | ThrottleMessage;
+export type QuorumMessage = PingMessage | PongMessage | ActivateMessage | WorkMessage | JobMessage | ThrottleMessage;
 
 //used for coordination like version activation
 export interface PingMessage {
@@ -38,20 +38,6 @@ export interface JobMessage {
   job: JobOutput
 }
 
-//ask all workers and engines to report themselves
-export interface RollCallMessage {
-  type: 'rollcall';
-  topic?: string; //filter by worker (only these workers will respond)
-  guid?: string;  //filter by engine ()
-  duration?: '5s' | '10s' | '30s' | '1m' | '5m' | '10m' | '30m' | '1h'; //how far back in time for network status
-}
-
-//report on yourself (processed counts, rate, bytes in/out, etc)
-export interface ReportMessage {
-  type: 'report';
-  profile: QuorumProfile;
-}
-
 //delay in ms between fetches from the buffered stream (speed/slow down entire network)
 export interface ThrottleMessage {
   type: 'throttle';
@@ -67,28 +53,6 @@ export interface JobMessageCallback {
 export interface SubscriptionCallback {
   (topic: string, message: Record<string, any>): void;
 }
-
-//describes the profile for a quorum member
-export type QuorumProfile = {
-  namespace: string;
-  appId: string;
-  guid: string;
-  topic?: string;
-  role?: string;
-  status: QuorumStatus;
-  throttle: number;
-  d: QuorumProcessed[];
-};
-
-export type QuorumStatus = 'active' | 'inactive';
-export type QuorumProcessed = {
-  t: number;
-  i: number;
-  o: number;
-  p: number;
-  f: number;
-  s: number;
-};
 
 export interface QuorumMessageCallback {
   (topic: string, message: QuorumMessage): void;

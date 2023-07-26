@@ -9,7 +9,6 @@ import { CacheMode } from '../../types/cache';
 import {
   QuorumMessage,
   QuorumMessageCallback,
-  RollCallMessage,
   SubscriptionCallback,
   ThrottleMessage
 } from '../../types/quorum';
@@ -95,8 +94,6 @@ class QuorumService {
         this.sayPong(self.appId, self.guid, message.originator);
       } else if (message.type === 'pong' && self.guid === message.originator) {
         self.quorum = self.quorum + 1;
-      } else if (message.type === 'rollcall') {
-        self.engine.report();
       } else if (message.type === 'throttle') {
         self.engine.throttle(message.throttle);
       } else if (message.type === 'work') {
@@ -134,7 +131,7 @@ class QuorumService {
 
   // ************* PUB/SUB METHODS *************
   //publish a message to the quorum
-  async pub(quorumMessage: ThrottleMessage | RollCallMessage) {
+  async pub(quorumMessage: ThrottleMessage) {
     return await this.store.publish(KeyType.QUORUM, quorumMessage, this.appId, quorumMessage.topic || quorumMessage.guid);
   }
   //subscribe user to quorum messages

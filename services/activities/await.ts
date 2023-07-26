@@ -10,7 +10,7 @@ import {
 import { JobState } from '../../types/job';
 import { MultiResponseFlags } from '../../types/redis';
 import { StreamCode, StreamStatus } from '../../types/stream';
-import { Span } from '../../types/telemetry';
+import { Span, SpanStatusCode } from '../../types/telemetry';
 
 class Await extends Activity {
   config: AwaitActivity;
@@ -43,11 +43,13 @@ class Await extends Activity {
       await this.execActivity();
       return this.context.metadata.aid;
     } catch (error) {
+      span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
       if (error instanceof GetStateError) {
         this.logger.error('await-get-state-error', error);
       } else {
         this.logger.error('await-process-error', error);
       }
+      throw error;
     } finally {
       //todo: inject attribute with the spawned job id
       this.endSpan(span);
@@ -63,7 +65,7 @@ class Await extends Activity {
         pj: this.context.metadata.jid,
         pa: this.metadata.aid,
         trc: this.context.metadata.trc,
-        spn: this.context['$self'].output.metadata.l1s,
+        spn: this.context['$self'].output.metadata?.l1s,
       }
     };
     //todo: publish to stream (xadd)
@@ -103,6 +105,7 @@ class Await extends Activity {
       this.transition(isComplete);
     } catch (error) {
       this.logger.error('await-resolve-await-error', error);
+      span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
       throw error;
     } finally {
       this.endSpan(span);

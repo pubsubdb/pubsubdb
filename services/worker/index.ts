@@ -7,12 +7,9 @@ import { SubService } from "../sub";
 import { PubSubDBConfig, PubSubDBWorker } from "../../types/pubsubdb";
 import {
   QuorumMessage,
-  ReportMessage,
   SubscriptionCallback } from "../../types/quorum";
 import { RedisClient, RedisMulti } from "../../types/redis";
 import { StreamRole } from "../../types/stream";
-
-const REPORT_INTERVAL = 10000;
 
 class WorkerService {
   namespace: string;
@@ -114,39 +111,10 @@ class WorkerService {
     const self = this;
     return async (topic: string, message: QuorumMessage) => {
       self.logger.debug('worker-event-received', { topic, type: message.type });
-      if (message.type === 'rollcall') {
-        self.report();
-      } else if (message.type === 'throttle') {
+      if (message.type === 'throttle') {
         self.throttle(message.throttle);
       }
     };
-  }
-
-  async report() {
-    const message: ReportMessage = {
-      type: 'report',
-      profile: this.streamSignaler.report(),
-    };
-    await this.store.publish(KeyType.QUORUM, message, this.appId);
-    if (!this.reporting) {
-      this.reporting = true;
-      setTimeout(this.reportNow.bind(this), REPORT_INTERVAL);
-    }
-  }
-
-  async reportNow(once: boolean = false) {
-    try {
-      const message: ReportMessage = {
-        type: 'report',
-        profile: this.streamSignaler.reportNow(),
-      };
-      await this.store.publish(KeyType.QUORUM, message, this.appId);
-      if (!once) {
-        setTimeout(this.reportNow.bind(this), REPORT_INTERVAL);
-      }
-    } catch (err) {
-      this.logger.error('worker-report-now-error', err);
-    }
   }
 
   async throttle(delayInMillis: number) {

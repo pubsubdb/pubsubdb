@@ -14,7 +14,7 @@ import {
 import { JobState } from '../../types/job';
 import { RedisMulti } from '../../types/redis';
 import { StringAnyType } from '../../types/serializer';
-import { Span } from '../../types/telemetry';
+import { Span, SpanStatusCode } from '../../types/telemetry';
 
 class Trigger extends Activity {
   config: TriggerActivity;
@@ -55,6 +55,7 @@ class Trigger extends Activity {
       } else {
         this.logger.error('trigger-process-error', error);
       }
+      span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
       throw error;
     } finally {
       this.endSpan(jobSpan);
