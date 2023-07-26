@@ -70,7 +70,7 @@ class LoggerService implements ILogger {
         tags.push(`${key}:${value}`);
       });
     } catch (err) {
-      this.error('tagify-failed', err);
+      this.error('tagify-error', err);
     }
     return tags.join(' ');
   }

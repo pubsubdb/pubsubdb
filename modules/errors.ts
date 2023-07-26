@@ -21,10 +21,17 @@ class RegisterTimeoutError extends Error {
   }
 }
 
+class DuplicateJobError extends Error {
+  constructor(jobId: string) {
+    super("Duplicate job");
+    this.message = `Duplicate job: ${jobId}`;
+  }
+}
+
 class ExecActivityError extends Error {
   constructor() {
     super("Error occurred while executing activity");
   }
 }
 
-export { GetStateError, SetStateError, MapDataError, RegisterTimeoutError, ExecActivityError };
+export { DuplicateJobError, GetStateError, SetStateError, MapDataError, RegisterTimeoutError, ExecActivityError };

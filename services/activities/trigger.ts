@@ -1,26 +1,20 @@
-// import {
-//   GetStateError, 
-//   SetStateError, 
-//   MapDataError, 
-//   RegisterTimeoutError, 
-//   ExecActivityError, 
-//   DuplicateActivityError } from '../../../modules/errors';
+import { DuplicateJobError } from '../../modules/errors';
 import { formatISODate, getGuid, getTimeSeries } from '../../modules/utils';
-import { Activity } from "./activity";
+import { Activity } from './activity';
 import { CollatorService } from '../collator';
 import { EngineService } from '../engine';
-import { Pipe } from "../pipe";
+import { Pipe } from '../pipe';
 import { ReporterService } from '../reporter';
 import { MDATA_SYMBOLS } from '../serializer';
 import {
   ActivityData,
   ActivityMetadata,
   ActivityType,
-  TriggerActivity } from "../../types/activity";
+  TriggerActivity } from '../../types/activity';
 import { JobState } from '../../types/job';
 import { RedisMulti } from '../../types/redis';
 import { StringAnyType } from '../../types/serializer';
-import { Span } from "../../types/telemetry";
+import { Span } from '../../types/telemetry';
 
 class Trigger extends Activity {
   config: TriggerActivity;
@@ -41,35 +35,30 @@ class Trigger extends Activity {
     try {
       this.setDuplexLeg(2);
       await this.getState();
-      const spanName = `JOB/${this.engine.appId}/${this.config.subscribes}`;
+      const spanName = `JOB/${this.engine.appId}/${this.config.subscribes}/1`;
       jobSpan = this.startSpan(1, spanName);
       span = this.startSpan(2);
       this.mapJobData();
       await this.setStateNX();
-      /////// MULTI:START ///////
+
       const multi = this.store.getMulti();
       await this.setState(multi);
       await this.setStats(multi);
       await multi.exec();
-      /////// MULTI:END ///////
+
       const complete = CollatorService.isJobComplete(this.context.metadata.js);
       this.transition(complete);
-      this.endSpan(jobSpan);
-      this.endSpan(span);
       return this.context.metadata.jid;
     } catch (error) {
-      this.logger.error('trigger-process-failed', error);
-      jobSpan && this.endSpan(jobSpan);
-      span && this.endSpan(span);
-      // if (error instanceof DuplicateActivityError) {
-      // } else if (error instanceof GetStateError) {
-      // } else if (error instanceof SetStateError) {
-      // } else if (error instanceof MapDataError) {
-      // } else if (error instanceof RegisterTimeoutError) {
-      // } else if (error instanceof ExecActivityError) {
-      // } else {
-      // }
+      if (error instanceof DuplicateJobError) {
+        this.logger.error('duplicate-job-error', error);
+      } else {
+        this.logger.error('trigger-process-error', error);
+      }
       throw error;
+    } finally {
+      this.endSpan(jobSpan);
+      this.endSpan(span);
     }
   }
 
@@ -91,7 +80,6 @@ class Trigger extends Activity {
     const jobId = this.resolveJobId(inputContext);
     const jobKey = this.resolveJobKey(inputContext);
 
-    //create job context
     const utc = formatISODate(new Date());
     const { id, version } = await this.engine.getVID();
     const activityMetadata = { ...this.metadata, jid: jobId, key: jobKey };
@@ -143,7 +131,7 @@ class Trigger extends Activity {
   }
 
   bindActivityTelemetryToState(state: StringAnyType): void {
-    //trigger persists 2 spans when created (`l1s` is the job span, `l2s` is the trigger/activity span)
+    //triggers persist 2 spans (`l1s` is the JOB span, `l2s` is the trigger/activity span)
     state[`${this.metadata.aid}/output/metadata/l1s`] = this.context['$self'].output.metadata.l1s;
     state[`${this.metadata.aid}/output/metadata/l2s`] = this.context['$self'].output.metadata.l2s;
   }
@@ -177,7 +165,7 @@ class Trigger extends Activity {
   async setStateNX(): Promise<void> {
     const jobId = this.context.metadata.jid;
     if (!await this.store.setStateNX(jobId, this.engine.appId)) {
-      throw new Error(`Duplicate. Job ${jobId} already exists`);
+      throw new DuplicateJobError(jobId);
     }
   }
 

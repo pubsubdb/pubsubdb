@@ -70,7 +70,7 @@ class TaskService {
       }
     } catch (err) {
       //todo: retry connect to redis
-      this.logger.error('task-process-timehooks-failed', err);
+      this.logger.error('task-process-timehooks-error', err);
     }
   }
 

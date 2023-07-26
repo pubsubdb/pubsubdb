@@ -1,20 +1,16 @@
-// import {
-//   GetStateError, 
-//   SetStateError, 
-//   MapDataError, 
-//   RegisterTimeoutError, 
-//   ExecActivityError } from '../../../modules/errors';
-import { Activity } from "./activity";
-import { CollatorService } from "../collator";
-import { EngineService } from "../engine";
+import { GetStateError } from '../../modules/errors';
+import { Activity } from './activity';
+import { CollatorService } from '../collator';
+import { EngineService } from '../engine';
 import {
   ActivityData,
   ActivityMetadata,
   AwaitActivity,
-  ActivityType } from "../../types/activity";
-import { JobState } from "../../types/job";
-import { MultiResponseFlags } from "../../types/redis";
-import { StreamCode, StreamStatus } from "../../types/stream";
+  ActivityType } from '../../types/activity';
+import { JobState } from '../../types/job';
+import { MultiResponseFlags } from '../../types/redis';
+import { StreamCode, StreamStatus } from '../../types/stream';
+import { Span } from '../../types/telemetry';
 
 class Await extends Activity {
   config: AwaitActivity;
@@ -31,31 +27,31 @@ class Await extends Activity {
 
   //********  INITIAL ENTRY POINT (A)  ********//
   async process(): Promise<string> {
-    //try {
+    let span: Span;
+    try {
       this.setDuplexLeg(1);
       await this.getState();
-      const span = this.startSpan();
+      span = this.startSpan();
       this.mapInputData();
-      /////// MULTI: START ///////
+
       const multi = this.store.getMulti();
-      //todo: await this.registerTimeout();
+      //await this.registerTimeout();
       await this.setState(multi);
       await this.setStatus(1, multi);
       await multi.exec();
-      /////// MULTI: END ///////
-      await this.execActivity(); //todo: store a back-ref to the spawned jobid
-      this.endSpan(span);
+
+      await this.execActivity();
       return this.context.metadata.aid;
-    //} catch (error) {
-      //this.logger.error('await-process-failed', error);
-      // if (error instanceof GetStateError) {
-      // } else if (error instanceof SetStateError) {
-      // } else if (error instanceof MapDataError) {
-      // } else if (error instanceof RegisterTimeoutError) {
-      // } else if (error instanceof ExecActivityError) {
-      // } else {
-      // }
-    //}
+    } catch (error) {
+      if (error instanceof GetStateError) {
+        this.logger.error('await-get-state-error', error);
+      } else {
+        this.logger.error('await-process-error', error);
+      }
+    } finally {
+      //todo: inject attribute with the spawned job id
+      this.endSpan(span);
+    }
   }
 
   async execActivity(): Promise<void> {
@@ -70,6 +66,7 @@ class Await extends Activity {
         spn: this.context['$self'].output.metadata.l1s,
       }
     };
+    //todo: publish to stream (xadd)
     await this.engine.pub(
       this.config.subtype,
       this.context.data,
@@ -86,44 +83,47 @@ class Await extends Activity {
     const jid = this.context.metadata.jid;
     const aid = this.metadata.aid;
     if (!jid) {
-      throw new Error("service/activities/await:resolveAwait: missing jid in job context");
+      throw new Error('service/activities/await:resolveAwait: missing jid in job context');
     }
     this.logger.debug('await-onresponse-started', { jid, aid, status, code });
     this.status = status;
     this.code = code;
-    await this.getState();
-    const span = this.startSpan();
-    let multiResponse: MultiResponseFlags = [];
-    if (status === StreamStatus.SUCCESS) {
-      multiResponse = await this.processSuccess();
-    } else {
-      multiResponse = await this.processError();
+    let span: Span;
+    try {
+      await this.getState();
+      span = this.startSpan();
+      let multiResponse: MultiResponseFlags = [];
+      if (status === StreamStatus.SUCCESS) {
+        multiResponse = await this.processSuccess();
+      } else {
+        multiResponse = await this.processError();
+      }
+      const activityStatus = multiResponse[multiResponse.length - 1];
+      const isComplete = CollatorService.isJobComplete(activityStatus as number);
+      this.transition(isComplete);
+    } catch (error) {
+      this.logger.error('await-resolve-await-error', error);
+      throw error;
+    } finally {
+      this.endSpan(span);
     }
-    const activityStatus = multiResponse[multiResponse.length - 1];
-    const isComplete = CollatorService.isJobComplete(activityStatus as number);
-    this.transition(isComplete);
-    this.endSpan(span);
   }
 
   async processSuccess(): Promise<MultiResponseFlags> {
     this.bindActivityData('output');
     this.mapJobData();
-    //******      MULTI: START      ******//
     const multi = this.store.getMulti();
     await this.setState(multi);
     await this.setStatus(2, multi);
     return await multi.exec() as MultiResponseFlags;
-    //******       MULTI: END       ******//
   }
 
   async processError(): Promise<MultiResponseFlags> {
     this.bindActivityError(this.data);
-    //******      MULTI: START      ******//
     const multi = this.store.getMulti();
     await this.setState(multi);
     await this.setStatus(1, multi);
     return await multi.exec() as MultiResponseFlags;
-    //******       MULTI: END       ******//
   }
 }
 
