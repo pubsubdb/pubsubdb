@@ -58,7 +58,6 @@ import {
 
 //wait time to see if a job is complete
 const OTT_WAIT_TIME = 1000;
-const REPORT_INTERVAL = 10000;
 const STATUS_CODE_SUCCESS = 200;
 const STATUS_CODE_TIMEOUT = 504;
 
@@ -303,6 +302,16 @@ class EngineService {
       } else {
         await activityHandler.processWebHookEvent();
       }
+    } else if (streamData.type === StreamDataType.AWAIT) {
+      context.metadata = {
+        ...context.metadata,
+        pj: streamData.metadata.jid,
+        pa: streamData.metadata.aid,
+        trc: streamData.metadata.trc,
+        spn: streamData.metadata.spn,
+       };
+      const activityHandler = await this.initActivity(streamData.metadata.topic, streamData.data, context as JobState) as Trigger;
+      await activityHandler.process();
     } else {
       const activityHandler = await this.initActivity(`.${streamData.metadata.aid}`, context.data, context as JobState) as Worker;
       await activityHandler.processWorkerEvent(streamData.status, streamData.code);

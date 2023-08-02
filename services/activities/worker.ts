@@ -13,7 +13,7 @@ import {
   StreamCode,
   StreamData,
   StreamStatus } from '../../types/stream';
-import { Span, SpanStatusCode } from '../../types/telemetry';
+import { TelemetryService } from '../telemetry';
 
 class Worker extends Activity {
   config: WorkerActivity;
@@ -30,21 +30,27 @@ class Worker extends Activity {
 
   //********  INITIAL ENTRY POINT (A)  ********//
   async process(): Promise<string> {
-    let span: Span
+    let telemetry: TelemetryService;
     try {
-      this.setDuplexLeg(1);
+      this.setLeg(1);
       await this.getState();
-      span = this.startSpan();
+      telemetry = new TelemetryService(this.engine.appId, this.config, this.metadata, this.context);
+      telemetry.startActivitySpan(this.leg);
       this.mapInputData();
 
       const multi = this.store.getMulti();
       //await this.registerTimeout();
       await this.setState(multi);
       await this.setStatus(1, multi);
-      await multi.exec();
+      const multiResponse = await multi.exec() as MultiResponseFlags;
 
+      telemetry.mapActivityAttributes();
+      const activityStatus = multiResponse[multiResponse.length - 1];
       const messageId = await this.execActivity();
-      span.setAttribute('app.activity.mid', messageId);
+      telemetry.setActivityAttributes({
+        'app.activity.mid': messageId,
+        'app.job.jss': activityStatus
+      });
       return this.context.metadata.aid;
     } catch (error) {
       if (error instanceof GetStateError) {
@@ -52,10 +58,10 @@ class Worker extends Activity {
       } else {
         this.logger.error('worker-process-error', error);
       }
-      span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+      telemetry.setActivityError(error.message);
       throw error;
     } finally {
-      this.endSpan(span);
+      telemetry.endActivitySpan();
     }
   }
 
@@ -81,16 +87,17 @@ class Worker extends Activity {
 
   //********  RE-ENTRY POINT (DUPLEX LEG 2 of 2)  ********//
   async processWorkerEvent(status: StreamStatus = StreamStatus.SUCCESS, code: StreamCode = 200): Promise<void> {
-    this.setDuplexLeg(2);
+    this.setLeg(2);
     const jid = this.context.metadata.jid;
     const aid = this.metadata.aid;
     this.status = status;
     this.code = code;
     this.logger.debug('engine-process-worker-event', { jid, aid, topic: this.config.subtype });
-    let span: Span;
+    let telemetry: TelemetryService;
     try {
       await this.getState();
-      span = this.startSpan();
+      telemetry = new TelemetryService(this.engine.appId, this.config, this.metadata, this.context);
+      telemetry.startActivitySpan(this.leg);
       let isComplete = CollatorService.isActivityComplete(this.context.metadata.js, this.config.collationInt as number);
       if (isComplete) {
         this.logger.warn('worker-onresponse-duplicate', { jid, aid, status, code });
@@ -110,9 +117,10 @@ class Worker extends Activity {
       }
     } catch (error) {
       this.logger.error('worker-process-worker-event-error', error);
+      telemetry.setActivityError(error.message);
       throw error;
     } finally {
-      this.endSpan(span);
+      telemetry.endActivitySpan();
     }
   }
 

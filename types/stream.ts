@@ -22,6 +22,7 @@ export enum StreamStatus {
 export enum StreamDataType {
   TIMEHOOK = 'timehook',
   WEBHOOK = 'webhook',
+  AWAIT = 'await',
 }
 
 export interface StreamData {

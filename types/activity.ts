@@ -14,8 +14,9 @@ interface BaseActivity {
   settings?: Record<string, any>;
   job?: Record<string, any>;
   hook?: Record<string, any>;
+  telemetry?: Record<string, any>;
   sleep?: number;                      //@pipe /in seconds
-  expire?: number;                     //-1 forever, 15 seconds default
+  expire?: number;                     //-1 forever (15 seconds default); todo: make globally configurable
   retry?: StreamRetryPolicy
   collationInt?: number;               //compiler
   consumes?: Consumes;                 //compiler
@@ -90,10 +91,13 @@ type ActivityDataType = {
   hook?: Record<string, unknown>;
 };
 
+type ActivityLeg = 1 | 2;
+
 export {
   ActivityContext,
   ActivityData,
   ActivityDataType,
+  ActivityLeg,
   ActivityMetadata,
   ActivityType,
   Consumes,

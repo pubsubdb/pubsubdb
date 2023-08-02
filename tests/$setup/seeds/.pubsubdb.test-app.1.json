@@ -528,6 +528,20 @@
           "a3": {
             "title": "Return True",
             "type": "activity",
+            "telemetry": {
+              "approved": {
+                "@pipe": [
+                  [
+                    "{a2.output.data.approved}",
+                    "yes",
+                    "no"
+                  ],
+                  [
+                    "{@conditional.ternary}"
+                  ]
+                ]
+              }
+            },
             "job": {
               "maps": {
                 "id": "{a1.output.data.id}",
@@ -542,6 +556,20 @@
           "a4": {
             "title": "Return False",
             "type": "activity",
+            "telemetry": {
+              "approved": {
+                "@pipe": [
+                  [
+                    "{a2.output.data.approved}",
+                    "ja",
+                    "nein"
+                  ],
+                  [
+                    "{@conditional.ternary}"
+                  ]
+                ]
+              }
+            },
             "job": {
               "maps": {
                 "id": "{a1.output.data.id}",

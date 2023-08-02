@@ -30,5 +30,9 @@ export type StringAnyType = {
   [key: string]: any;
 };
 
+export type StringScalarType = {
+  [key: string]: boolean | number | string;
+};
+
 export type SymbolMap = Map<string, string>;
 export type SymbolMaps = Map<string, SymbolMap>;

@@ -102,7 +102,7 @@ The following illustrates the app version *activation* process.
 <img src="./img/lifecycle/activate_version.png" alt="App Version Activation" style="max-width:600px;width:600px;">
 
 ## Run Workflow
-Once the app is active, it's possible to send events and kick off workflows by publishing to known topics. For example, here is a fire-and-forget call to `pub`.
+Once the app is active, it's possible to send events and kick off workflows by publishing to known topics. Call `pub` to start a workflow.
 
 ```javascript
 const topic = 'discount.requested';
@@ -110,7 +110,7 @@ const payload = { id: 'ord123', price: 55.99 };
 const jobId = await pubSubDB.pub(topic, payload);
 //`jobId` will be `ord123`
 ```
-And here is a call to `pubsub` which awaits the response like a typical fetch call.
+Call `pubsub` to await the workflow response (like a typical fetch call).
 
 ```javascript
 const topic = 'discount.requested';
@@ -135,8 +135,40 @@ const context = { metadata: { trc: '123456', spn: '001' }};
 const jobId = await pubSubDB.pub(topic, payload, context);
 ```
 
-### Process Handoff Continuity
+### Downstream Continuity
 PubSubDB emits the `trace` (trc) and `span` (spn) IDs to registered worker functions. Add telemetry logging to your worker functions (perhaps it's already there) for a full, system-wide view of the running workflow as a connected graph of activities.
+
+### Custom Telemetry Logging
+Activities defined in the YAML execution models can export custom telemetry attributes. This is useful when logging specific values for which you have added alarms or conditions in the telemetry backend.
+
+Add a `telemetry` property to an activity and all subordinated properties will be emitted to the telemetry backend if they are of type `boolean`, `string`, or `number`. For example, the following YAML will emit an `approved` property to the telemetry backend that is always `true` when activity `a3` is run.
+
+```yaml
+activities:
+  ...
+
+  a3:
+    title: Return Approved
+    type: activity
+    telemetry:
+      approved: true
+```
+
+Use a [`@pipe`](./data_mapping.md) to customize telemetry data output.
+
+```yaml
+activities:
+  ...
+
+  a3:
+    title: Return Approved
+    type: activity
+    telemetry:
+      approved:
+        "@pipe":
+          - ['{a2.output.data.approved}', 'yes', 'no']
+          - ['{@conditional.ternary}']
+```
 
 ### Dashboards and Alerts
 PubSubDB tracks telemetry *spans* and *traces*, emitting them to the telemetry backend as a set of nested activities that naturally reform into the original workflow graph. Meter critical activities with alarms and alerts; use the telemetry data to drive your own custom dashboards.

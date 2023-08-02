@@ -6,6 +6,7 @@ import { EngineService } from '../engine';
 import { Pipe } from '../pipe';
 import { ReporterService } from '../reporter';
 import { MDATA_SYMBOLS } from '../serializer';
+import { TelemetryService } from '../telemetry';
 import {
   ActivityData,
   ActivityMetadata,
@@ -14,7 +15,6 @@ import {
 import { JobState } from '../../types/job';
 import { RedisMulti } from '../../types/redis';
 import { StringAnyType } from '../../types/serializer';
-import { Span, SpanStatusCode } from '../../types/telemetry';
 
 class Trigger extends Activity {
   config: TriggerActivity;
@@ -30,14 +30,13 @@ class Trigger extends Activity {
   }
 
   async process(): Promise<string> {
-    let jobSpan: Span;
-    let span: Span;
+    let telemetry: TelemetryService;
     try {
-      this.setDuplexLeg(2);
+      this.setLeg(2);
       await this.getState();
-      const spanName = `JOB/${this.engine.appId}/${this.config.subscribes}/1`;
-      jobSpan = this.startSpan(1, spanName);
-      span = this.startSpan(2);
+      telemetry = new TelemetryService(this.engine.appId, this.config, this.metadata, this.context);
+      telemetry.startJobSpan();
+      telemetry.startActivitySpan(this.leg); 
       this.mapJobData();
       await this.setStateNX();
 
@@ -45,6 +44,9 @@ class Trigger extends Activity {
       await this.setState(multi);
       await this.setStats(multi);
       await multi.exec();
+      telemetry.mapActivityAttributes();
+      telemetry.setJobAttributes({ 'app.job.jss': this.context.metadata.js });
+      telemetry.setActivityAttributes({ 'app.job.jss': this.context.metadata.js });
 
       const complete = CollatorService.isJobComplete(this.context.metadata.js);
       this.transition(complete);
@@ -55,11 +57,11 @@ class Trigger extends Activity {
       } else {
         this.logger.error('trigger-process-error', error);
       }
-      span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+      telemetry.setActivityError(error.message);
       throw error;
     } finally {
-      this.endSpan(jobSpan);
-      this.endSpan(span);
+      telemetry.endJobSpan();
+      telemetry.endActivitySpan();
     }
   }
 
@@ -125,16 +127,6 @@ class Trigger extends Activity {
     } else {
       return this.context['$self'].output.metadata.l1s;
     }
-  }
-
-  bindJobTelemetryToState(state: StringAnyType): void {
-    state['metadata/trc'] = this.context.metadata.trc;
-  }
-
-  bindActivityTelemetryToState(state: StringAnyType): void {
-    //triggers persist 2 spans (`l1s` is the JOB span, `l2s` is the trigger/activity span)
-    state[`${this.metadata.aid}/output/metadata/l1s`] = this.context['$self'].output.metadata.l1s;
-    state[`${this.metadata.aid}/output/metadata/l2s`] = this.context['$self'].output.metadata.l2s;
   }
 
   bindJobMetadataPaths(): string[] {

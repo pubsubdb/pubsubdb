@@ -9,8 +9,8 @@ import {
   ActivityType } from '../../types/activity';
 import { JobState } from '../../types/job';
 import { MultiResponseFlags } from '../../types/redis';
-import { StreamCode, StreamStatus } from '../../types/stream';
-import { Span, SpanStatusCode } from '../../types/telemetry';
+import { StreamCode, StreamData, StreamDataType, StreamStatus } from '../../types/stream';
+import { TelemetryService } from '../telemetry';
 
 class Await extends Activity {
   config: AwaitActivity;
@@ -27,23 +27,30 @@ class Await extends Activity {
 
   //********  INITIAL ENTRY POINT (A)  ********//
   async process(): Promise<string> {
-    let span: Span;
+    let telemetry: TelemetryService;
     try {
-      this.setDuplexLeg(1);
+      this.setLeg(1);
       await this.getState();
-      span = this.startSpan();
+      telemetry = new TelemetryService(this.engine.appId, this.config, this.metadata, this.context);
+      telemetry.startActivitySpan(this.leg);
       this.mapInputData();
 
       const multi = this.store.getMulti();
       //await this.registerTimeout();
       await this.setState(multi);
       await this.setStatus(1, multi);
-      await multi.exec();
+      const multiResponse = await multi.exec() as MultiResponseFlags;
 
-      await this.execActivity();
+      telemetry.mapActivityAttributes();
+      const activityStatus = multiResponse[multiResponse.length - 1];
+      const messageId = await this.execActivity();
+      telemetry.setActivityAttributes({
+        'app.activity.mid': messageId,
+        'app.job.jss': activityStatus
+      });
       return this.context.metadata.aid;
     } catch (error) {
-      span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+      telemetry.setActivityError(error.message);
       if (error instanceof GetStateError) {
         this.logger.error('await-get-state-error', error);
       } else {
@@ -52,28 +59,28 @@ class Await extends Activity {
       throw error;
     } finally {
       //todo: inject attribute with the spawned job id
-      this.endSpan(span);
+      telemetry.endActivitySpan();
     }
   }
 
-  async execActivity(): Promise<void> {
-    const context: JobState = { 
-      data: this.context.data,
-      metadata: { 
-        ...this.context.metadata,
-        ngn: undefined,
-        pj: this.context.metadata.jid,
-        pa: this.metadata.aid,
-        trc: this.context.metadata.trc,
+  async execActivity(): Promise<string> {
+    const streamData: StreamData = {
+      metadata: {
+        jid: this.context.metadata.jid,
+        aid: this.metadata.aid,
+        topic: this.config.subtype,
         spn: this.context['$self'].output.metadata?.l1s,
-      }
+        trc: this.context.metadata.trc,
+      },
+      type: StreamDataType.AWAIT,
+      data: this.context.data
     };
-    //todo: publish to stream (xadd)
-    await this.engine.pub(
-      this.config.subtype,
-      this.context.data,
-      context
-    );
+    if (this.config.retry) {
+      streamData.policies = {
+        retry: this.config.retry
+      };
+    }
+    return await this.engine.streamSignaler?.publishMessage(null, streamData);
   }
 
 
@@ -81,7 +88,7 @@ class Await extends Activity {
   //this method is invoked when the job spawned by this job ends;
   //`this.data` is the job data produced by the spawned job
   async resolveAwait(status: StreamStatus = StreamStatus.SUCCESS, code: StreamCode = 200): Promise<void> {
-    this.setDuplexLeg(2);
+    this.setLeg(2);
     const jid = this.context.metadata.jid;
     const aid = this.metadata.aid;
     if (!jid) {
@@ -90,25 +97,29 @@ class Await extends Activity {
     this.logger.debug('await-onresponse-started', { jid, aid, status, code });
     this.status = status;
     this.code = code;
-    let span: Span;
+    let telemetry: TelemetryService;
     try {
       await this.getState();
-      span = this.startSpan();
+      telemetry = new TelemetryService(this.engine.appId, this.config, this.metadata, this.context);
+      telemetry.startActivitySpan(this.leg);
       let multiResponse: MultiResponseFlags = [];
       if (status === StreamStatus.SUCCESS) {
         multiResponse = await this.processSuccess();
       } else {
         multiResponse = await this.processError();
       }
+
+      telemetry.mapActivityAttributes();
       const activityStatus = multiResponse[multiResponse.length - 1];
+      telemetry.setActivityAttributes({ 'app.job.jss': activityStatus });
       const isComplete = CollatorService.isJobComplete(activityStatus as number);
       this.transition(isComplete);
     } catch (error) {
       this.logger.error('await-resolve-await-error', error);
-      span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+      telemetry.setActivityError(error.message);
       throw error;
     } finally {
-      this.endSpan(span);
+      telemetry.endActivitySpan();
     }
   }
 
