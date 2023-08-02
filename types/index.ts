@@ -3,6 +3,7 @@ export {
   ActivityDataType,
   ActivityContext,
   ActivityData,
+  ActivityLeg,
   ActivityMetadata,
   Consumes,
   AwaitActivity,
@@ -78,13 +79,14 @@ export {
   RedisMultiType } from './redisclient';
 export {
   JSONSchema,
-  StringStringType,
   StringAnyType,
+  StringScalarType,
+  StringStringType,
   SymbolMap,
   SymbolMaps,
-  SymbolSets,
   SymbolRanges,
-  Symbols } from './serializer';
+  Symbols,
+  SymbolSets } from './serializer';
 export {
   AggregatedData,
   CountByFacet,

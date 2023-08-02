@@ -34,6 +34,11 @@ activities:
   a3:
     title: Return True
     type: activity
+    telemetry:
+      approved:
+        "@pipe":
+          - ['{a2.output.data.approved}', 'yes', 'no']
+          - ['{@conditional.ternary}']
     job:
       maps:
         $ref: '../maps/order.approval.requested.yaml#/a3/job'
@@ -41,6 +46,11 @@ activities:
   a4:
     title: Return False
     type: activity
+    telemetry:
+      approved:
+        "@pipe":
+          - ['{a2.output.data.approved}', 'ja', 'nein']
+          - ['{@conditional.ternary}']
     job:
       maps:
         $ref: '../maps/order.approval.requested.yaml#/a4/job'

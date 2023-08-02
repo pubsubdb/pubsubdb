@@ -1,5 +1,4 @@
 import { GetStateError } from '../../modules/errors';
-import packageJson from '../../package.json';
 import {
   formatISODate,
   getValueByPath,
@@ -12,9 +11,11 @@ import { Pipe } from '../pipe';
 import { MDATA_SYMBOLS } from '../serializer';
 import { StoreSignaler } from '../signaler/store';
 import { StoreService } from '../store';
+import { TelemetryService } from '../telemetry';
 import { 
   ActivityType,
   ActivityData,
+  ActivityLeg,
   ActivityMetadata,
   Consumes } from '../../types/activity';
 import { JobState, JobStatus } from '../../types/job';
@@ -24,14 +25,6 @@ import {
   RedisMulti } from '../../types/redis';
 import { StringAnyType } from '../../types/serializer';
 import { StreamCode, StreamStatus } from '../../types/stream';
-import {
-  Span,
-  SpanContext,
-  SpanKind,
-  trace,
-  Context,
-  context, 
-  SpanStatusCode} from '../../types/telemetry';
 import { TransitionRule, Transitions } from '../../types/transition';
 
 /**
@@ -48,7 +41,7 @@ class Activity {
   logger: ILogger;
   status: StreamStatus = StreamStatus.SUCCESS;
   code: StreamCode = 200;
-  leg: number = 0;
+  leg: ActivityLeg;
 
   constructor(
     config: ActivityType,
@@ -69,11 +62,12 @@ class Activity {
 
   //********  INITIAL ENTRY POINT (A)  ********//
   async process(): Promise<string> {
-    let span: Span;
+    let telemetry: TelemetryService;
     try {
-      this.setDuplexLeg(1);
+      this.setLeg(1);
       await this.getState();
-      span = this.startSpan();
+      telemetry = new TelemetryService(this.engine.appId, this.config, this.metadata, this.context);
+      telemetry.startActivitySpan(this.leg);
 
       const multi = this.store.getMulti();
       //await this.registerTimeout();
@@ -84,7 +78,9 @@ class Activity {
       await this.setStatus(decrementBy, multi);
       const multiResponse = await multi.exec() as MultiResponseFlags;
 
+      telemetry.mapActivityAttributes();
       const activityStatus = multiResponse[multiResponse.length - 1];
+      telemetry.setActivityAttributes({ 'app.job.jss': activityStatus });
       const isComplete = CollatorService.isJobComplete(activityStatus as number);
       !shouldSleep && this.transition(isComplete);
       return this.context.metadata.aid;
@@ -94,90 +90,15 @@ class Activity {
       } else {
         this.logger.error('activity-process-error', error);
       }
-      span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+      telemetry.setActivityError(error.message);
       throw error;
     } finally {
-      this.endSpan(span);
+      telemetry.endActivitySpan();
     }
   }
 
-  setDuplexLeg(leg: number): void {
+  setLeg(leg: ActivityLeg): void {
     this.leg = leg;
-  }
-
-  startSpan(leg = this.leg, spanName?: string): Span {
-    const tracer = trace.getTracer(packageJson.name, packageJson.version);
-    let parentContext = this.getParentSpanContext(leg);
-    spanName = spanName || `${this.config.type.toUpperCase()}/${this.engine.appId}/${this.metadata.aid}/${leg}`;
-    const span = tracer.startSpan(
-      spanName,
-      { kind: SpanKind.CLIENT, attributes: this.getSpanAttrs(leg), root: !parentContext },
-      parentContext
-    );
-    this.setTelemetryContext(span, leg);
-    return span;
-  }
-
-  endSpan(span?: Span): void {
-    span && span.end();
-  }
-
-  getParentSpanContext(leg: number): undefined | Context {
-    const traceId = this.getTraceId();
-    const spanId = this.getParentSpanId(leg);
-    if (traceId && spanId) {
-      const restoredSpanContext: SpanContext = {
-        traceId,
-        spanId,
-        isRemote: true,
-        traceFlags: 1, // (todo: revisit sampling strategy/config)
-      };
-      const parentContext = trace.setSpanContext(context.active(), restoredSpanContext);
-      return parentContext;
-    }
-  }
-
-  getParentSpanId(leg: number): string | undefined {
-    if (leg === 1) {
-      return this.context[this.config.parent].output?.metadata?.l2s;
-    } else {
-      return this.context['$self'].output?.metadata?.l1s;
-    }
-  }
-
-  getTraceId(): string | undefined {
-    return this.context.metadata.trc;
-  }
-
-  getSpanAttrs(leg: number): StringAnyType {
-    return {
-      ...Object.keys(this.context.metadata).reduce((result, key) => {
-        result[`app.job.${key}`] = this.context.metadata[key];
-        return result;
-      }, {}),
-      ...Object.keys(this.metadata).reduce((result, key) => {
-        result[`app.activity.${key}`] = this.metadata[key];
-        return result;
-      }, {}),
-      'app.activity.leg': leg,
-    };
-  };
-
-  setTelemetryContext(span: Span, leg: number) {
-    if (!this.context.metadata.trc) {
-      this.context.metadata.trc = span.spanContext().traceId;
-    }
-    if (leg === 1) {
-      if (!this.context['$self'].output.metadata) {
-        this.context['$self'].output.metadata = {};
-      }
-      this.context['$self'].output.metadata.l1s = span.spanContext().spanId;
-    } else {
-      if (!this.context['$self'].output.metadata) {
-        this.context['$self'].output.metadata = {};
-      }
-      this.context['$self'].output.metadata.l2s = span.spanContext().spanId;
-    }
   }
 
   //********  SIGNALER RE-ENTRY POINT (B)  ********//
@@ -215,27 +136,32 @@ class Activity {
   }
   async processHookEvent(jobId: string): Promise<JobStatus | void> {
     this.logger.debug('activity-process-hook-event', { jobId });
-    let span: Span;
+    let telemetry: TelemetryService;
     try {
-      this.setDuplexLeg(2);
+      this.setLeg(2);
       await this.getState(jobId);
-      span = this.startSpan();
+      telemetry = new TelemetryService(this.engine.appId, this.config, this.metadata, this.context);
+      telemetry.startActivitySpan(this.leg);
       this.bindActivityData('hook');
       this.mapJobData();
+
       const multi = this.engine.store.getMulti();
       await this.setState(multi);
       await this.setStatus(1, multi);
       const multiResponse = await multi.exec() as MultiResponseFlags;
+      telemetry.mapActivityAttributes();
+
       const activityStatus = multiResponse[multiResponse.length - 1];
+      telemetry.setActivityAttributes({ 'app.job.jss': activityStatus });
       const isComplete = CollatorService.isJobComplete(activityStatus as number);
       await this.transition(isComplete);
       return Number(activityStatus);
     } catch (error) {
       this.logger.error('engine-process-hook-event-error', error);
-      span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+      telemetry.setActivityError(error.message);
       throw error;
     } finally {
-      this.endSpan(span);
+      telemetry.endActivitySpan();
     }
   }
 
@@ -330,11 +256,7 @@ class Activity {
         state[path] = value;
       }
     }
-    this.bindJobTelemetryToState(state);
-  }
-
-  bindJobTelemetryToState(state: StringAnyType): void {
-    //no-op
+    TelemetryService.bindJobTelemetryToState(state, this.config, this.context);
   }
 
   bindActivityState(state: StringAnyType,): void {
@@ -349,12 +271,7 @@ class Activity {
         state[prefixedPath] = value;
       } 
     }
-    this.bindActivityTelemetryToState(state);
-  }
-
-  bindActivityTelemetryToState(state: StringAnyType): void {
-    const target = `l${this.leg}s`;
-    state[`${this.metadata.aid}/output/metadata/${target}`] = this.context['$self'].output.metadata[target];
+    TelemetryService.bindActivityTelemetryToState(state, this.config, this.metadata, this.context, this.leg);
   }
 
   bindJobMetadataPaths(): string[] {
@@ -389,7 +306,7 @@ class Activity {
         }
       }
     }
-    this.addTargetTelemetryPaths(consumes);
+    TelemetryService.addTargetTelemetryPaths(consumes, this.config, this.metadata, this.leg);
     jobId = jobId || this.context.metadata.jid;
     const { id: appId } = await this.engine.getVID();
     //`state` is a flat hash
@@ -398,21 +315,6 @@ class Activity {
     this.context = restoreHierarchy(state) as JobState;
     this.initSelf(this.context);
     this.initPolicies(this.context);
-  }
-
-  addTargetTelemetryPaths(consumes: Consumes): void {
-    //restore the telemetry parent span context (query for the parent span id)
-    if (this.leg === 1) {
-      if (!(this.config.parent in consumes)) {
-        consumes[this.config.parent] = [];
-      }
-      consumes[this.config.parent].push(`${this.config.parent}/output/metadata/l2s`);
-    } else {
-      if (!(this.metadata.aid in consumes)) {
-        consumes[this.metadata.aid] = [];
-      }
-      consumes[this.metadata.aid].push(`${this.metadata.aid}/output/metadata/l1s`);
-    }
   }
 
   initSelf(context: StringAnyType): JobState {
