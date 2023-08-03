@@ -398,7 +398,7 @@ class Activity {
       metadata: {
         jid: this.context.metadata.jid,
         aid,
-        spn: this.context['$self'].output.metadata?.l1s,
+        spn: this.context['$self'].output.metadata?.l2s,
         trc: this.context.metadata.trc,
       },
       type: StreamDataType.TRANSITION,

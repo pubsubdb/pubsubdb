@@ -9,6 +9,7 @@ import {
   StreamConfig,
   StreamData,
   StreamDataResponse,
+  StreamDataType,
   StreamError,
   StreamRole,
   StreamStatus
@@ -171,6 +172,7 @@ class StreamSignaler {
           output = this.structureError(input, output);
         }
       }
+      output.type = StreamDataType.RESPONSE;
       return await this.publishMessage(null, output as StreamDataResponse);
     }
   }

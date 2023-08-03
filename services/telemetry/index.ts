@@ -9,7 +9,7 @@ import {
   StringAnyType,
   StringScalarType,
   StringStringType } from '../../types/serializer';
-import { StreamData, StreamRole } from '../../types/stream';
+import { StreamData, StreamDataType, StreamRole } from '../../types/stream';
 import {
   Span,
   SpanContext,
@@ -37,7 +37,7 @@ class TelemetryService {
     context?: JobState,
   ) {
     this.appId = appId;
-    //following are REQUIRED for job and activity spans
+    //these are REQUIRED for job and activity spans
     this.config = config;
     this.metadata = metadata;
     this.context = context;
@@ -82,8 +82,16 @@ class TelemetryService {
   }
 
   startStreamSpan(data: StreamData, role: StreamRole): TelemetryService {
-    const TYPE = role === StreamRole.WORKER ? 'EXECUTE' : 'PROCESS';
-    const spanName = `${TYPE}/${this.appId}/${data.metadata.aid}/${data.metadata.topic}`;
+    let TYPE: string;
+    if (role === StreamRole.WORKER) {
+      TYPE = 'EXECUTE';
+    } else if (data.type === StreamDataType.TRANSITION) {
+      TYPE = 'TRANSITION';
+    } else {
+      TYPE = 'PROCESS';
+    }
+    const topic = data.metadata.topic ? `/${data.metadata.topic}` : '';
+    const spanName = `${TYPE}/${this.appId}/${data.metadata.aid}${topic}`;
     const attributes = this.getStreamSpanAttrs(data);
     const span: Span = this.startSpan(data.metadata.trc, data.metadata.spn, spanName, attributes);
     this.span = span;
