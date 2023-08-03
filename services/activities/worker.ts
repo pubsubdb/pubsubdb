@@ -7,7 +7,7 @@ import {
   ActivityMetadata,
   WorkerActivity,
   ActivityType } from '../../types/activity';
-import { JobState } from '../../types/job';
+import { JobData, JobState } from '../../types/job';
 import { MultiResponseFlags } from '../../types/redis';
 import {
   StreamCode,

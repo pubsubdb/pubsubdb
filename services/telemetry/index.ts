@@ -1,6 +1,15 @@
 import packageJson from '../../package.json';
-import { ActivityType } from '../activities/activity';
-import { Consumes } from '../../types/activity';
+import { MapperService } from '../mapper';
+import {
+  ActivityMetadata,
+  ActivityType,
+  Consumes } from '../../types/activity';
+import { JobState } from '../../types/job';
+import {
+  StringAnyType,
+  StringScalarType,
+  StringStringType } from '../../types/serializer';
+import { StreamData, StreamRole } from '../../types/stream';
 import {
   Span,
   SpanContext,
@@ -9,10 +18,6 @@ import {
   Context,
   context, 
   SpanStatusCode } from '../../types/telemetry';
-import { StringAnyType, StringScalarType, StringStringType } from '../../types/serializer';
-import { ActivityMetadata } from '../../types/activity';
-import { JobState } from '../../types/job';
-import { MapperService } from '../mapper';
 
 class TelemetryService {
   span: Span;
@@ -27,11 +32,12 @@ class TelemetryService {
 
   constructor(
     appId: string,
-    config: ActivityType,
-    metadata: ActivityMetadata,
-    context: JobState,
+    config?: ActivityType,
+    metadata?: ActivityMetadata,
+    context?: JobState,
   ) {
     this.appId = appId;
+    //following are REQUIRED for job and activity spans
     this.config = config;
     this.metadata = metadata;
     this.context = context;
@@ -57,8 +63,10 @@ class TelemetryService {
     const spanName = `JOB/${this.appId}/${this.config.subscribes}/1`;
     const traceId = this.getTraceId();
     const spanId = this.getJobParentSpanId();
-    const span: Span = this.startSpan(1, traceId, spanId, spanName);
+    const attributes = this.getSpanAttrs(1);
+    const span: Span = this.startSpan(traceId, spanId, spanName, attributes);
     this.jobSpan = span;
+    this.setTelemetryContext(span, 1);
     return this;
   }
 
@@ -66,22 +74,32 @@ class TelemetryService {
     const spanName = `${this.config.type.toUpperCase()}/${this.appId}/${this.metadata.aid}/${leg}`;
     const traceId = this.getTraceId();
     const spanId = this.getActivityParentSpanId(leg);
-    const span: Span = this.startSpan(leg, traceId, spanId, spanName);
+    const attributes = this.getSpanAttrs(leg);
+    const span: Span = this.startSpan(traceId, spanId, spanName, attributes);
+    this.setTelemetryContext(span, leg);
     this.span = span;
     return this;
   }
 
-  startSpan(leg = this.leg, traceId: string, spanId: string, spanName: string): Span {
+  startStreamSpan(data: StreamData, role: StreamRole): TelemetryService {
+    const TYPE = role === StreamRole.WORKER ? 'EXECUTE' : 'PROCESS';
+    const spanName = `${TYPE}/${this.appId}/${data.metadata.aid}/${data.metadata.topic}`;
+    const attributes = this.getStreamSpanAttrs(data);
+    const span: Span = this.startSpan(data.metadata.trc, data.metadata.spn, spanName, attributes);
+    this.span = span;
+    return this;
+  }
+
+  startSpan(traceId: string, spanId: string, spanName: string, attributes: StringScalarType): Span {
     this.traceId = traceId;
     this.spanId = spanId;
     const tracer = trace.getTracer(packageJson.name, packageJson.version);
     let parentContext = this.getParentSpanContext();
     const span = tracer.startSpan(
       spanName,
-      { kind: SpanKind.CLIENT, attributes: this.getSpanAttrs(leg), root: !parentContext },
+      { kind: SpanKind.CLIENT, attributes, root: !parentContext },
       parentContext
     );
-    this.setTelemetryContext(span, leg);
     return span;
   }
 
@@ -105,6 +123,10 @@ class TelemetryService {
     this.span.setAttributes(attributes);
   }
 
+  setStreamAttributes(attributes: StringScalarType): void {
+    this.span.setAttributes(attributes);
+  }
+
   setJobAttributes(attributes: StringScalarType): void {
     this.jobSpan.setAttributes(attributes);
   }
@@ -114,6 +136,10 @@ class TelemetryService {
   }
 
   endActivitySpan(): void {
+    this.endSpan(this.span);
+  }
+
+  endStreamSpan(): void {
     this.endSpan(this.span);
   }
 
@@ -137,7 +163,9 @@ class TelemetryService {
   getSpanAttrs(leg: number): StringAnyType {
     return {
       ...Object.keys(this.context.metadata).reduce((result, key) => {
-        result[`app.job.${key}`] = this.context.metadata[key];
+        if (key !== 'trc') {
+          result[`app.job.${key}`] = this.context.metadata[key];
+        }
         return result;
       }, {}),
       ...Object.keys(this.metadata).reduce((result, key) => {
@@ -145,6 +173,17 @@ class TelemetryService {
         return result;
       }, {}),
       'app.activity.leg': leg,
+    };
+  };
+
+  getStreamSpanAttrs(input: StreamData): StringAnyType {
+    return {
+      ...Object.keys(input.metadata).reduce((result, key) => {
+        if (key !== 'trc' && key !== 'spn') {
+          result[`app.stream.${key}`] = input.metadata[key];
+        }
+        return result;
+      }, {})
     };
   };
 
@@ -166,6 +205,10 @@ class TelemetryService {
   }
 
   setActivityError(message: string) {
+    this.span.setStatus({ code: SpanStatusCode.ERROR, message });
+  }
+
+  setStreamError(message: string) {
     this.span.setStatus({ code: SpanStatusCode.ERROR, message });
   }
 

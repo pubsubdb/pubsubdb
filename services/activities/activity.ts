@@ -13,10 +13,10 @@ import { StoreSignaler } from '../signaler/store';
 import { StoreService } from '../store';
 import { TelemetryService } from '../telemetry';
 import { 
-  ActivityType,
   ActivityData,
   ActivityLeg,
   ActivityMetadata,
+  ActivityType,
   Consumes } from '../../types/activity';
 import { JobState, JobStatus } from '../../types/job';
 import {
@@ -24,7 +24,11 @@ import {
   RedisClient,
   RedisMulti } from '../../types/redis';
 import { StringAnyType } from '../../types/serializer';
-import { StreamCode, StreamStatus } from '../../types/stream';
+import {
+  StreamCode,
+  StreamData,
+  StreamDataType,
+  StreamStatus } from '../../types/stream';
 import { TransitionRule, Transitions } from '../../types/transition';
 
 /**
@@ -371,7 +375,6 @@ class Activity {
       this.engine.runJobCompletionTasks(this.context);
       return 0;
     } else {
-      //transitions can cascade through the descendant activities
       let toDecrement = 0;
       const transitions = await this.store.getTransitions(await this.engine.getVID());
       const transition = transitions[`.${this.metadata.aid}`];
@@ -379,18 +382,34 @@ class Activity {
         for (const toActivityId in transition) {
           const transitionRule: boolean|TransitionRule = transition[toActivityId];
           if (MapperService.evaluate(transitionRule, this.context)) {
-            await this.engine.pub(
-              `.${toActivityId}`,
-              {},
-              this.context
-            );
+            await this.execAdjacent(toActivityId);
           } else {
+            //cancelled transitions cascade
             toDecrement = await this.skipDescendants(toActivityId, transitions, toDecrement);
           }
         }
       }
       return toDecrement;
     }
+  }
+
+  async execAdjacent(aid: string): Promise<string> {
+    const streamData: StreamData = {
+      metadata: {
+        jid: this.context.metadata.jid,
+        aid,
+        spn: this.context['$self'].output.metadata?.l1s,
+        trc: this.context.metadata.trc,
+      },
+      type: StreamDataType.TRANSITION,
+      data: {}
+    };
+    if (this.config.retry) {
+      streamData.policies = {
+        retry: this.config.retry
+      };
+    }
+    return await this.engine.streamSignaler?.publishMessage(null, streamData);
   }
 }
 

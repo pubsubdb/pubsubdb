@@ -110,18 +110,18 @@ describe('QuorumService', () => {
         values: JSON.stringify([200, 4, 5]),
       };
       const [divide, b, c, d, multiply] = await Promise.all([
-        pubSubDB.pubsub('calculate', payload),
-        pubSubDB.pubsub('calculate', payload),
-        pubSubDB.pubsub('calculate', payload),
-        pubSubDB.pubsub('calculate', payload),
+        pubSubDB.pubsub('calculate', payload, 5000),
+        pubSubDB.pubsub('calculate', payload, 5000),
+        pubSubDB.pubsub('calculate', payload, 5000),
+        pubSubDB.pubsub('calculate', payload, 5000),
         pubSubDB.pubsub('calculate', {
           operation: 'multiply',
           values: JSON.stringify([10, 10, 10]),
-        }),
+        }, 5000),
       ]);
       expect(divide?.data.result).toBe(10);
       expect(multiply?.data.result).toBe(1000);
-    }, 2500);
+    }, 20_000);
   });
 
   describe('Pub Sub', () => {

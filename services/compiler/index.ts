@@ -37,7 +37,7 @@ class CompilerService {
 
       return schema as PubSubDBManifest
     } catch(err) {
-      console.error(err);
+      this.logger.error('compiler-plan-error', err);
     }
   }
 
@@ -70,7 +70,7 @@ class CompilerService {
       }
       return schema;
     } catch(err) {
-      console.error(err);
+      this.logger.error('compiler-deploy-error', err);
     }
   }
 

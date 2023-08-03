@@ -1,11 +1,10 @@
-import packageJson from '../../package.json';
 import { KeyType } from '../../modules/key';
 import { XSleepFor, sleepFor } from '../../modules/utils';
 import { ILogger } from '../logger';
 import { StoreService } from '../store';
 import { StreamService } from '../stream';
+import { TelemetryService } from '../telemetry';
 import { RedisClient, RedisMulti } from '../../types/redis';
-import { StringAnyType } from '../../types/serializer';
 import {
   StreamConfig,
   StreamData,
@@ -14,14 +13,6 @@ import {
   StreamRole,
   StreamStatus
 } from '../../types/stream';
-import {
-  context,
-  Context,
-  Span,
-  SpanContext,
-  SpanKind,
-  SpanStatusCode,
-  trace } from '../../types/telemetry';
 
 const MAX_RETRIES = 4; //max delay (10s using exponential backoff);
 const MAX_TIMEOUT_MS = 60000;
@@ -29,7 +20,6 @@ const GRADUATED_INTERVAL_MS = 5000;
 const BLOCK_DURATION = 15000; //Set to `15` so SIGINT/SIGTERM can interrupt; set to `0` to BLOCK indefinitely
 const TEST_BLOCK_DURATION = 1000; //Set to `1000` so tests can interrupt quickly
 const BLOCK_TIME_MS = process.env.NODE_ENV === 'test' ? TEST_BLOCK_DURATION : BLOCK_DURATION;
-const REPORT_INTERVAL = 10000;
 const UNKNOWN_STATUS_CODE = 500;
 const UNKNOWN_STATUS_MESSAGE = 'unknown';
 const XCLAIM_MS = 1000 * 60; //max time a message can be unacked before it is claimed by another
@@ -37,7 +27,6 @@ const XPENDING_COUNT = 10;
 
 class StreamSignaler {
   static signalers: Set<StreamSignaler> = new Set();
-  namespace: string;
   appId: string;
   guid: string;
   role: StreamRole;
@@ -52,7 +41,6 @@ class StreamSignaler {
   shouldConsume: boolean;
 
   constructor(config: StreamConfig, stream: StreamService<RedisClient, RedisMulti>, store: StoreService<RedisClient, RedisMulti>, logger: ILogger) {
-    this.namespace = config.namespace;
     this.appId = config.appId;
     this.guid = config.guid;
     this.role = config.role;
@@ -130,23 +118,24 @@ class StreamSignaler {
   async consumeOne(stream: string, group: string, id: string, message: string[], callback: (streamData: StreamData) => Promise<StreamDataResponse|void>) {
     this.logger.debug(`stream-consume-one-message-starting`, { id, stream, group });
     const input: StreamData = JSON.parse(message[1]);
-    const leg = group === 'WORKER' ? 1 : 2;
-    const span = this.startSpan(leg, input);
     let output: StreamDataResponse | void;
+    let telemetry: TelemetryService;
     try {
+      telemetry = new TelemetryService(this.appId);
+      telemetry.startStreamSpan(input, this.role);  
       output = await this.execStreamLeg(input, stream, id, callback.bind(this));
       if (output?.status === StreamStatus.ERROR) {
-        span.setStatus({ code: SpanStatusCode.ERROR, message: `Function Status Code ${ output.code || UNKNOWN_STATUS_CODE }` });
+        telemetry.setStreamError(`Function Status Code ${ output.code || UNKNOWN_STATUS_CODE }`);
       }
       this.errorCount = 0;
     } catch (err) {
       this.logger.error(`stream-consume-one-message-error`, { err, id, stream, group });
-      span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
+      telemetry.setStreamError(err.message);
     }
     const messageId = await this.publishResponse(input, output);
-    span.setAttribute('app.worker.mid', messageId);
+    telemetry.setStreamAttributes({ 'app.worker.mid': messageId });
     await this.ackAndDelete(stream, group, id);
-    this.endSpan(span);
+    telemetry.endStreamSpan();
   }
 
   async execStreamLeg(input: StreamData, stream: string, id: string, callback: (streamData: StreamData) => Promise<StreamDataResponse|void>) {
@@ -278,44 +267,6 @@ class StreamSignaler {
     }
     return pendingMessages;
   }
-
-  startSpan(leg: number, input: StreamData): Span {
-    const tracer = trace.getTracer(packageJson.name, packageJson.version);
-    let parentContext = this.getParentSpanContext(input);
-    const spanName = `FUNCTION/${this.appId}/${input.metadata.aid}/${input.metadata.topic}/${leg}`;
-    const span = tracer.startSpan(
-      spanName,
-      { kind: SpanKind.CLIENT, attributes: this.getSpanAttrs(input), root: !parentContext },
-      parentContext
-    );
-    return span;
-  }
-
-  endSpan(span?: Span): void {
-    span && span.end();
-  }
-
-  getParentSpanContext(input: StreamData): undefined | Context {
-    const restoredSpanContext: SpanContext = {
-      traceId: input.metadata.trc,
-      spanId: input.metadata.spn,
-      isRemote: true,
-      traceFlags: 1, // (todo: revisit sampling strategy/config)
-    };
-    const parentContext = trace.setSpanContext(context.active(), restoredSpanContext);
-    return parentContext;
-  }
-
-  getSpanAttrs(input: StreamData): StringAnyType {
-    return {
-      ...Object.keys(input.metadata).reduce((result, key) => {
-        if (key !== 'trc' && key !== 'spn') {
-          result[`app.worker.${key}`] = input.metadata[key];
-        }
-        return result;
-      }, {})
-    };
-  };
 }
 
 export { StreamSignaler };
