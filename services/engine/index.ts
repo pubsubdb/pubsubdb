@@ -295,14 +295,17 @@ class EngineService {
       },
       data: streamData.data,
     };
-    if (streamData.type === StreamDataType.TIMEHOOK || streamData.type === StreamDataType.WEBHOOK) {
+    if (streamData.type === StreamDataType.TIMEHOOK || streamData.type === StreamDataType.WEBHOOK || streamData.type === StreamDataType.TRANSITION) {
       const activityHandler = await this.initActivity(`.${streamData.metadata.aid}`, context.data, context as JobState) as Activity;
       if (streamData.type === StreamDataType.TIMEHOOK) {
         await activityHandler.processTimeHookEvent(streamData.metadata.jid);
+      } else if (streamData.type === StreamDataType.TRANSITION) {
+        await activityHandler.process();
       } else {
         await activityHandler.processWebHookEvent();
       }
     } else if (streamData.type === StreamDataType.AWAIT) {
+      //invoke (and await) a new job
       context.metadata = {
         ...context.metadata,
         pj: streamData.metadata.jid,
@@ -313,6 +316,7 @@ class EngineService {
       const activityHandler = await this.initActivity(streamData.metadata.topic, streamData.data, context as JobState) as Trigger;
       await activityHandler.process();
     } else {
+      //process a worker callback response
       const activityHandler = await this.initActivity(`.${streamData.metadata.aid}`, context.data, context as JobState) as Worker;
       await activityHandler.processWorkerEvent(streamData.status, streamData.code);
     }

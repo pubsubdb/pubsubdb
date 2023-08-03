@@ -63,6 +63,7 @@ class Await extends Activity {
     }
   }
 
+
   async execActivity(): Promise<string> {
     const streamData: StreamData = {
       metadata: {

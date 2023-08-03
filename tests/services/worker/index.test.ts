@@ -35,14 +35,12 @@ describe('Worker', () => {
     const operation = streamData.data.operation as 'add'|'subtract'|'multiply'|'divide';
     const result = new NumberHandler()[operation](values);
     //let myCount = counter++;
-    //console.time(`callback-${myCount}`);
     if (isSlow) {
       isSlow = false;
       await sleepFor(6_000);
     } else {
       await sleepFor(1_000);
     }
-    //console.timeEnd(`callback-${myCount}`);
     return {
       status: StreamStatus.SUCCESS,
       metadata: { ...streamData.metadata },
@@ -118,11 +116,11 @@ describe('Worker', () => {
       };
 
       //job 1 is processed immediately by worker 1 and will sleep for 6s
-      //jobs 2 and 3 (which last 1s) will be completed by the other worker
-      //at which point the the second worker will take the job (xclaim)
-      //and complete it. The stuck worker will eventually complete, but it
-      //won't matter as the job will be completed by the other worker and
-      //a warning will print to the log that the too-late response is ignored
+      //jobs 2 and 3 (which last 1s each) will be completed by the second worker
+      //at which point the the second worker will be bored and take the job (xclaim)
+      //and complete it. The first worker will eventually resume after 6s, but it
+      //won't matter as the job will have been completed by the second worker and
+      //a warning will print to the log that the `too-late` response was ignored
       const jobId1 = await pubSubDB.pub('calculate', { ...payload });
       const jobId2 = await pubSubDB.pub('calculate', { ...payload });
       const jobId3 = await pubSubDB.pub('calculate', { ...payload });

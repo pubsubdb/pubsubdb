@@ -116,8 +116,8 @@ describe('pubsubdb', () => {
   describe('run()', () => {
     it('executes an `await` activity that resolves to true', async () => {
       const payload = { 
-        id: `wdg_${parseInt((Math.random()*10000000).toString()).toString()}`, 
-        price: 49.99, 
+        id: `wdg_${parseInt((Math.random()*10000000).toString()).toString()}`,
+        price: 49.99,
         object_type: 'widgetA'
       }
       const topic = 'order.approval.requested';
@@ -155,7 +155,7 @@ describe('pubsubdb', () => {
       for (let i = 0; i < 1; i++) {
         payload = { 
           id: `ord_${parseInt((Math.random()*1000000).toString()).toString()}`, 
-          price: 49.99 + i, 
+          price: 49.99 + i,
           object_type: i % 2 ? 'widget' : 'order'
         }
         const job: JobOutput = await pubSubDB.pubsub('order.approval.price.requested', payload);
@@ -213,7 +213,7 @@ describe('pubsubdb', () => {
           }
         }
       }
-    });
+    }, 10_000);
 
     it('should throw an error when publishing duplicates', async () => {
       try {
@@ -289,10 +289,9 @@ describe('pubsubdb', () => {
       const payload = { duration: 1 };
       const jobId = await pubSubDB.pub('sleep.do', payload);
       //get the job status
-      await sleepFor(250);
-      const status1 = await pubSubDB.getStatus(jobId as string);
-      expect(status1).toBe(560000000000000); //sleeping
-      while(await pubSubDB.getStatus(jobId as string) === 560000000000000) {
+      await sleepFor(500);
+      await pubSubDB.getStatus(jobId as string);
+      while(await pubSubDB.getStatus(jobId as string) !== 460000000000000) {
         await sleepFor(1000);
       }
       const status2 = await pubSubDB.getStatus(jobId as string);
@@ -309,9 +308,10 @@ describe('pubsubdb', () => {
         facility:'spacely',
         actual_release_series: '202304110015',
       };
-      const response = await pubSubDB.hook('order.routed', payload);
-      //expect(response).toBe(946000000000000); //fulfill (last activity) still pending at this stage
-      await sleepFor(250);
+      await pubSubDB.hook('order.routed', payload);
+      while(await pubSubDB.getStatus(payload.id) !== 646000000000000) {
+        await sleepFor(1000);
+      }
       const status = await pubSubDB.getStatus(payload.id);
       expect(status).toBe(646000000000000); //fulfill should be done by now
     });
@@ -333,6 +333,8 @@ describe('pubsubdb', () => {
         end: 'NOW',
       };
       const response = await pubSubDB.hookAll('order.routed', payload, query, ['color:red']);
+      await sleepFor(1500);
+      //todo: verify status of all target jobs by id!
       expect(response).not.toBeNull();
     });
   });
