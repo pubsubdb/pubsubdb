@@ -46,7 +46,7 @@ class Await extends Activity {
       const messageId = await this.execActivity();
       telemetry.setActivityAttributes({
         'app.activity.mid': messageId,
-        'app.job.jss': activityStatus.toString()
+        'app.job.jss': Number(activityStatus)
       });
       return this.context.metadata.aid;
     } catch (error) {
@@ -112,7 +112,7 @@ class Await extends Activity {
 
       telemetry.mapActivityAttributes();
       const activityStatus = multiResponse[multiResponse.length - 1];
-      telemetry.setActivityAttributes({ 'app.job.jss': activityStatus.toString() });
+      telemetry.setActivityAttributes({ 'app.job.jss': Number(activityStatus) });
       const isComplete = CollatorService.isJobComplete(activityStatus as number);
       this.transition(isComplete);
     } catch (error) {

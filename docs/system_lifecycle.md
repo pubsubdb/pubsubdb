@@ -171,9 +171,13 @@ activities:
 ```
 
 ### Dashboards and Alerts
-PubSubDB tracks telemetry *spans* and *traces*, emitting them to the telemetry backend as a set of nested activities that naturally reform into the original workflow graph. Meter critical activities with alarms and alerts; use the telemetry data to drive your own custom dashboards.
+PubSubDB tracks telemetry *spans* and *traces*, emitting them to the telemetry backend as a set of nested activities that naturally reform into the original workflow graph. Meter critical activities with alarms, alerts, and custom dashboards.
 
-In the following dashboard (HoneyComb), a sequence of 4 duplexed activities are displayed along with the worker functions they orchestrate. The full duration was 160ms with the bulk of the processing time spent executing the `sforcecloud` worker function (57.93ms).
+In the following dashboard (HoneyComb), the fully composed execution graph can be seen for the job, including the subordinated job that is called. The columns `js` and `jss`, represent **job state** and **secondary job state** respectively. These are emitted by the PubSubDB engine and can be used to track the progress of job activities as they execute in parallel.
+
+>The PubSubDB YAML execution models depicted in the following graph are located [here](../tests/$setup/apps/calc/v1/). Take note of how the YAML models (the DAGs) are surfaced in the telemetry dashboard as a connected graph of activities.
+
+The *FANIN* and *FANOUT* designations represent locations in the exection flow where information is exchanged via streams. *FANOUT* designates the invocation, while *FANIN* designates the response.
 
 **HoneyComb Trace UI**
 
