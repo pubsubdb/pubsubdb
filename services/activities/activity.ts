@@ -84,7 +84,7 @@ class Activity {
 
       telemetry.mapActivityAttributes();
       const activityStatus = multiResponse[multiResponse.length - 1];
-      telemetry.setActivityAttributes({ 'app.job.jss': activityStatus.toString() });
+      telemetry.setActivityAttributes({ 'app.job.jss': Number(activityStatus) });
       const isComplete = CollatorService.isJobComplete(activityStatus as number);
       if (!shouldSleep) {
         await this.transition(isComplete);
@@ -158,7 +158,7 @@ class Activity {
       telemetry.mapActivityAttributes();
 
       const activityStatus = multiResponse[multiResponse.length - 1];
-      telemetry.setActivityAttributes({ 'app.job.jss': activityStatus.toString() });
+      telemetry.setActivityAttributes({ 'app.job.jss': Number(activityStatus) });
       const isComplete = CollatorService.isJobComplete(activityStatus as number);
       await this.transition(isComplete);
       return Number(activityStatus);

@@ -45,8 +45,8 @@ class Trigger extends Activity {
       await this.setStats(multi);
       await multi.exec();
       telemetry.mapActivityAttributes();
-      telemetry.setJobAttributes({ 'app.job.jss': this.context.metadata.js.toString() });
-      telemetry.setActivityAttributes({ 'app.job.jss': this.context.metadata.js.toString() });
+      telemetry.setJobAttributes({ 'app.job.jss': Number(this.context.metadata.js) });
+      telemetry.setActivityAttributes({ 'app.job.jss': Number(this.context.metadata.js) });
 
       const complete = CollatorService.isJobComplete(this.context.metadata.js);
       await this.transition(complete);
