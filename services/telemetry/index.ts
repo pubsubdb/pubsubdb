@@ -82,16 +82,16 @@ class TelemetryService {
   }
 
   startStreamSpan(data: StreamData, role: StreamRole): TelemetryService {
-    let TYPE: string;
+    let type: string;
     if (role === StreamRole.WORKER) {
-      TYPE = 'EXECUTE';
-    } else if (data.type === StreamDataType.TRANSITION) {
-      TYPE = 'TRANSITION';
+      type = 'EXECUTE';
+    } else if (data.type === StreamDataType.RESULT || data.type === StreamDataType.RESPONSE) {
+      type = 'FANIN';
     } else {
-      TYPE = 'PROCESS';
+      type = 'FANOUT';
     }
     const topic = data.metadata.topic ? `/${data.metadata.topic}` : '';
-    const spanName = `${TYPE}/${this.appId}/${data.metadata.aid}${topic}`;
+    const spanName = `${type}/${this.appId}/${data.metadata.aid}${topic}`;
     const attributes = this.getStreamSpanAttrs(data);
     const span: Span = this.startSpan(data.metadata.trc, data.metadata.spn, spanName, attributes);
     this.span = span;

@@ -23,6 +23,7 @@ export enum StreamDataType {
   TIMEHOOK = 'timehook',
   WEBHOOK = 'webhook',
   AWAIT = 'await',
+  RESULT = 'result', //await result
   WORKER = 'worker',
   RESPONSE = 'response', //worker response
   TRANSITION = 'transition',

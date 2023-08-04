@@ -14,7 +14,6 @@ import {
   TriggerActivity } from '../../types/activity';
 import { JobState } from '../../types/job';
 import { RedisMulti } from '../../types/redis';
-import { StringAnyType } from '../../types/serializer';
 
 class Trigger extends Activity {
   config: TriggerActivity;
@@ -36,7 +35,8 @@ class Trigger extends Activity {
       await this.getState();
       telemetry = new TelemetryService(this.engine.appId, this.config, this.metadata, this.context);
       telemetry.startJobSpan();
-      telemetry.startActivitySpan(this.leg); 
+      telemetry.startActivitySpan(this.leg);
+      this.context.metadata.js = this.getJobStatus();
       this.mapJobData();
       await this.setStateNX();
 
@@ -45,11 +45,11 @@ class Trigger extends Activity {
       await this.setStats(multi);
       await multi.exec();
       telemetry.mapActivityAttributes();
-      telemetry.setJobAttributes({ 'app.job.jss': this.context.metadata.js });
-      telemetry.setActivityAttributes({ 'app.job.jss': this.context.metadata.js });
+      telemetry.setJobAttributes({ 'app.job.jss': this.context.metadata.js.toString() });
+      telemetry.setActivityAttributes({ 'app.job.jss': this.context.metadata.js.toString() });
 
       const complete = CollatorService.isJobComplete(this.context.metadata.js);
-      this.transition(complete);
+      await this.transition(complete);
       return this.context.metadata.jid;
     } catch (error) {
       if (error instanceof DuplicateJobError) {
@@ -102,7 +102,7 @@ class Trigger extends Activity {
         jc: utc,
         ju: utc,
         ts: getTimeSeries(this.resolveGranularity()),
-        js: this.getJobStatus(),
+        js: this.config.collationKey,
       },
       data: {},
       [this.metadata.aid]: { 
@@ -119,14 +119,6 @@ class Trigger extends Activity {
        },
     };
     this.context['$self'] = this.context[this.metadata.aid];
-  }
-
-  getParentSpanId(leg: number): string | undefined {
-    if (leg === 1) {
-      return this.context.metadata.spn;
-    } else {
-      return this.context['$self'].output.metadata.l1s;
-    }
   }
 
   bindJobMetadataPaths(): string[] {

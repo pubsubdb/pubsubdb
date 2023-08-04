@@ -305,7 +305,6 @@ class EngineService {
         await activityHandler.processWebHookEvent();
       }
     } else if (streamData.type === StreamDataType.AWAIT) {
-      //invoke (and await) a new job
       context.metadata = {
         ...context.metadata,
         pj: streamData.metadata.jid,
@@ -315,40 +314,45 @@ class EngineService {
        };
       const activityHandler = await this.initActivity(streamData.metadata.topic, streamData.data, context as JobState) as Trigger;
       await activityHandler.process();
+    } else if (streamData.type === StreamDataType.RESULT) {
+      const activityHandler = await this.initActivity(`.${context.metadata.aid}`, streamData.data, context as JobState) as Await;
+      await activityHandler.resolveAwait(streamData.status, streamData.code);
     } else {
-      //process a worker callback response
       const activityHandler = await this.initActivity(`.${streamData.metadata.aid}`, context.data, context as JobState) as Worker;
       await activityHandler.processWorkerEvent(streamData.status, streamData.code);
     }
     this.logger.debug('engine-process-stream-message-stopped');
-    //NOTE: returning `void` says: ack/delete/stop-ponging
   }
 
-  // ***************** `AWAIT` ACTIVITY RE-ENTRY POINT ****************
-  hasParentJob(context: JobState): boolean {
-    return Boolean(context.metadata.pj && context.metadata.pa);
-  }
-  async resolveAwait(context: JobState) {
+  // ***************** `AWAIT` ACTIVITY RETURN RESPONSE ****************
+  async execAdjacentParent(context: JobState, jobOutput: JobOutput): Promise<string> {
     if (this.hasParentJob(context)) {
-      const completedJobId = context.metadata.jid;
-      const topic = context.metadata.tpc;
-      const output = await this.getState(topic, completedJobId);
-      const error = this.resolveError(output.metadata);
-      const parentContext: Partial<JobState> = {
-        data: error || output.data || {},
+      //errors are stringified `StreamError` objects
+      const error = this.resolveError(jobOutput.metadata);
+      const spn = context['$self']?.output?.metadata?.l2s || context['$self']?.output?.metadata?.l1s;
+      const streamData: StreamData = {
         metadata: {
-          ...context.metadata,
           jid: context.metadata.pj,
           aid: context.metadata.pa,
-          pj: undefined,
-          pa: undefined,
-        }
+          trc: context.metadata.trc,
+          spn,
+        },
+        type: StreamDataType.RESULT,
+        data: jobOutput.data,
       };
-      const activityHandler = await this.initActivity(`.${parentContext.metadata.aid}`, parentContext.data, parentContext as JobState) as Await;
-      const status = error ? StreamStatus.ERROR : StreamStatus.SUCCESS;
-      const code = error ? error.code : STATUS_CODE_SUCCESS;
-      return await activityHandler.resolveAwait(status, code);
+      if (error && error.code) {
+        streamData.status = StreamStatus.ERROR;
+        streamData.data = error;
+        streamData.code = error.code;
+      } else {
+        streamData.status = StreamStatus.SUCCESS;
+        streamData.code = STATUS_CODE_SUCCESS;
+      }
+      return await this.streamSignaler?.publishMessage(null, streamData);
     }
+  }
+  hasParentJob(context: JobState): boolean {
+    return Boolean(context.metadata.pj && context.metadata.pa);
   }
   resolveError(metadata: JobMetadata): StreamError | undefined {
     if (metadata && metadata.err) {
@@ -457,10 +461,9 @@ class EngineService {
       }, timeout);
     });
   }
-  async resolveOneTimeSubscription(context: JobState) {
+  async resolveOneTimeSubscription(context: JobState, jobOutput: JobOutput) {
     //todo: subscriber should query for the job...only publish minimum context needed
     if (this.hasOneTimeSubscription(context)) {
-      const jobOutput = await this.getState(context.metadata.tpc, context.metadata.jid);
       const message: JobMessage = {
         type: 'job',
         topic: context.metadata.jid,
@@ -469,13 +472,15 @@ class EngineService {
       this.store.publish(KeyType.QUORUM, message, this.appId, context.metadata.ngn);
     }
   }
-  async resolvePersistentSubscriptions(context: JobState) {
+  async getSubscriptionsTopic(context: JobState): Promise<string> {
     const config = await this.getVID();
     const activityId = context.metadata.aid || context['$self']?.output?.metadata?.aid;
     const schema = await this.store.getSchema(activityId, config);
-    const topic = schema.publishes;
+    return schema.publishes;
+  }
+  async resolvePersistentSubscriptions(context: JobState, jobOutput: JobOutput) {
+    const topic = await this.getSubscriptionsTopic(context);
     if (topic) {
-      const jobOutput = await this.getState(context.metadata.tpc, context.metadata.jid);
       const message: JobMessage = {
         type: 'job',
         topic,
@@ -509,11 +514,18 @@ class EngineService {
       }
     }
   }
-  runJobCompletionTasks(context: JobState) {
-    //todo: optimize; when publishing (one time or peristent) just gen the payload once;
-    this.resolveAwait(context);
-    this.resolveOneTimeSubscription(context);
-    this.resolvePersistentSubscriptions(context);
+  async runJobCompletionTasks(context: JobState) {
+    const isAwait = this.hasParentJob(context);
+    const isOneTimeSubscription = this.hasOneTimeSubscription(context);
+    const topic = await this.getSubscriptionsTopic(context);
+    if (isAwait || isOneTimeSubscription || topic) {
+      const jobOutput = await this.getState(context.metadata.tpc, context.metadata.jid);
+      //always wait for stream pub/sub
+      await this.execAdjacentParent(context, jobOutput);
+      //no need to wait for standard pub/sub
+      this.resolveOneTimeSubscription(context, jobOutput);
+      this.resolvePersistentSubscriptions(context, jobOutput);
+    }
     this.task.registerJobForCleanup(context.metadata.jid, context.metadata.expire);
   }
 

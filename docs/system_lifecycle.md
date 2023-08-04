@@ -154,7 +154,7 @@ activities:
       approved: true
 ```
 
-Use a [`@pipe`](./data_mapping.md) to customize telemetry data output.
+Use [`@pipes`](./data_mapping.md) to customize telemetry output. The following declaration will emit an `app.activity.data.approved` attribute that is `yes` or `no`, depending upon the boolean state of `a2.output.data.approved`.
 
 ```yaml
 activities:

@@ -5,9 +5,9 @@ import { EngineService } from '../engine';
 import {
   ActivityData,
   ActivityMetadata,
-  WorkerActivity,
-  ActivityType } from '../../types/activity';
-import { JobData, JobState } from '../../types/job';
+  ActivityType,
+  WorkerActivity } from '../../types/activity';
+import { JobState } from '../../types/job';
 import { MultiResponseFlags } from '../../types/redis';
 import {
   StreamCode,
@@ -49,7 +49,7 @@ class Worker extends Activity {
       const messageId = await this.execActivity();
       telemetry.setActivityAttributes({
         'app.activity.mid': messageId,
-        'app.job.jss': activityStatus
+        'app.job.jss': activityStatus.toString()
       });
       return this.context.metadata.aid;
     } catch (error) {
@@ -102,16 +102,20 @@ class Worker extends Activity {
       if (isComplete) {
         this.logger.warn('worker-onresponse-duplicate', { jid, aid, status, code });
         this.logger.debug('worker-onresponse-duplicate-resolution', { resolution: 'Increase PubSubDB config `xclaim` timeout.' });
-        return; //ok to return early here (due to xclaimed intercept completing first)
+        return; //ok to return early here (due to xclaimed claimaint completing first)
       }
-      let multiResponse: MultiResponseFlags = [];
+
       if (status === StreamStatus.PENDING) {
         await this.processPending();
+        telemetry.mapActivityAttributes();
+        telemetry.setActivityAttributes({ 'app.job.jss': this.context.metadata.js?.toString() });
       } else {
-        multiResponse = status === StreamStatus.SUCCESS ?
+        const multiResponse = status === StreamStatus.SUCCESS ?
           await this.processSuccess():
           await this.processError();
+        telemetry.mapActivityAttributes();
         const activityStatus = multiResponse[multiResponse.length - 1];
+        telemetry.setActivityAttributes({ 'app.job.jss': activityStatus.toString() });
         isComplete = CollatorService.isJobComplete(activityStatus as number);
         this.transition(isComplete);
       }
