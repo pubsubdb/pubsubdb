@@ -84,9 +84,11 @@ class Activity {
 
       telemetry.mapActivityAttributes();
       const activityStatus = multiResponse[multiResponse.length - 1];
-      telemetry.setActivityAttributes({ 'app.job.jss': activityStatus });
+      telemetry.setActivityAttributes({ 'app.job.jss': activityStatus.toString() });
       const isComplete = CollatorService.isJobComplete(activityStatus as number);
-      !shouldSleep && this.transition(isComplete);
+      if (!shouldSleep) {
+        await this.transition(isComplete);
+      }
       return this.context.metadata.aid;
     } catch (error) {
       if (error instanceof GetStateError) {
@@ -156,7 +158,7 @@ class Activity {
       telemetry.mapActivityAttributes();
 
       const activityStatus = multiResponse[multiResponse.length - 1];
-      telemetry.setActivityAttributes({ 'app.job.jss': activityStatus });
+      telemetry.setActivityAttributes({ 'app.job.jss': activityStatus.toString() });
       const isComplete = CollatorService.isJobComplete(activityStatus as number);
       await this.transition(isComplete);
       return Number(activityStatus);

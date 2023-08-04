@@ -205,16 +205,15 @@ describe('StreamSignaler', () => {
         pubSubDB.pubsub('calculate', {
           operation: 'divide',
           values: JSON.stringify([200, 4, 5]),
-        }),
+        }, 1500),
         pubSubDB.pubsub('calculate', {
           operation: 'multiply',
           values: JSON.stringify([10, 10, 10]),
-        }),
+        }, 1500),
       ]);
       expect(divide?.data.result).toBe(10);
       expect(multiply?.data.result).toBe(1000);
-    });
-
+    }, 3000);
 
     it('should manually delete a completed job', async () => {
       const payload = {
