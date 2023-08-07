@@ -10,7 +10,7 @@ The examples provided in this guide are the simplest possible flows that can be 
   - [Define the Application](#define-the-application)
   - [Deploy the Application](#deploy-the-application)
   - [Activate the Application](#activate-the-application)
-- [The Simplest Flow](#the-simplest-real-flow)
+- [The Simplest Flow](#the-simplest-flow)
 - [The Simplest Compositional Flow](#the-simplest-compositional-flow)
 - [The Simplest Executable Flow](#the-simplest-executable-flow)
 - [The Simplest Executable Data Flow](#the-simplest-executable-data-flow)
