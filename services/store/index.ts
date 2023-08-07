@@ -334,8 +334,8 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
       Object.entries(payload).forEach(([key, value]) => {
         payload[key] = value.toString();
       });
-      const status = await this.redisClient[this.commands.hset](key, payload as any);
-      return this.isSuccessful(status);
+      await this.redisClient[this.commands.hset](key, payload as any);
+      return true;
     }
     throw new Error(`Version ${version} does not exist for app ${id}`);
   }

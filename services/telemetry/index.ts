@@ -251,6 +251,10 @@ class TelemetryService {
     if (config.type === 'trigger') {
       state[`${metadata.aid}/output/metadata/l1s`] = context['$self'].output.metadata.l1s;
       state[`${metadata.aid}/output/metadata/l2s`] = context['$self'].output.metadata.l2s;
+    } else if (config.type === 'activity' && leg === 1) {
+      //activities run non-duplexed and only have a single leg
+      state[`${metadata.aid}/output/metadata/l1s`] = context['$self'].output.metadata.l1s;
+      state[`${metadata.aid}/output/metadata/l2s`] = context['$self'].output.metadata.l1s;
     } else {
       const target = `l${leg}s`;
       state[`${metadata.aid}/output/metadata/${target}`] = context['$self'].output.metadata[target];

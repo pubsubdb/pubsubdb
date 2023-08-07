@@ -15,6 +15,35 @@ describe('Pipe', () => {
     pipe = null;
   });
 
+  describe('date', () => {
+    it('now, toLocaleString', () => {
+      jobData = {};
+  
+      // Test now
+      rules = [
+        ['{@date.now}']
+      ];
+      const before = Date.now();
+      pipe = new Pipe(rules, jobData);
+      const now = pipe.process();
+      const after = Date.now();
+      expect(now).toBeGreaterThanOrEqual(before);
+      expect(now).toBeLessThanOrEqual(after);
+  
+      rules = [
+        ['{@date.now}', 'en-US'],
+        ['{@date.toLocaleString}'],
+      ];
+  
+      pipe = new Pipe(rules, jobData);
+      const localeString = pipe.process();
+      //"8/6/2023, 10:52:39 PM"
+      expect(!isNaN(localeString.split('/')[0])).toEqual(true);
+      expect(!isNaN(localeString.split('/')[1])).toEqual(true);
+      expect(!isNaN(localeString.split('/')[2])).toEqual(false);
+    });
+  });  
+
   describe('array', () => {
     it('should join an array with a space delimiter', () => {
       jobData = {
@@ -62,7 +91,7 @@ describe('Pipe', () => {
   
       expect(isOddResult).toEqual(true);
     });
-  });  
+  });
 
   describe('string', () => {
     it('concat, split, charAt, includes, indexOf', () => {

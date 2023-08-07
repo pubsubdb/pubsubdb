@@ -89,12 +89,19 @@ class Pipe {
     return resolved;
   }
 
+  private isFunction(currentCell: PipeItem): boolean {
+    return typeof currentCell === 'string' && currentCell.startsWith('{@') && currentCell.endsWith('}');
+  }
+
   private isMappable(currentCell: PipeItem): boolean {
-    return typeof currentCell === 'string' &&  currentCell.startsWith('{');
+    return typeof currentCell === 'string' &&  currentCell.startsWith('{') && currentCell.endsWith('}');
   }
 
   resolveCellValue(currentCell: PipeItem): unknown {
-    if (this.isMappable(currentCell)) {
+    if (this.isFunction(currentCell)) {
+      const fn = Pipe.resolveFunction(currentCell as string);
+      return fn.call();
+    } else if (this.isMappable(currentCell)) {
       return this.resolveMappableValue(currentCell as string);
     } else {
       return currentCell;
@@ -115,8 +122,16 @@ class Pipe {
   }
 
   resolveMappableValue(currentCell: string): unknown {
-    const term = currentCell.substring(1, currentCell.length - 1);
+    const term = this.resolveMapTerm(currentCell);
     return this.getNestedProperty(this.jobData, term);
+  }
+
+  resolveFunctionTerm(currentCell: string): string {
+    return currentCell.substring(2, currentCell.length - 1);
+  }
+
+  resolveMapTerm(currentCell: string): string {
+    return currentCell.substring(1, currentCell.length - 1);
   }
 }
 
