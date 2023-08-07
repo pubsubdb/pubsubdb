@@ -194,7 +194,7 @@ class Deployer {
       let result = [];
       function traverse(obj: StringAnyType, path = []) {
         for (let key in obj) {
-          if (typeof obj[key] === 'object' && obj[key] !== null) {
+          if (typeof obj[key] === 'object' && obj[key] !== null && !('@pipe' in obj[key])) {
             let newPath = [...path, key];
             traverse(obj[key], newPath);
           } else {

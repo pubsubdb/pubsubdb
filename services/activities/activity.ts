@@ -66,6 +66,7 @@ class Activity {
 
   //********  INITIAL ENTRY POINT (A)  ********//
   async process(): Promise<string> {
+    this.logger.debug('activity-process', { jid: this.context.metadata.jid, aid: this.metadata.aid });
     let telemetry: TelemetryService;
     try {
       this.setLeg(1);
@@ -84,7 +85,7 @@ class Activity {
 
       telemetry.mapActivityAttributes();
       const activityStatus = multiResponse[multiResponse.length - 1];
-      telemetry.setActivityAttributes({ 'app.job.jss': Number(activityStatus) });
+      telemetry.setActivityAttributes({ 'app.job.jss': activityStatus as number - 0 });
       const isComplete = CollatorService.isJobComplete(activityStatus as number);
       if (!shouldSleep) {
         await this.transition(isComplete);
@@ -100,6 +101,7 @@ class Activity {
       throw error;
     } finally {
       telemetry.endActivitySpan();
+      this.logger.debug('activity-process-end', { jid: this.context.metadata.jid, aid: this.metadata.aid });
     }
   }
 
@@ -158,10 +160,10 @@ class Activity {
       telemetry.mapActivityAttributes();
 
       const activityStatus = multiResponse[multiResponse.length - 1];
-      telemetry.setActivityAttributes({ 'app.job.jss': Number(activityStatus) });
+      telemetry.setActivityAttributes({ 'app.job.jss': activityStatus as number - 0 });
       const isComplete = CollatorService.isJobComplete(activityStatus as number);
       await this.transition(isComplete);
-      return Number(activityStatus);
+      return activityStatus as number - 0;
     } catch (error) {
       this.logger.error('engine-process-hook-event-error', error);
       telemetry.setActivityError(error.message);
