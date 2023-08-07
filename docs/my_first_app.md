@@ -1,9 +1,5 @@
 # My First App: Network Calculator
 
-In a microservices environment, each service has its own unique capacity and throughput, leading to asymmetry when one service calls another. PubSubDB addresses asymmetry by orchestrating buffered execution streams. This addresses the problem at its source, removing all back-pressure and redundant state from the system.
-
-In this embodiment, Redis inflates like a balloon as necessary, buffering information flow at the pace maintained by receivers. If all receivers are functioning as designed, Redis won't inflate and will simply serve as a network router.
-
 The tutorial uses the creation of a networked calculator application to illustrate important concepts about designing and running distributed applications at scale. Whether you deploy one worker of dozens, nothing changes in the deployment and configuration. PubSubDB will calcuate values as fast as Redis can distribute the work streams.
 
 ## Table of Contents

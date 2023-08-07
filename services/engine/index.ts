@@ -196,10 +196,7 @@ class EngineService {
   }
 
   // ************* METADATA/MODEL METHODS *************
-  async initActivity(topic: string, data: JobData, context?: JobState): Promise<Activity> {
-    if (!data) {
-      throw new Error(`payload data is required and must be an object`);
-    }
+  async initActivity(topic: string, data: JobData = {}, context?: JobState): Promise<Activity> {
     const [activityId, schema] = await this.getSchema(topic);
     const ActivityHandler = Activities[schema.type];
     if (ActivityHandler) {
