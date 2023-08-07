@@ -42,11 +42,11 @@ class Await extends Activity {
       const multiResponse = await multi.exec() as MultiResponseFlags;
 
       telemetry.mapActivityAttributes();
-      const activityStatus = multiResponse[multiResponse.length - 1];
+      const activityStatus = this.resolveStatus(multiResponse);
       const messageId = await this.execActivity();
       telemetry.setActivityAttributes({
         'app.activity.mid': messageId,
-        'app.job.jss': activityStatus as number - 0
+        'app.job.jss': activityStatus
       });
       return this.context.metadata.aid;
     } catch (error) {
@@ -111,9 +111,9 @@ class Await extends Activity {
       }
 
       telemetry.mapActivityAttributes();
-      const activityStatus = multiResponse[multiResponse.length - 1];
-      telemetry.setActivityAttributes({ 'app.job.jss': activityStatus as number - 0 });
-      const isComplete = CollatorService.isJobComplete(activityStatus as number);
+      const activityStatus = this.resolveStatus(multiResponse);
+      telemetry.setActivityAttributes({ 'app.job.jss': activityStatus });
+      const isComplete = CollatorService.isJobComplete(activityStatus);
       this.transition(isComplete);
     } catch (error) {
       this.logger.error('await-resolve-await-error', error);

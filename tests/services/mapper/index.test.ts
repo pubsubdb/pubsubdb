@@ -1,12 +1,9 @@
-import { PSNS } from '../../../modules/key';
-import { sleepFor } from '../../../modules/utils';
 import {
   IORedisStore,
   IORedisStream,
   IORedisSub,
   PubSubDB,
   PubSubDBConfig } from '../../../index';
-import { NumberHandler } from '../../../services/pipe/functions/number';
 import { StreamSignaler } from '../../../services/signaler/stream';
 import { RedisConnection } from '../../$setup/cache/ioredis';
 import { RedisClientType } from '../../../types/ioredisclient';
@@ -206,5 +203,155 @@ describe('MapperService', () => {
       expect(data.speed).toBe(payload.speed);
       expect(data.height).toBe(payload.seed * payload.speed);
     }, 2_500);
+  });
+
+  describe('Deploy and Activate', () => {
+    it('deploys and activates version 6', async () => {
+      await pubSubDB.deploy('/app/tests/$setup/apps/tree/v6/pubsubdb.yaml');
+      const isActivated = await pubSubDB.activate('6');
+      expect(isActivated).toBe(true);
+    });
+  });
+
+  describe('Run Version', () => {
+    it('should run a one-step flow with no mappings', async () => {
+      const result = await pubSubDB.pubsub('spring', {});
+      expect(result.metadata.js).toBe(600000000000000);
+      expect(result.metadata.tpc).toBe('spring');
+      expect(result.metadata.vrs).toBe('6');
+    }, 2_500);
+  });
+
+  describe('Deploy and Activate', () => {
+    it('deploys and activates version 7', async () => {
+      await pubSubDB.deploy('/app/tests/$setup/apps/tree/v7/pubsubdb.yaml');
+      const isActivated = await pubSubDB.activate('7');
+      expect(isActivated).toBe(true);
+    });
+  });
+
+  describe('Run Version', () => {
+    it('should run a two-step flow with no mappings', async () => {
+      const result = await pubSubDB.pubsub('spring', {});
+      expect(result.metadata.js).toBe(660000000000000);
+      expect(result.metadata.tpc).toBe('spring');
+      expect(result.metadata.vrs).toBe('7');
+    }, 2_500);
+  });
+
+  describe('Deploy and Activate', () => {
+    it('deploys and activates version 8', async () => {
+      await pubSubDB.deploy('/app/tests/$setup/apps/tree/v8/pubsubdb.yaml');
+      const isActivated = await pubSubDB.activate('8');
+      expect(isActivated).toBe(true);
+    });
+  });
+
+  describe('Run Version', () => {
+    it('should run nested flows', async () => {
+      const result = await pubSubDB.pubsub('spring', {});
+      expect(result.metadata.js).toBe(660000000000000);
+      expect(result.metadata.tpc).toBe('spring');
+      expect(result.metadata.vrs).toBe('8');
+    }, 2_500);
+  });
+
+  describe('Hot Deploy', () => {
+    it('should run, deploy, and activate multiple successive versions', async () => {
+      //NOTE: this is essentially the quick start tutorial run as a functional test
+      //init Redis connections and clients
+      const redisConnection = await RedisConnection.getConnection('a');
+      const subscriberConnection = await RedisConnection.getConnection('b');
+      const streamEngineConnection = await RedisConnection.getConnection('c');
+      const streamWorkerConnection = await RedisConnection.getConnection('d');
+      const streamWorkerConnection2 = await RedisConnection.getConnection('e');
+      const redisStorer = await redisConnection.getClient();
+      const redisSubscriber = await subscriberConnection.getClient();
+      const redisEngineStreamer = await streamEngineConnection.getClient();
+      const redisWorkerStreamer = await streamWorkerConnection.getClient();
+      const redisWorkerStreamer2 = await streamWorkerConnection2.getClient();
+
+      //wrap Redis clients in PubSubDB Redis client wrappers
+      const redisStore = new IORedisStore(redisStorer);
+      const redisEngineStream = new IORedisStream(redisEngineStreamer);
+      const redisWorkerStream = new IORedisStream(redisWorkerStreamer);
+      const redisWorkerStream2 = new IORedisStream(redisWorkerStreamer2);
+      const redisSub = new IORedisSub(redisSubscriber);
+
+      //init/activate PubSubDB (test both `engine` and `worker` roles)
+      const config: PubSubDBConfig = {
+        appId: 'abc',
+        logLevel: 'debug',
+        engine: {
+          store: redisStore,
+          stream: redisEngineStream,
+          sub: redisSub,
+        },
+        workers: [
+          {
+            topic: 'work.do',
+            store: redisStore,
+            stream: redisWorkerStream,
+            sub: redisSub,
+            callback: async (data: StreamData) => {
+              return {
+                metadata: { ...data.metadata },
+                data: { y: `${data?.data?.x} world` }
+              };
+            }
+          },
+          {
+            topic: 'work.do.more',
+            store: redisStore,
+            stream: redisWorkerStream2,
+            sub: redisSub,
+            callback: async (data: StreamData) => {
+              return {
+                metadata: { ...data.metadata },
+                data: { o: `${data?.data?.i} world` }
+              };
+            }
+          }
+        ]
+      };
+      const pubSubDB = await PubSubDB.init(config);
+
+      await pubSubDB.deploy('/app/tests/$setup/apps/abc/v1/pubsubdb.yaml');
+      await pubSubDB.activate('1');
+      const response1 = await pubSubDB.pubsub('abc.test', {});
+      expect(response1.metadata.jid).not.toBeUndefined();
+
+      await pubSubDB.deploy('/app/tests/$setup/apps/abc/v2/pubsubdb.yaml');
+      await pubSubDB.activate('2');
+      const response2 = await pubSubDB.pubsub('abc.test', {});
+      expect(response2.metadata.jid).not.toBeUndefined();
+
+      await pubSubDB.deploy('/app/tests/$setup/apps/abc/v3/pubsubdb.yaml');
+      await pubSubDB.activate('3');
+      const response3 = await pubSubDB.pubsub('abc.test', {});
+      expect(response3.metadata.jid).not.toBeUndefined();
+
+      await pubSubDB.deploy('/app/tests/$setup/apps/abc/v4/pubsubdb.yaml');
+      await pubSubDB.activate('4');
+      const response4 = await pubSubDB.pubsub('abc.test', {});
+      expect(response4.metadata.jid).not.toBeUndefined();
+
+      await pubSubDB.deploy('/app/tests/$setup/apps/abc/v5/pubsubdb.yaml');
+      await pubSubDB.activate('5');
+      const response5 = await pubSubDB.pubsub('abc.test', { a : 'hello' });
+      expect(response5.data.b).toBe('hello world');
+
+      await pubSubDB.deploy('/app/tests/$setup/apps/abc/v6/pubsubdb.yaml');
+      await pubSubDB.activate('6');
+      const response6 = await pubSubDB.pubsub('abc.test', { a : 'hello' });
+      expect(response6.data.b).toBe('hello world');
+      expect(response6.data.c).toBe('hello world');
+
+      await pubSubDB.deploy('/app/tests/$setup/apps/abc/v7/pubsubdb.yaml');
+      await pubSubDB.activate('7');
+      const response7 = await pubSubDB.pubsub('abc.test', { a : 'hello' });
+      expect(response7.data.b).toBe('hello world');
+      expect(response7.data.c).toBe('hello world world');
+    }, 20_000);
   });
 });

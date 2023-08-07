@@ -136,7 +136,7 @@ const jobId = await pubSubDB.pub(topic, payload, context);
 ```
 
 ### Downstream Continuity
-PubSubDB emits the `trace` (trc) and `span` (spn) IDs to registered worker functions. Add telemetry logging to your worker functions (perhaps it's already there) for a full, system-wide view of the running workflow as a connected graph of activities.
+PubSubDB emits the `trace` (trc) and `span` (spn) IDs to registered worker functions. Add telemetry logging to your worker functions for a full, system-wide view of the running workflow as a connected graph of activities.
 
 ### Custom Telemetry Logging
 Activities defined in the YAML execution models can export custom telemetry attributes. This is useful when logging specific values for which you have added alarms or conditions in the telemetry backend.
@@ -182,6 +182,5 @@ The *FANIN* and *FANOUT* designations represent locations in the exection flow w
 **HoneyComb Trace UI**
 
 <img src="./img/telemetry.png" alt="Open Telemetry" style="max-width:600px;width:600px;">
-
 
 >PubSubDB's duplex communication pattern can be seen in the trace output, with legs 1 and 2 of each activity described in the logs.

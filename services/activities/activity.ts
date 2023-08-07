@@ -84,9 +84,9 @@ class Activity {
       const multiResponse = await multi.exec() as MultiResponseFlags;
 
       telemetry.mapActivityAttributes();
-      const activityStatus = multiResponse[multiResponse.length - 1];
-      telemetry.setActivityAttributes({ 'app.job.jss': activityStatus as number - 0 });
-      const isComplete = CollatorService.isJobComplete(activityStatus as number);
+      const activityStatus = this.resolveStatus(multiResponse);
+      telemetry.setActivityAttributes({ 'app.job.jss': activityStatus });
+      const isComplete = CollatorService.isJobComplete(activityStatus);
       if (!shouldSleep) {
         await this.transition(isComplete);
       }
@@ -159,9 +159,9 @@ class Activity {
       const multiResponse = await multi.exec() as MultiResponseFlags;
       telemetry.mapActivityAttributes();
 
-      const activityStatus = multiResponse[multiResponse.length - 1];
-      telemetry.setActivityAttributes({ 'app.job.jss': activityStatus as number - 0 });
-      const isComplete = CollatorService.isJobComplete(activityStatus as number);
+      const activityStatus = this.resolveStatus(multiResponse);
+      telemetry.setActivityAttributes({ 'app.job.jss': activityStatus });
+      const isComplete = CollatorService.isJobComplete(activityStatus);
       await this.transition(isComplete);
       return activityStatus as number - 0;
     } catch (error) {
@@ -170,6 +170,15 @@ class Activity {
       throw error;
     } finally {
       telemetry.endActivitySpan();
+    }
+  }
+
+  resolveStatus(multiResponse: MultiResponseFlags): number {
+    const activityStatus = multiResponse[multiResponse.length - 1];
+    if (Array.isArray(activityStatus)) {
+      return Number(activityStatus[1]);
+    } else {
+      return Number(activityStatus);
     }
   }
 

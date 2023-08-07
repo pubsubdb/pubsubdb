@@ -45,11 +45,11 @@ class Worker extends Activity {
       const multiResponse = await multi.exec() as MultiResponseFlags;
 
       telemetry.mapActivityAttributes();
-      const activityStatus = multiResponse[multiResponse.length - 1];
+      const activityStatus = this.resolveStatus(multiResponse);
       const messageId = await this.execActivity();
       telemetry.setActivityAttributes({
         'app.activity.mid': messageId,
-        'app.job.jss': activityStatus as number - 0
+        'app.job.jss': activityStatus
       });
       return this.context.metadata.aid;
     } catch (error) {
@@ -114,9 +114,9 @@ class Worker extends Activity {
           await this.processSuccess():
           await this.processError();
         telemetry.mapActivityAttributes();
-        const activityStatus = multiResponse[multiResponse.length - 1];
-        telemetry.setActivityAttributes({ 'app.job.jss': activityStatus as number - 0 });
-        isComplete = CollatorService.isJobComplete(activityStatus as number);
+        const activityStatus = this.resolveStatus(multiResponse);
+        telemetry.setActivityAttributes({ 'app.job.jss': activityStatus });
+        isComplete = CollatorService.isJobComplete(activityStatus);
         this.transition(isComplete);
       }
     } catch (error) {

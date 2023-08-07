@@ -175,6 +175,9 @@ const pubSubDB = await PubSubDB.init({
 ## FAQ
 Refer to the [FAQ](./docs/faq.md) for terms, definitions, and an overview of how a Process Database simplifies worflow type use cases.
 
+## Quick Start
+Refer to the [Quick Start](./docs/quickstart.md) for example flows you can copy/paste/modify to get started.
+
 ## Developer Guide
 Refer to the [Developer Guide](./docs/developer_guide.md) for more information on the full end-to-end development process, including details about schemas, APIs, and deployment.
 
