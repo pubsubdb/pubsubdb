@@ -1,6 +1,6 @@
 # Quick Start
 
-The examples provided in this guide are the simplest possible flows that can be defined in PubSubDB. They are intended to be used as a starting point for your own flows as you modify portions to fit your use case. Examples are organized as a story, with each example building upon the prior one for illustrative purposes. But any single example can be used as a starting point if you find it relevant.
+The examples provided in this guide are the simplest possible flows that can be defined in PubSubDB. They are intended to be used as a starting point as you modify portions to fit your use case. Examples are organized as a story, with each example building upon the prior one for better context. But any single example can be used as a starting point if you find it relevant.
 
 **Table of Contents**
 - [Setup](#setup)
@@ -40,7 +40,7 @@ npm install ioredis
 ### Configure and Initialize Redis
 Configure and initialize 3 Redis clients.
 
->The examples in this guide will use the `ioredis` package, but you can use the `redis` package if you prefer.
+>The examples in this guide will use the `ioredis` package, but you can use the `redis` package if you prefer. Configure and connect to Redis as is standard for your chosen package.
 
 ```javascript
 import Redis from 'ioredis';
@@ -188,7 +188,7 @@ await pubSubDB.activate('2');
 const response2 = await pubSubDB.pubsub('abc.test', {});
 ```
 
-From the outside (from the caller's perspective), the flow behavior doesn't appear much different. But behind the scenes, two activities will now run when called: the trigger and the activity. The trigger will transition to the activity, and the activity will transition to the end of the flow.
+From the outside (from the caller's perspective), the flow behavior doesn't appear much different. But behind the scenes, two activities will now run when called: the `trigger` (t1) and the `activity` (a1). The `trigger` will transition to the `activity`, and the `activity` will transition to the end of the flow.
 
 ## The Simplest Compositional Flow
 This example shows the simplest *compositional flow* possible (where one flow triggers another). Composition allows for standardization and component re-use. Save this YAML descriptor as `abc.3.yaml`:
