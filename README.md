@@ -2,7 +2,9 @@
 ![alpha release](https://img.shields.io/badge/release-alpha-yellow)
 
 ## Overview
-PubSubDB is a *Process Database* that manages changes to data over time. With PubSubDB, you describe activity flow using YAML models. PubSubDB then orchestrates the execution of those activities, coordinating data flow as it moves through the network. Backed by a [headless orchestration engine](./docs/architecture.md), PubSubDB delivers sophisticated event orchestration at scale using standard infrastructure you already own.
+PubSubDB is a [Process Database](./docs/faq.md) that orchestrates and monitors distributed workflows. Its telemetry-first design ensures that every activity is recorded and available for analysis in context of the entire event stream that precedes and follows. Gather real-time insight into your critical business processes; set alarms and alerts on target thresholds; and use trends to predict future outcomes.
+
+<img src="./docs/img/telemetry.png" alt="Open Telemetry" style="max-width:600px;width:600px;">
 
 ## Install
 [![npm version](https://badge.fury.io/js/%40pubsubdb%2Fpubsubdb.svg)](https://badge.fury.io/js/%40pubsubdb%2Fpubsubdb)
