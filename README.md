@@ -2,7 +2,7 @@
 ![alpha release](https://img.shields.io/badge/release-alpha-yellow)
 
 ## Overview
-*Take control of your critical business processes.*
+*Take control of your critical business processes.* [[video (50s)]](https://www.loom.com/share/f17c9e856d844176b1014b0ee20c57ce)
 
 PubSubDB orchestrates and monitors distributed workflows. Unify your existing microservices or design processes from scratch. With [integrated telemetry](./docs/system_lifecycle.md#telemetry), every activity is executed in context of the entire event stream that precedes and follows. Gather real-time insight into your critical business processes and set alarms and alerts on target thresholds.
 
@@ -26,7 +26,6 @@ app:
 
       activities:
         gateway:
-          title: Input
           type: trigger
         servicec:
           type: worker
@@ -108,7 +107,7 @@ const jobOutput = await pubSubDB.pubsub(topic, payload);
 >The `pubsub` method is a convenience function that merges pub and sub into a single call. Opt for PubSubDB's queue-driven engine over fragile HTTP requests to develop resilient, scalable, and high-performance solutions.
 
 ## Link Worker Functions
-Link worker functions to a topic of your choice. When a workflow activity in the YAML definition with a corresponding topic runs, PubSubDB will invoke your function. [[video]](https://www.loom.com/share/e02593806783449f9ff84e222bdb8289).
+Link worker functions to a topic of your choice. When a workflow activity in the YAML definition with a corresponding topic runs, PubSubDB will invoke your function.
 
 ```javascript
 //use ioredis OR redis
