@@ -10,12 +10,15 @@ The examples provided in this guide are the simplest possible flows that can be 
   - [Define the Application](#define-the-application)
   - [Deploy the Application](#deploy-the-application)
   - [Activate the Application](#activate-the-application)
+  - [End-to-End Example](#end-to-end-example)
 - [The Simplest Flow](#the-simplest-flow)
 - [The Simplest Compositional Flow](#the-simplest-compositional-flow)
 - [The Simplest Executable Flow](#the-simplest-executable-flow)
 - [The Simplest Executable Data Flow](#the-simplest-executable-data-flow)
 - [The Simplest Parallel Data Flow](#the-simplest-parallel-data-flow)
 - [The Simplest Sequential Data Flow](#the-simplest-sequential-data-flow)
+- [The Simplest Compositional Executable Flow](#the-simplest-compositional-executable-flow)
+- [The Simplest Conditional Executable Flow](#the-simplest-conditional-executable-flow)
 
 ## Setup
 ### Install Packages
@@ -122,7 +125,8 @@ const response = await pubSubDB.pubsub('abc.test', {});
 console.log(response.metadata);
 ```
 
-Here is the entire end-to-end example, including the one-time setup steps to deploy and activate the flow:
+### End-to-End Example
+Here is the entire end-to-end example, including the one-time setup steps to *deploy* and *activate* version 1 of app `abc`.
 
 ```javascript
 import Redis from 'ioredis';
@@ -172,7 +176,7 @@ app:
           - to: a1
 ```
 
-Try PubSubDB's **hot deployment** capability by upgrading the `abc` app from version `1` to version `2`.
+Use PubSubDB's **hot deployment** capability to upgrade the `abc` app from version `1` to version `2`.
 
 ```javascript
 // continued from prior example
@@ -188,7 +192,7 @@ await pubSubDB.activate('2');
 const response2 = await pubSubDB.pubsub('abc.test', {});
 ```
 
-From the outside (from the caller's perspective), the flow behavior doesn't appear much different. But behind the scenes, two activities will now run when called: the `trigger` (t1) and the `activity` (a1). The `trigger` will transition to the `activity`, and the `activity` will transition to the end of the flow.
+From the outside (from the caller's perspective), the flow behavior doesn't appear much different. But behind the scenes, two activities will now run: the `trigger` (t1) and the `activity` (a1). The `trigger` will transition to the `activity`, and the `activity` will transition to the end of the flow.
 
 ## The Simplest Compositional Flow
 This example shows the simplest *compositional flow* possible (where one flow triggers another). Composition allows for standardization and component re-use. Save this YAML descriptor as `abc.3.yaml`:
@@ -258,7 +262,7 @@ app:
           - to: a1
 ```
 
-When a `worker` activity is defined in the YAML, you must likewise register a `worker` function that will perform the work. Here is the updated end-to-end example with the entire evolution of the application from version `1` to version `4`. Notice how the `PubSubDB.init` call now registers the worker function, using 3 additional redis connections. Points of presence like this (instance of PubSubDB) can declare a PubSubDB engine and/or one or more workers. The engine is used to coordinate the flow, while the workers are used to perform the work.
+When a `worker` activity is defined in the YAML, you must likewise register a `worker` function that will perform the work. Here is the updated end-to-end example with the entire evolution of the application from version `1` to version `4`. Notice how the `PubSubDB.init` call now registers the worker function, using 3 additional redis connections. Points of presence like this (instances of PubSubDB) can declare a PubSubDB engine and/or one or more workers. The engine is used to coordinate the flow, while the workers are used to perform the work.
 
 ```javascript
 import Redis from 'ioredis';
@@ -691,4 +695,241 @@ await pubSubDB.activate('7');
 const response7 = await pubSubDB.pubsub('abc.test', { a : 'hello' });
 console.log(response7.data.b); // hello world
 console.log(response7.data.c); // hello world world
+```
+
+## The Simplest Compositional Executable Flow
+This example depicts a composed set of 2 flows, passing data from the first flow to the second flow. The second flow calls the same worker function used in prior examples (The function identified by the `work.do` topic) to transform the input before returning it to the first flow.
+
+```yaml
+# abc.8.yaml
+app:
+  id: abc
+  version: '8'
+  graphs:
+    - subscribes: abc.test
+      input:
+        schema:
+          type: object
+          properties:
+            a:
+              type: string
+
+      output:
+        schema:
+          type: object
+          properties:
+            b:
+              type: string
+
+      activities:
+        t1:
+          type: trigger
+        a1:
+          type: await
+          subtype: some.other.topic
+          input:
+            schema:
+              type: object
+              properties:
+                awaitInput1:
+                  type: string
+            maps:
+              awaitInput1: '{t1.output.data.a}'
+          output:
+            schema:
+              type: object
+              properties:
+                awaitOutput1:
+                  type: string
+          job:
+            maps:
+              b: '{$self.output.data.awaitOutput1}'
+
+      transitions:
+        t1:
+          - to: a1
+
+    - subscribes: some.other.topic
+      input:
+        schema:
+          type: object
+          properties:
+            awaitInput1:
+              type: string
+
+      output:
+        schema:
+          type: object
+          properties:
+            awaitOutput1:
+              type: string
+
+      activities:
+        t2:
+          type: trigger
+        a2:
+          type: worker
+          subtype: work.do
+          input:
+            schema:
+              type: object
+              properties:
+                x:
+                  type: string
+            maps:
+              x: '{t2.output.data.awaitInput1}'
+          output:
+            schema:
+              type: object
+              properties:
+                y:
+                  type: string
+          job:
+            maps:
+              awaitOutput1: '{$self.output.data.y}'
+
+      transitions:
+        t2:
+          - to: a2
+```
+
+Test the output of the composed flow:
+
+```javascript
+// continued from prior example
+await pubSubDB.deploy('./abc.7.yaml');
+await pubSubDB.activate('7');
+const response7 = await pubSubDB.pubsub('abc.test', { a : 'hello' });
+console.log(response7.data.b); // hello world
+console.log(response7.data.c); // hello world world
+
+await pubSubDB.deploy('./abc.8.yaml');
+await pubSubDB.activate('8');
+const response8 = await pubSubDB.pubsub('abc.test', { a : 'hello' });
+console.log(response8.data.b); // hello world
+```
+
+## The Simplest Conditional Executable Flow
+This example depicts two sequential workers. The first worker will conditionally run if the input (a) is not equal to `goodbye` or `bye`. The second worker will only run if the output produced by worker `a1` (`a1.output.data.y`) is equal to `hello world`. Refer to the `transitions` section in the following flow for details.
+
+>Note how the [@pipes](./data_mapping.md) syntax can be used to design robust comparison expressions for fine-grained control over the execution flow.
+
+```yaml
+# abc.9.yaml
+app:
+  id: abc
+  version: '9'
+  graphs:
+    - subscribes: abc.test
+
+      input:
+        schema:
+          type: object
+          properties:
+            a:
+              type: string
+
+      output:
+        schema:
+          type: object
+          properties:
+            b:
+              type: string
+            c:
+              type: string
+
+      activities:
+        t1:
+          type: trigger
+        a1:
+          type: worker
+          subtype: work.do
+          input:
+            schema:
+              type: object
+              properties:
+                x:
+                  type: string
+            maps:
+              x: '{t1.output.data.a}'
+          output:
+            schema:
+              type: object
+              properties:
+                y:
+                  type: string
+          job:
+            maps:
+              b: '{$self.output.data.y}'
+        a2:
+          type: worker
+          subtype: work.do.more
+          input:
+            schema:
+              type: object
+              properties:
+                i:
+                  type: string
+            maps:
+              i: '{a1.output.data.y}'
+          output:
+            schema:
+              type: object
+              properties:
+                o:
+                  type: string
+          job:
+            maps:
+              c: '{$self.output.data.o}'
+      transitions:
+        t1:
+          - to: a1
+            conditions:
+              gate: and
+              match:
+                - expected: false
+                  actual: 
+                    '@pipe':
+                      - ['{t1.output.data.a}', 'goodbye']
+                      - ['{@conditional.equality}']
+                - expected: false
+                  actual: 
+                    '@pipe':
+                      - ['{t1.output.data.a}', 'bye']
+                      - ['{@conditional.equality}']
+        a1:
+          - to: a2
+            conditions:
+              match:
+                - expected: true
+                  actual: 
+                    '@pipe':
+                      - ['{a1.output.data.y}', 'hello world']
+                      - ['{@conditional.equality}']
+```
+
+Note how the workflow will output values for fields b and/or c depending upon what is input into field a. If the input is `goodbye` or `bye`, the workflow will only execute the trigger (t1) and then immediately end. If the input is `hello` (and the output produced by `a1` is 'hello world'), then the workflow will also execute activity `a2`.
+
+```javascript
+// continued from prior example
+await pubSubDB.deploy('./abc.8.yaml');
+await pubSubDB.activate('8');
+const response8 = await pubSubDB.pubsub('abc.test', { a : 'hello' });
+
+console.log(response8.data.b); // hello world
+console.log(response8.data.c); // hello world world
+
+await pubSubDB.deploy('./abc.9.yaml');
+await pubSubDB.activate('9');
+
+const response9a = await pubSubDB.pubsub('abc.test', { a : 'goodbye' });
+console.log(response9a.data); // undefined
+
+const response9b = await pubSubDB.pubsub('abc.test', { a : 'help' });
+console.log(response9b.data.b); // help world
+console.log(response9b.data.c); // undefined
+
+const response9c = await pubSubDB.pubsub('abc.test', { a : 'hello' });
+console.log(response9c.data.b); // hello world
+console.log(response9c.data.c); // hello world world
 ```
