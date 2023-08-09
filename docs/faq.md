@@ -1,19 +1,19 @@
 # PubSubDB FAQ
 
-## What is a Process Database?
-Similar to how a relational database provides tools for modeling *tables* and  *relationships*, a process database provides tools for modeling *activities* and *transitions*. Constructs like "reading" and "writing" data still remain; however, instead of reading and writing to *tables*, the targets are *jobs* and *flows*. Importantly, the act of reading and writing data drives the perpetual behavior of the system, delivering process orchestration through the simple act of journaling state.
-
 ## What is PubSubDB?
 PubSubDB (a Process Database) is a wrapper for Redis that exposes a higher level set of domain constructs like ‘activities’, ‘jobs’, ‘flows’, etc. Behind the scenes, it uses *Redis Data* (Hash, ZSet, and List); *Redis Streams* (XReadGroup, XAdd, XLen) and *Redis Publish/Subscribe*.
 
+## What is a Process Database?
+Similar to how a relational database provides tools for modeling *tables* and  *relationships*, a process database provides tools for modeling *activities* and *transitions*. Constructs like "reading" and "writing" data still remain; however, instead of reading and writing to *tables*, the targets are *jobs* and *flows*. Importantly, the act of reading and writing data drives the perpetual behavior of the system, delivering process orchestration through the simple act of journaling state.
+
 ## What gets installed?
-PubSubDB is a lightweight NPM package (500KB) that gets installed anywhere a connection to Redis is needed. The entire process is invisible, and it’s easy to set up, as you’re reusing existing Redis connections. Essentially you call higher-level methods provided by PubSubDB (pub, sub, pubsub, etc) instead of the lower-level Redis commands (hset, xadd, etc).
+PubSubDB is a lightweight NPM package (500KB) that gets installed anywhere a connection to Redis is needed.Essentially you call higher-level methods provided by PubSubDB (pub, sub, pubsub, etc) instead of the lower-level Redis commands (hset, xadd, etc).
 
 ## Is PubSubDB an Orchestration Hub/Bus?
 Yes and No. PubSubDB was designed to deliver the functionality of an orchestration server but without the additional infrastructure demands of a traditional server. Only the outcome (process orchestration) exists. The server itself is an emergent property of the data journaling process.
 
 ## How does PubSubDB operate without a central controller?
-PubSubDB is designed as a [distributed headless engine](./architecture.md) based upon the principles of CQRS. According to CQRS, *consumers* are instructed to read events from assigned topic queues while *producers* write to said queues. This division of labor is essential to the smooth running of the system. PubSubDB leverages this principle to drive the perpetual behavior of engines and workers (along with other strategies described [here](./architecture.md)). 
+PubSubDB is designed as a [distributed orchestration engine](./architecture.md) based upon the principles of CQRS. According to CQRS, *consumers* are instructed to read events from assigned topic queues while *producers* write to said queues. This division of labor is essential to the smooth running of the system. PubSubDB leverages this principle to drive the perpetual behavior of engines and workers (along with other strategies described [here](./architecture.md)). 
 
 As long as a topic queue has items, consumers will read exactly one and then journal the result to another queue. As long as all consumers (engines and workers) follow this one rule, complex, composable, multi-system workflows emerge. The "secret" to the process is to model the desired process using a DAG and then compile it into singular, stateless events that are just the right shape to be processed according to CQRS principles.
 

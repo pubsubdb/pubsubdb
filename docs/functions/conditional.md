@@ -5,11 +5,11 @@ In this section, various conditional functions will be explored, which are avail
 **Table of Contents**
 - [conditional.ternary](#conditionalternary)
 - [conditional.equality](#conditionalequality)
-- [conditional.strict_equality](#conditionalstrictequality)
-- [conditional.greater_than](#conditionalgreaterthan)
-- [conditional.less_than](#conditionallessthan)
-- [conditional.greater_than_or_equal](#conditionalgreaterthanorequal)
-- [conditional.less_than_or_equal](#conditionallessthanorequal)
+- [conditional.strict_equality](#conditionalstrict_equality)
+- [conditional.greater_than](#conditionalgreater_than)
+- [conditional.less_than](#conditionalless_than)
+- [conditional.greater_than_or_equal](#conditionalgreater_than_or_equal)
+- [conditional.less_than_or_equal](#conditionalless_than_or_equal)
 
 ## conditional.ternary
 

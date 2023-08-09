@@ -352,6 +352,22 @@ describe('MapperService', () => {
       const response7 = await pubSubDB.pubsub('abc.test', { a : 'hello' });
       expect(response7.data.b).toBe('hello world');
       expect(response7.data.c).toBe('hello world world');
-    }, 20_000);
+
+      await pubSubDB.deploy('/app/tests/$setup/apps/abc/v8/pubsubdb.yaml');
+      await pubSubDB.activate('8');
+      const response8 = await pubSubDB.pubsub('abc.test', { a : 'hello' });
+      expect(response8.data.b).toBe('hello world');
+
+      await pubSubDB.deploy('/app/tests/$setup/apps/abc/v9/pubsubdb.yaml');
+      await pubSubDB.activate('9');
+      const response9a = await pubSubDB.pubsub('abc.test', { a : 'hello' });
+      expect(response9a.data.b).toBe('hello world');
+      expect(response9a.data.c).toBe('hello world world');
+      const response9b = await pubSubDB.pubsub('abc.test', { a : 'goodbye' });
+      expect(response9b.data).toBeUndefined();
+      const response9c = await pubSubDB.pubsub('abc.test', { a : 'help' });
+      expect(response9c.data.b).toBe('help world');
+      expect(response9c.data.c).toBeUndefined();
+    }, 22_000);
   });
 });
