@@ -242,13 +242,13 @@ class EngineService {
   }
 
   // ************* COMPILER METHODS *************
-  async plan(path: string): Promise<PubSubDBManifest> {
+  async plan(pathOrYAML: string): Promise<PubSubDBManifest> {
     const compiler = new CompilerService(this.store, this.logger);
-    return await compiler.plan(path);
+    return await compiler.plan(pathOrYAML);
   }
-  async deploy(path: string): Promise<PubSubDBManifest> {
+  async deploy(pathOrYAML: string): Promise<PubSubDBManifest> {
     const compiler = new CompilerService(this.store, this.logger);
-    return await compiler.deploy(path);
+    return await compiler.deploy(pathOrYAML);
   }
 
   // ************* REPORTER METHODS *************

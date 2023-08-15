@@ -42,17 +42,19 @@ In  PubSubDB, the receiver (object C in our example), drives the transformation.
 
 Given these source objects, we want to create a new object, C, with the following structure:
 
- 1. `full_name` - Concatenate the `first_name` and `last_name` fields from object A.
- 2. `email` - Use the `email` field from object B.
- 3. `age` - Use the `age` field from object B.
- 4. `is_employee` - Set a static boolean value.
- 5. `company` - Set a static string value.
- 6. `bonus` - Set a static number value.
+ 1. `first` - Rename and map the `first_name` field from object A.
+ 2. `last` - Rename and map the `last_name` field from object A.
+ 3. `email` - Use the `email` field from object B.
+ 4. `age` - Use the `age` field from object B.
+ 5. `is_employee` - Set a static boolean value.
+ 6. `company` - Set a static string value.
+ 7. `bonus` - Set a static number value.
 
 Most fields can be mapped using a combination of object notation ({}) and static data. We use curly braces to reference and map the data from objects A and B into the corresponding fields of object C. We also include static values for `is_employee`, `company`, and `bonus`:
 
 ```yaml
-full_name: "{a.output.data.first_name} {a.output.data.last_name}"
+first: "{a.output.data.first_name}"
+last: "{a.output.data.last_name}"
 email: "{b.output.data.email}"
 age: "{b.output.data.age}"
 is_employee: true
@@ -64,7 +66,8 @@ With this YAML configuration, PubSubDB's data mapping solution will generate a n
 
 ```json
 {
-  "full_name": "John Doe",
+  "first": "John",
+  "last": "Doe",
   "email": "john.doe@example.com",
   "age": 30,
   "is_employee": true,
@@ -78,13 +81,13 @@ In some cases, you might need more complex mapping transformations than what's a
 
 ### Example 1) Ternary Syntax
 
-As stated above, PubSubDB uses a functional approach for transforming data. This approach unifies method syntax, standardizing how transformations are invoked. For example, the standard JavaScript syntax for a ternary expression is as follows:
+PubSubDB functional approach for transforming data unifies method syntax, standardizing how transformations are invoked. Although syntactic sugar is useful, it makes it difficult to reason about functional transformations given the variability of the language. For example, consider the standard JavaScript syntax for a ternary expression.
 
 ```javascript
 const sound = isDog ? "bark" : "meow";
 ```
 
-The functional approach (used by PubSubDB) is as follows:
+The functional equivalent is as follows.
 
 ```javascript
 const sound = ternary(isDog, "bark", "meow");
@@ -92,13 +95,13 @@ const sound = ternary(isDog, "bark", "meow");
 
 ### Example 2) Instance Property Syntax
 
-Consider a second example that returns the `length` of a string. The standard *property-based* approach is as follows:
+Consider a second example that uses *property-based* access to return the `length` of a string.
 
 ```javascript
 const length = someString.length
 ```
 
-On the other hand, the functional approach remains syntactically consistent:
+The functional approach remains syntactically consistent.
 
 ```javascript
 const length = stringLength(someString);
@@ -106,20 +109,19 @@ const length = stringLength(someString);
 
 ### Example 3) Instance Method Syntax
 
-Consider a third example that `joins` an array. The standard *instance method* approach is as follows:
+Consider a third example that `joins` an array by calling an *instance method*.
 
 ```javascript
 const someString = someArray.join(' ');
 ```
 
-The functional approach, by design, remains syntactically consistent:
+The functional approach, by design, remains syntactically consistent.
 
 ```javascript
 const someString = join(someArray, ' ');
 ```
 
 ### Overview of `@pipe`
-
 `@pipe` is the central mechanism for invoking functional transformations. It is executed at runtime as an array of arrays, where each row represents a transformation step. The transformed/resolved data is then used as input for the next step as necessary until all transformations have been run. This pattern works, because it executes all ECMA Script commands as functions with inputs, reducing the semantic variability of the language.
 
 There are three types of data that can be used within `@pipe`:
@@ -164,9 +166,9 @@ To better illustrate this concept, let's use a visual representation. Notice how
 
 Here's how the `@pipe` processes the rows:
 
-1. Resolve the cells in Row 0. They could be *static* or *dynamic* values.
+1. Resolve the cells in Row 0. They could be *static* or *dynamic* values or can be a *nullary function* that expects no upstream input (like {@date.now}).
 2. Pass the resolved values from Row 0 as input parameters to the *function* in cell 1 of Row 1.
-3. Resolve the *function* in Row 1 with the input parameters, and resolve any following cells.
+3. Resolve the *function* in Row 1 with the input parameters, and resolve any following cells. The following cells could be *static* or *dynamic* values or can be a *nullary function* that expects no upstream input (like {@date.now}).
 4. Pass the resolved values from Row 1 as input parameters to the *function* in cell 1 of Row 2.
 5. Repeat the process until the last row is processed.
 

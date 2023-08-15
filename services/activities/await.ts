@@ -27,6 +27,7 @@ class Await extends Activity {
 
   //********  INITIAL ENTRY POINT (A)  ********//
   async process(): Promise<string> {
+    this.logger.debug('await-process', { jid: this.context.metadata.jid, aid: this.metadata.aid });
     let telemetry: TelemetryService;
     try {
       this.setLeg(1);
@@ -60,6 +61,7 @@ class Await extends Activity {
     } finally {
       //todo: inject attribute with the spawned job id
       telemetry.endActivitySpan();
+      this.logger.debug('await-process-end', { jid: this.context.metadata.jid, aid: this.metadata.aid });
     }
   }
 

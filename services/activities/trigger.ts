@@ -29,6 +29,7 @@ class Trigger extends Activity {
   }
 
   async process(): Promise<string> {
+    this.logger.debug('trigger-process', { subscribes: this.config.subscribes });
     let telemetry: TelemetryService;
     try {
       this.setLeg(2);
@@ -62,6 +63,7 @@ class Trigger extends Activity {
     } finally {
       telemetry.endJobSpan();
       telemetry.endActivitySpan();
+      this.logger.debug('trigger-process-end', { subscribes: this.config.subscribes, jid: this.context.metadata.jid });
     }
   }
 

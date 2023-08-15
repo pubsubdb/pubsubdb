@@ -6,8 +6,20 @@ PubSubDB (a Process Database) is a wrapper for Redis that exposes a higher level
 ## What is a Process Database?
 Similar to how a relational database provides tools for modeling *tables* and  *relationships*, a process database provides tools for modeling *activities* and *transitions*. Constructs like "reading" and "writing" data still remain; however, instead of reading and writing to *tables*, the targets are *jobs* and *flows*. Importantly, the act of reading and writing data drives the perpetual behavior of the system, delivering process orchestration through the simple act of journaling state.
 
+## Are there Other Process Databases?
+Yes! [Temporal](https://temporal.io) refers to the pattern by its technical name: [Reentrant Process](https://en.wikipedia.org/wiki/Reentrancy_(computing)). Technically speaking, PubSubDB is a `Reentrant Process Engine` that runs `Reentrant Process Workflows`. But it's fundamentally different from Temporal in that the engine is an emergent property of the system. It is an operational outcome of the data journaling process. PubSubDB can run millions of simultaneous workflows using a single Redis instance. It's also much simpler to use and deploy, because there is no infrastructure to install, manage, maintain and upgrade. 
+
+*If you have Redis, you have PubSubDB.*
+
+## Are there Advantages to a Reentrant Process Architecture?
+A key component of Reentrant Processes is an understanding of retries, idempotency, and the ability to handle failures. PubSubDB provides a simple, yet powerful, mechanism for handling retries and idempotency through the use of Redis Streams. If the execution fails, the engine will retry (xclaim) the activity until the retry limit is reached. If the job succeeds, the engine will transition to the next activity.
+
+<img src="./img/lifecycle/self_perpetuation.png" alt="PubSubDB Self-Perpetuation" style="max-width:100%;width:600px;">
+
+While idempotency is guaranteed for the engine, it is impossible to guarantee for workers (workers call your functions, and are only idempotent if your functions are idempotent). Regardless, it is possible to model these exceptions in PubSubDB and design rollbacks in the YAML model. But if the workers being orchestrated are idempotent, then the entire process is idempotent and will inevitably conclude, backed by the reliability of stream semantics (xadd, xdel, xclaim, etc).
+
 ## What gets installed?
-PubSubDB is a lightweight NPM package (500KB) that gets installed anywhere a connection to Redis is needed.Essentially you call higher-level methods provided by PubSubDB (pub, sub, pubsub, etc) instead of the lower-level Redis commands (hset, xadd, etc).
+PubSubDB is a lightweight NPM package (250KB) that gets installed anywhere a connection to Redis is needed. Essentially you call higher-level methods provided by PubSubDB (pub, sub, pubsub, etc) instead of the lower-level Redis commands (hset, xadd, etc).
 
 ## Is PubSubDB an Orchestration Hub/Bus?
 Yes and No. PubSubDB was designed to deliver the functionality of an orchestration server but without the additional infrastructure demands of a traditional server. Only the outcome (process orchestration) exists. The server itself is an emergent property of the data journaling process.
@@ -16,16 +28,6 @@ Yes and No. PubSubDB was designed to deliver the functionality of an orchestrati
 PubSubDB is designed as a [distributed orchestration engine](./architecture.md) based upon the principles of CQRS. According to CQRS, *consumers* are instructed to read events from assigned topic queues while *producers* write to said queues. This division of labor is essential to the smooth running of the system. PubSubDB leverages this principle to drive the perpetual behavior of engines and workers (along with other strategies described [here](./architecture.md)). 
 
 As long as a topic queue has items, consumers will read exactly one and then journal the result to another queue. As long as all consumers (engines and workers) follow this one rule, complex, composable, multi-system workflows emerge. The "secret" to the process is to model the desired process using a DAG and then compile it into singular, stateless events that are just the right shape to be processed according to CQRS principles.
-
-## Why not use Kafka?
-Kafka (Kinesis, etc) were designed with CQRS in mind. They are journaling technologies with write guarantees baked in. The logs produced are immutable allowing for tail compaction and append-only writes to the head. Consumers are separate from Producers in this system and can be installed separately to consume the log data in a manner that makes sense for the use case at hand.
-
-The use case provided by PubSubDB is fully in-memory and provides a level of real-time interaction not guaranteed by Kafka as Kafka is a write-based system that only describes how the producer must log all events. Consumers can be installed to read from these logs, but there are no existing Kafka implementations that provide real time, composable activity orchestration. It is not a primary use case for Kafka, but one could build it using custom code and a mix of existing packages.
-
-It is important to note that PubSubDB is complementary to Kafka. It requires less change to implement, using existing legacy hardware and infrastructure (it’s just an NPM package). PubSubDB can serve as the glue between legacy systems and Kafka as its event-driven approach is complementary to both systems.
-
-## Does Redis Support Kafka-like features (single producer, etc)?
-Yes, Redis streams provide much of what Kafka does out of the box. There are slight differences, but the core principle of sequence and order serve to organize events into topics, so they can be processed by consumer groups. Blocking, one-time-delivery and similar concepts are supported.
 
 ## What is the purpose of pubSubDB.pub?
 Call `pub` to kick off a workflow. It’s a one-way fire-and-forget call. The job id is returned but otherwise there is nothing to track.
@@ -39,7 +41,7 @@ Call `pubsub` from your legacy system to kick off a workflow and wait for the re
 ## Can you update a running deployment?
 Yes, but you must make principled changes. If you update your model and delete everything, it will break. But if you want to add additional logic (like a new activity), it’s supported. Adding and updating logic is relatively straightforward, while deprecation is preferable to deletion.
 
-The system is designed to deploy new versions (the YAML execution rules) to Redis where they are held as the single source of truth. All running engines are then asked to join in a game of ping pong. If every running engine in the quorum simultaneously says “pong” 4 times in a row, then the quorum is considered to be “healthy” and “unified” and capable of real-time upgrades. 
+The system is designed to [deploy new versions](./system_lifecycle.md#deploy-version) (the YAML execution rules) to Redis where they are held as the single source of truth. All running engines are then asked to join in a [game of ping pong](./system_lifecycle.md#activate-version). If every running engine in the quorum simultaneously says “pong” 4 times in a row, then the quorum is considered to be “healthy” and “unified” and capable of real-time upgrades. 
 
 At this moment, a fifth and final message goes out, instructing all clients to stop using cached execution rules without first querying for the active version. All engines continue to run and use their cached execution rules, but they will always confirm the version to use with an extra real-time call to the server each time they process a message. 
 

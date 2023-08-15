@@ -114,8 +114,8 @@ class PubSubDBService {
   async plan(path: string): Promise<PubSubDBManifest> {
     return await this.engine?.plan(path);
   }
-  async deploy(path: string): Promise<PubSubDBManifest> {
-    return await this.engine?.deploy(path);
+  async deploy(pathOrYAML: string): Promise<PubSubDBManifest> {
+    return await this.engine?.deploy(pathOrYAML);
   }
   async activate(version: string, delay?: number): Promise<boolean> {
     //activation is a quorum operation
