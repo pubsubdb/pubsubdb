@@ -177,7 +177,7 @@ In the following dashboard (HoneyComb), the fully composed execution graph can b
 
 >The PubSubDB YAML execution models depicted in the following graph are located [here](../tests/$setup/apps/calc/v1/). Take note of how the YAML models (the DAGs) are surfaced in the telemetry dashboard as a connected graph of activities.
 
-The *FANIN* and *FANOUT* designations represent locations in the exection flow where information is exchanged via streams. *FANOUT* designates the invocation, while *FANIN* designates the response in the duplexed exchange.
+The *FANIN* and *FANOUT* designations represent locations in the exection flow where information is exchanged via streams. *FANOUT* designates the invocation, while *FANIN* designates the stream response in the duplexed exchange.
 
 **HoneyComb Trace UI**
 

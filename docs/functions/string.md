@@ -355,6 +355,77 @@ After executing the mapping rules, the resulting JSON object will be:
   "substring": "quick"
 }
 ```
+
+## string.toUpperCase
+
+The `string.toUpperCase` function converts all the characters in a string to uppercase.
+
+### Example
+Suppose there are the following input JSON objects:
+
+**Object A:**
+```json
+{
+  "output": {
+    "data": {
+      "sentence": "The quick brown fox."
+    }
+  }
+}
+```
+
+The goal is to create a new object with the `sentence` string converted to uppercase. The `string.toUpperCase` function can be used in the mapping rules as follows:
+
+```yaml
+uppercase_sentence:
+  "@pipe":
+    - ["{a.output.data.sentence}"]
+    - ["{@string.toUpperCase}"]
+```
+
+After executing the mapping rules, the resulting JSON object will be:
+
+```json
+{
+  "uppercase_sentence": "THE QUICK BROWN FOX."
+}
+```
+
+## string.toLowerCase
+
+The `string.toLowerCase` function converts all the characters in a string to lowercase.
+
+### Example
+Suppose there are the following input JSON objects:
+
+**Object A:**
+```json
+{
+"output": {
+  "data": {
+    "sentence": "The QUICK BROWN FOX."
+    }
+  }
+}
+```
+
+The goal is to create a new object with the `sentence` string converted to lowercase. The `string.toLowerCase` function can be used in the mapping rules as follows:
+
+```yaml
+lowercase_sentence:
+  "@pipe":
+    - ["{a.output.data.sentence}"]
+    - ["{@string.toLowerCase}"]
+```
+
+After executing the mapping rules, the resulting JSON object will be:
+
+```json
+{
+  "lowercase_sentence": "the quick brown fox."
+}
+```
+
 ## string.trim
 The `string.trim` function removes whitespace from both ends of a string. It takes one parameter: the string to trim.
 

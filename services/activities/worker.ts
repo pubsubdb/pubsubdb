@@ -30,6 +30,7 @@ class Worker extends Activity {
 
   //********  INITIAL ENTRY POINT (A)  ********//
   async process(): Promise<string> {
+    this.logger.debug('worker-process', { jid: this.context.metadata.jid, aid: this.metadata.aid });
     let telemetry: TelemetryService;
     try {
       this.setLeg(1);
@@ -62,6 +63,7 @@ class Worker extends Activity {
       throw error;
     } finally {
       telemetry.endActivitySpan();
+      this.logger.debug('worker-process-end', { jid: this.context.metadata.jid, aid: this.metadata.aid });
     }
   }
 

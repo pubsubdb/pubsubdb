@@ -4,7 +4,7 @@
 ## Overview
 *Take control of your critical business processes.* [[video (50s)]](https://www.loom.com/share/f17c9e856d844176b1014b0ee20c57ce)
 
-PubSubDB orchestrates and monitors distributed workflows. Unify your existing microservices or design processes from scratch. With [integrated telemetry](./docs/system_lifecycle.md#telemetry), every activity is executed in context of the entire event stream that precedes and follows. Gather real-time insight into your critical business processes and set alarms and alerts on target thresholds.
+PubSubDB orchestrates and monitors distributed workflows. [Refactor your existing microservices](./docs/refactoring101.md) or design processes from scratch. With integrated telemetry, every activity is executed in context of the entire event stream that precedes and follows. Gather real-time insight into your critical business processes and set alarms and alerts on target thresholds.
 
 ## Install
 [![npm version](https://badge.fury.io/js/%40pubsubdb%2Fpubsubdb.svg)](https://badge.fury.io/js/%40pubsubdb%2Fpubsubdb)
@@ -49,6 +49,8 @@ app:
 The activities defined in the YAML are metered in the context of the complete process, offering real-time, unified insights into your legacy functions. Detailed telemetry data includes execution time, run count (and retry count), and the number of errors encountered.
 
 <img src="./docs/img/open_telemetry.png" alt="Open Telemetry" style="width:600px;max-width:600px;">
+
+Designing workflows with PubSubDB is straightforward and effective, especially when dealing with legacy micro-service networks. For a deeper dive into how you can transform your micro-services and benefit from PubSubDB, see the [Refactoring 101 Guide](./docs/refactoring101.md).
 
 ## Initialize
 To initialize PubSubDB, pass in **three** Redis clients. This 3-channel design is crucial for its autonomous operation. PubSubDB utilizes the *store* to maintain the workflow state, the *stream* to guide activity transitions, and the *sub* to synchronize the [quorum](./docs/architecture.md) of engines.

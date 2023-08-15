@@ -1,4 +1,5 @@
 import $RefParser from '@apidevtools/json-schema-ref-parser';
+import yaml from 'js-yaml';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -24,34 +25,42 @@ class CompilerService {
    * verifies and plans the deployment of an app to Redis; the app is not deployed yet
    * @param path 
    */
-  async plan(path: string): Promise<PubSubDBManifest> {
+  async plan(mySchemaOrPath: string): Promise<PubSubDBManifest> {
     try {
-      // 0) parse the manifest file and save fully resolved as a JSON file
-      const schema = await $RefParser.dereference(path) as PubSubDBManifest;
+      let schema: PubSubDBManifest;
+      if (this.isPath(mySchemaOrPath)) {
+        schema = await $RefParser.dereference(mySchemaOrPath) as PubSubDBManifest;
+      } else {
+        schema = yaml.load(mySchemaOrPath) as PubSubDBManifest;
+      }
 
       // 1) validate the manifest file
       const validator = new Validator(schema);
       validator.validate(this.store);
 
       // 2) todo: add a PlannerService module that will plan the deployment (what might break, drift, etc)
-
       return schema as PubSubDBManifest
     } catch(err) {
       this.logger.error('compiler-plan-error', err);
     }
   }
 
-  /**
-   * deploys an app to Redis; the app is not active yet
-   * @param mySchemaPath 
-   */
-  async deploy(mySchemaPath: string, activate = false): Promise<PubSubDBManifest> {
-    try {
-      // 0) parse and resolve all $refs to create a single manifest
-      const schema = await $RefParser.dereference(mySchemaPath) as PubSubDBManifest;
+  isPath(input: string): boolean {
+    return !input.trim().startsWith('app:');
+  }
 
-      // 1) save the manifest as a JSON file
-      await this.saveAsJSON(mySchemaPath, schema);
+  /**
+   * deploys an app to Redis but does NOT activate it.
+   */
+  async deploy(mySchemaOrPath: string): Promise<PubSubDBManifest> {
+    try {
+      let schema: PubSubDBManifest;
+      if (this.isPath(mySchemaOrPath)) {
+        schema = await $RefParser.dereference(mySchemaOrPath) as PubSubDBManifest;
+        await this.saveAsJSON(mySchemaOrPath, schema);
+      } else {
+        schema = yaml.load(mySchemaOrPath) as PubSubDBManifest;
+      }
 
       // 2) validate the manifest file (synchronous operation...no callbacks)
       const validator = new Validator(schema);
@@ -63,11 +72,6 @@ class CompilerService {
 
       // 4) save the app version to Redis (so it can be activated later)
       await this.store.setApp(schema.app.id, schema.app.version);
-
-      // 5) activate
-      if (activate) {
-        await this.activate(schema.app.id, schema.app.version);
-      }
       return schema;
     } catch(err) {
       this.logger.error('compiler-deploy-error', err);
