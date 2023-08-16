@@ -1,8 +1,8 @@
-# Refactoring 101: Simplifying Micro-service Workflows with PubSubDB
+# Refactoring 101: Simplifying Microservice Workflows
 
-Consider the following micro-services network. It doesn't matter what the services do, or if it's AWS, GCP or Azure. We've all encountered systems like this and the burdensome *tech debt* they represent.
+Consider the following microservices network. It doesn't matter what the services do, or if it's AWS, GCP or Azure. We've all encountered systems like this and the burdensome *tech debt* they represent.
 
-<img src="./img/refactor/rf1.png" alt="Current State of the micro-services network with functions" style="max-width:100%;width:600px;">
+<img src="./img/refactor/rf1.png" alt="Current State of the microservices network with functions" style="max-width:100%;width:600px;">
 
 There's real value in there. Functions A, B, and C represent important company IP. But reasoning through a migration can be so challenging that often it's easier to just leave it alone or add another bandage.
 
@@ -15,7 +15,7 @@ From this vantage point, networking doesn't change. The network remains chaotic.
 
 <img src="./img/refactor/rf3.png" alt="PubSubDB reverses the information flow" style="max-width:100%;width:600px;">
 
-PubSubDB steps in as a mediator, leveraging all 3 Redis communication channels (`streams`, `data`, and `events`) to reverse the information flow and orchestrate the activities. This inversion of control is a game-changer, simplifying refactoring by plucking and orchestrating target functions idependent of the legacy network clutter.
+PubSubDB steps in as a mediator, leveraging all 3 Redis communication channels (`streams`, `data`, and `events`) to reverse the information flow and orchestrate the activities. This inversion of control is a game-changer, simplifying refactoring by plucking and orchestrating target functions independent of the legacy network clutter.
 
 ## Time to Connect Endpoints
 The approach is now clearer, allowing us to refactor without disrupting legacy processes.
@@ -66,7 +66,7 @@ const jobId = await pubSubDB.pub('sandbox.test', {});
 ```
 
 ## Wrapping Up
-By leveraging Redis, we've significantly simplified our micro-services network without causing disruptions. The network can now be viewed as a series of activities, facilitating changes without breaking the legacy process.
+By leveraging Redis, we've significantly simplified our microservices network without causing disruptions. The network can now be viewed as a series of activities, facilitating changes without breaking the legacy process.
 
 Each function orchestrated by PubSubDB runs with Queue semantics (via Redis Streams), ensuring messages are only deleted post successful function execution. Additionally, every activity orchestrated by PubSubDB [exports detailed telemetry data](./system_lifecycle.md#telemetry) to your chosen backend system. Set up alarms and alerts to stay in the loop about any issues and take control of your business processes.
 
