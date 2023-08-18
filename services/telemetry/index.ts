@@ -83,7 +83,9 @@ class TelemetryService {
 
   startStreamSpan(data: StreamData, role: StreamRole): TelemetryService {
     let type: string;
-    if (role === StreamRole.WORKER) {
+    if (role === StreamRole.SYSTEM) {
+      type = 'SYSTEM';
+    } else if (role === StreamRole.WORKER) {
       type = 'EXECUTE';
     } else if (data.type === StreamDataType.RESULT || data.type === StreamDataType.RESPONSE) {
       type = 'FANIN';

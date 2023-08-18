@@ -75,7 +75,7 @@ describe('Worker', () => {
           store: redisStore,
           stream: redisEngineStream,
           sub: redisSub,
-          xclaim: 1_500,  //default 5_000
+          reclaimDelay: 1_500,  //default 5_000
         },
         workers: [
           {
@@ -84,7 +84,7 @@ describe('Worker', () => {
             store: redisStore,
             stream: redisWorkerStream,
             sub: redisSub,
-            xclaim: 1_500, //default 60_000
+            reclaimDelay: 1_500, //default 60_000
 
             callback,
           }

@@ -1,4 +1,5 @@
 import { KeyStoreParams, KeyType } from '../../modules/key';
+import { ReclaimedMessageType } from '../../types/stream';
 import { ILogger } from '../logger';
 
 abstract class StreamService<T, U> {
@@ -43,7 +44,7 @@ abstract class StreamService<T, U> {
     consumer: string,
     minIdleTime: number,
     id: string,
-    ...args: string[]): Promise<[string, string][] | unknown[]>;
+    ...args: string[]): Promise<ReclaimedMessageType>;
   abstract xack(key: string, group: string, id: string, multi?: U): Promise<number|U>;
   abstract xdel(key: string, id: string, multi?: U): Promise<number|U>;
 }

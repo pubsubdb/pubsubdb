@@ -4,6 +4,7 @@ import { SerializerService as Serializer } from '../../serializer';
 import { Cache } from '../cache';
 import { StoreService } from '../index';
 import { RedisClientType, RedisMultiType } from '../../../types/redisclient';
+import { ReclaimedMessageType } from '../../../types/stream';
 
 class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
   redisClient: RedisClientType;
@@ -123,9 +124,9 @@ class RedisStoreService extends StoreService<RedisClientType, RedisMultiType> {
     minIdleTime: number,
     id: string,
     ...args: string[]
-  ): Promise<[string, string][]> {
+  ): Promise<ReclaimedMessageType> {
     try {
-      return await this.redisClient.sendCommand(['XCLAIM', key, group, consumer, minIdleTime.toString(), id, ...args]);
+      return await this.redisClient.sendCommand(['XCLAIM', key, group, consumer, minIdleTime.toString(), id, ...args]) as unknown as ReclaimedMessageType;
     } catch (err) {
       this.logger.error(`Error in claiming message with id: ${id} in group: ${group} for key: ${key}`, err);
       throw err;

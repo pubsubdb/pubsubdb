@@ -139,7 +139,13 @@ describe('IORedisStreamService', () => {
       let claimedMessage = pendingMessages.find(([id,consumer, ,]) => id === messageId && consumer === initialConsumer);
       expect(claimedMessage).toBeDefined();
       // Claim the message by another consumer using sendCommand
-      await redisStreamService.xclaim(key, groupName, claimantConsumer, 0, messageId);
+      const reclaimMessage = await redisStreamService.xclaim(key, groupName, claimantConsumer, 0, messageId);
+      const [messageField, messageValue] = reclaimMessage[0][1];
+      expect(messageField).toBe(field);
+      expect(messageValue).toBe(value);
+      //check for race (did another consumer claim this message?)
+      const failedReclaimAttempt = await redisStreamService.xclaim(key, groupName, claimantConsumer, 1000, messageId);
+      expect(failedReclaimAttempt.length).toBe(0);
       // Retrieve pending messages for the claimant consumer
       pendingMessages = await redisStreamService.xpending(key, groupName, '-', '+', 1, claimantConsumer) as [string, string, number, any][];
       claimedMessage = pendingMessages.find(([id,consumer, ,]) => id === messageId && consumer === claimantConsumer);

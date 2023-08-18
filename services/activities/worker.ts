@@ -103,7 +103,7 @@ class Worker extends Activity {
       let isComplete = CollatorService.isActivityComplete(this.context.metadata.js, this.config.collationInt as number);
       if (isComplete) {
         this.logger.warn('worker-onresponse-duplicate', { jid, aid, status, code });
-        this.logger.debug('worker-onresponse-duplicate-resolution', { resolution: 'Increase PubSubDB config `xclaim` timeout.' });
+        this.logger.debug('worker-onresponse-duplicate-resolution', { resolution: 'Increase PubSubDB config `reclaimDelay` timeout.' });
         return; //ok to return early here (due to xclaimed claimaint completing first)
       }
 

@@ -27,6 +27,7 @@ import {
   StatsType } from '../../types/stats';
 import { Transitions } from '../../types/transition';
 import { formatISODate, getSymKey } from '../../modules/utils';
+import { ReclaimedMessageType } from '../../types/stream';
 
 interface AbstractRedisClient {
   exec(): any;
@@ -100,7 +101,7 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
     consumer: string,
     minIdleTime: number,
     id: string,
-    ...args: string[]): Promise<[string, string][] | unknown[]>;
+    ...args: string[]): Promise<ReclaimedMessageType>;
   abstract xack(
     key: string,
     group: string,

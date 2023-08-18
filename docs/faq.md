@@ -16,10 +16,10 @@ A key component of Reentrant Processes is an understanding of retries, idempoten
 
 <img src="./img/lifecycle/self_perpetuation.png" alt="PubSubDB Self-Perpetuation" style="max-width:100%;width:600px;">
 
-While idempotency is guaranteed for the engine, it is impossible to guarantee for workers (workers call your functions, and are only idempotent if your functions are idempotent). Regardless, it is possible to model these exceptions in PubSubDB and design rollbacks in the YAML model. But if the workers being orchestrated are idempotent, then the entire process is idempotent and will inevitably conclude, backed by the reliability of stream semantics (xadd, xdel, xclaim, etc).
+While idempotency is guaranteed for the engine, it is impossible to guarantee for workers (workers call your functions, and are only idempotent if your functions are idempotent). Regardless, it is possible to model these exceptions in PubSubDB and design rollbacks in the YAML model. But if the workers being orchestrated are idempotent, then the entire process is idempotent and will inevitably conclude, backed by the reliability of stream semantics (xadd, xreadgroup, xdel, xack, xclaim, etc).
 
 ## What gets installed?
-PubSubDB is a lightweight NPM package (250KB) that gets installed anywhere a connection to Redis is needed. Essentially you call higher-level methods provided by PubSubDB (pub, sub, pubsub, etc) instead of the lower-level Redis commands (hset, xadd, etc).
+PubSubDB is a lightweight NPM package (250KB) that gets installed anywhere a connection to Redis is needed. Essentially you call higher-level methods provided by PubSubDB (pub, sub, pubsub, etc) instead of the lower-level Redis commands (hset, xadd, zadd, etc).
 
 ## Is PubSubDB an Orchestration Hub/Bus?
 Yes and No. PubSubDB was designed to deliver the functionality of an orchestration server but without the additional infrastructure demands of a traditional server. Only the outcome (process orchestration) exists. The server itself is an emergent property of the data journaling process.

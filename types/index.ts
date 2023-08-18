@@ -105,6 +105,7 @@ export {
   Segment,
   TimeSegment } from './stats';
 export {
+  ReclaimedMessageType,
   StreamCode,
   StreamConfig,
   StreamData,
