@@ -13,7 +13,8 @@ type PubSubDBEngine = {
   store: StoreService<RedisClient, RedisMulti>;
   stream: StreamService<RedisClient, RedisMulti>;
   sub: SubService<RedisClient, RedisMulti>;
-  xclaim?: number; //milliseconds
+  reclaimDelay?: number; //milliseconds
+  reclaimCount?: number;
 }
 
 type PubSubDBWorker = {
@@ -21,7 +22,8 @@ type PubSubDBWorker = {
   store: StoreService<RedisClient, RedisMulti>;
   stream: StreamService<RedisClient, RedisMulti>;
   sub: SubService<RedisClient, RedisMulti>;
-  xclaim?: number; //milliseconds
+  reclaimDelay?: number; //milliseconds
+  reclaimCount?: number;
   callback: (payload: StreamData) => Promise<StreamDataResponse|void>;
 }
 

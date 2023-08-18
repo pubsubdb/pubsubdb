@@ -6,6 +6,7 @@ import { StreamService } from '../stream';
 import { TelemetryService } from '../telemetry';
 import { RedisClient, RedisMulti } from '../../types/redis';
 import {
+  ReclaimedMessageType,
   StreamConfig,
   StreamData,
   StreamDataResponse,
@@ -21,9 +22,11 @@ const GRADUATED_INTERVAL_MS = 5000;
 const BLOCK_DURATION = 15000; //Set to `15` so SIGINT/SIGTERM can interrupt; set to `0` to BLOCK indefinitely
 const TEST_BLOCK_DURATION = 1000; //Set to `1000` so tests can interrupt quickly
 const BLOCK_TIME_MS = process.env.NODE_ENV === 'test' ? TEST_BLOCK_DURATION : BLOCK_DURATION;
+const SYSTEM_STATUS_CODE = 999;
 const UNKNOWN_STATUS_CODE = 500;
 const UNKNOWN_STATUS_MESSAGE = 'unknown';
-const XCLAIM_MS = 1000 * 60; //max time a message can be unacked before it is claimed by another
+const XCLAIM_DELAY_MS = 1000 * 60; //max time a message can be unacked before it is claimed by another
+const XCLAIM_COUNT = 3; //max number of times a message can be claimed by another before it is dead-lettered
 const XPENDING_COUNT = 10;
 
 class StreamSignaler {
@@ -34,7 +37,8 @@ class StreamSignaler {
   topic: string | undefined;
   store: StoreService<RedisClient, RedisMulti>;
   stream: StreamService<RedisClient, RedisMulti>;
-  xclaim: number;
+  reclaimDelay: number;
+  reclaimCount: number;
   logger: ILogger;
   throttle = 0;
   errorCount = 0;
@@ -48,7 +52,8 @@ class StreamSignaler {
     this.topic = config.topic;
     this.stream = stream;
     this.store = store;
-    this.xclaim = config.xclaim || XCLAIM_MS;
+    this.reclaimDelay = config.reclaimDelay || XCLAIM_DELAY_MS;
+    this.reclaimCount = config.reclaimCount || XCLAIM_COUNT;
     this.logger = logger;
   }
 
@@ -92,9 +97,9 @@ class StreamSignaler {
 
         // Check for pending messages (note: Redis 6.2 simplifies)
         const now = Date.now();
-        if (now - lastCheckedPendingMessagesAt > this.xclaim) {
+        if (now - lastCheckedPendingMessagesAt > this.reclaimDelay) {
           lastCheckedPendingMessagesAt = now;
-          const pendingMessages = await this.claimUnacknowledgedMessages(stream, group, consumer);
+          const pendingMessages = await this.claimUnacknowledged(stream, group, consumer);
           for (const [id, message] of pendingMessages) {
             await this.consumeOne(stream, group, id, message, callback);
           }
@@ -118,7 +123,7 @@ class StreamSignaler {
 
   async consumeOne(stream: string, group: string, id: string, message: string[], callback: (streamData: StreamData) => Promise<StreamDataResponse|void>) {
     this.logger.debug(`stream-consume-one-message-starting`, { id, stream, group });
-    const input: StreamData = JSON.parse(message[1]);
+    const [err, input] = this.parseStreamData(message[1]);
     let output: StreamDataResponse | void;
     let telemetry: TelemetryService;
     try {
@@ -210,6 +215,21 @@ class StreamSignaler {
     } as StreamDataResponse;
   }
 
+  structureUnacknowledgedError(input: StreamData) {
+    const message = 'stream message max delivery count exceeded';
+    const code = SYSTEM_STATUS_CODE;
+    const data: StreamError = { message, code };
+    const output: StreamDataResponse = { 
+      metadata: { ...input.metadata },
+      status: StreamStatus.ERROR,
+      code,
+      data,
+    };
+    //send unacknowleded errors to the engine (it has no topic)
+    delete output.metadata.topic;
+    return output;
+  }
+
   structureError(input: StreamData, output: StreamDataResponse): StreamDataResponse {
     const message = output.data?.message ? output.data?.message.toString() : UNKNOWN_STATUS_MESSAGE;
     const statusCode = output.code || output.data?.code;
@@ -255,19 +275,78 @@ class StreamSignaler {
     this.logger.info(`stream-throttle-reset`, { delay: this.throttle, topic: this.topic });
   }
 
-  async claimUnacknowledgedMessages(stream: string, group: string, consumer: string, idleTimeMs = this.xclaim, limit = XPENDING_COUNT): Promise<[string, [string, string]][]> {
+  async claimUnacknowledged(stream: string, group: string, consumer: string, idleTimeMs = this.reclaimDelay, limit = XPENDING_COUNT): Promise<[string, [string, string]][]> {
     let pendingMessages = [];
     const pendingMessagesInfo = await this.stream.xpending(stream, group, '-', '+', limit); //[[ '1688768134881-0', 'testConsumer1', 1017, 1 ]]
     for (const pendingMessageInfo of pendingMessagesInfo) {
       if (Array.isArray(pendingMessageInfo)) {
-        const [id, , elapsedTimeMs] = pendingMessageInfo;
+        const [id, , elapsedTimeMs, deliveryCount] = pendingMessageInfo;
         if (elapsedTimeMs > idleTimeMs) {
-          const message = await this.stream.xclaim(stream, group, consumer, idleTimeMs, id);
-          pendingMessages = pendingMessages.concat(message);
+          const reclaimedMessage = await this.stream.xclaim(stream, group, consumer, idleTimeMs, id);
+          if (reclaimedMessage.length) {
+            if (deliveryCount <= this.reclaimCount) {
+              pendingMessages = pendingMessages.concat(reclaimedMessage);
+            } else {
+              await this.expireUnacknowledged(reclaimedMessage, stream, group, consumer, id, deliveryCount);
+            }
+          }
         }
       }
     }
     return pendingMessages;
+  }
+
+  async expireUnacknowledged(reclaimedMessage: ReclaimedMessageType, stream: string, group: string, consumer: string, id: string, count: number) {
+    //The stream activity was not processed within established limits. Possibilities Include:
+    // 1) user error: the workers were not properly configured and are timing out
+    // 2a) system error: JSON is corrupt
+    //     i) bad/unwitting actor
+    //     ii) corrupt hardware/network/transport/etc
+    // 3b) system error: Redis unable to accept `xadd` request
+    // 4c) system error: Redis unable to accept `xdel`/`xack` request
+    this.logger.error('stream-message-max-delivery-count-exceeded', { id, stream, group, consumer, code: SYSTEM_STATUS_CODE, count });
+    const streamData = reclaimedMessage[0]?.[1]?.[1];
+
+    //fatal risk point 1 of 3): json is corrupt
+    const [err, input] = this.parseStreamData(streamData as string);
+    if (err) {
+      return this.logger.error('expire-unacknowledged-parse-fatal-error', { id, err })
+    } else if(!input || !input.metadata) {
+      return this.logger.error('expire-unacknowledged-parse-fatal-error', { id })
+    }
+    let telemetry: TelemetryService;
+    let messageId: string;
+    try {
+      telemetry = new TelemetryService(this.appId);
+      telemetry.startStreamSpan(input, StreamRole.SYSTEM);
+      telemetry.setStreamError(`Stream Message Max Delivery Count Exceeded`);
+
+      //fatal risk point 2 of 3): unable to publish error message (to notify the parent job)
+      const output = this.structureUnacknowledgedError(input);
+      messageId = await this.publishResponse(input, output);
+      telemetry.setStreamAttributes({ 'app.worker.mid': messageId });
+
+      //fatal risk point 3 of 3): unable to ack and delete stream message
+      await this.ackAndDelete(stream, group, id);
+    } catch (err) {
+      if (messageId) {
+        this.logger.error('expire-unacknowledged-pub-fatal-error', { id, err, ...input.metadata });
+        telemetry.setStreamAttributes({ 'app.system.fatal': 'expire-unacknowledged-pub-fatal-error' });
+      } else {
+        this.logger.error('expire-unacknowledged-ack-fatal-error', { id, err, ...input.metadata });
+        telemetry.setStreamAttributes({ 'app.system.fatal': 'expire-unacknowledged-ack-fatal-error' });
+      }
+    } finally {
+      telemetry.endStreamSpan();
+    }
+  }
+
+  parseStreamData(str: string): [undefined, StreamData] | [Error] {
+    try {
+      return [,JSON.parse(str)];
+    } catch (e) {
+      return [e as Error];
+    }
   }
 }
 

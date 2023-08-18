@@ -52,7 +52,16 @@ export interface StreamDataResponse extends StreamData {}
 export enum StreamRole {
   WORKER = 'worker',
   ENGINE = 'engine',
+  SYSTEM = 'system', //reserved for system use (i.e, if worker or engine fails)
 }
+
+export type ReclaimedMessageType = [
+  messageId: string, //stream id (e.g.,`<timestamp>-<count>`)
+  details: [
+    key: string,     //`key' is always 'message'
+    value: string    //`value` is stringified StreamData (StreamDataType)
+  ]
+][];                 //wrapped in an outer array
 
 export type StreamConfig = {
   namespace: string;
@@ -60,5 +69,6 @@ export type StreamConfig = {
   guid: string;
   role: StreamRole;
   topic?: string;
-  xclaim?: number; //default 60_000
+  reclaimDelay?: number; //default 60_000
+  reclaimCount?: number; //default 3 (any value greater throws an error)
 }

@@ -2,6 +2,7 @@ import { KeyService, KeyStoreParams, KeyType, PSNS } from '../../../modules/key'
 import { ILogger } from '../../logger';
 import { StreamService } from '../index';
 import { RedisClientType, RedisMultiType } from '../../../types/redisclient';
+import { ReclaimedMessageType } from '../../../types/stream';
 
 class RedisStreamService extends StreamService<RedisClientType, RedisMultiType> {
   redisClient: RedisClientType;
@@ -98,9 +99,9 @@ class RedisStreamService extends StreamService<RedisClientType, RedisMultiType> 
     minIdleTime: number,
     id: string,
     ...args: string[]
-  ): Promise<[string, string][]> {
+  ): Promise<ReclaimedMessageType> {
     try {
-      return await this.redisClient.sendCommand(['XCLAIM', key, group, consumer, minIdleTime.toString(), id, ...args]);
+      return await this.redisClient.sendCommand(['XCLAIM', key, group, consumer, minIdleTime.toString(), id, ...args]) as unknown as ReclaimedMessageType;
     } catch (err) {
       this.logger.error(`Error in claiming message with id: ${id} in group: ${group} for key: ${key}`, err);
       throw err;
