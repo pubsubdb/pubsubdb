@@ -11,7 +11,7 @@ This README provides an overview of the `PubSubDB` runtime engine. The document 
 6. [Telemetry](#telemetry)
 
 ## Init Engine and Quorum
-The engine is the core of the PubSubDB system and is responsible for running activities according to its execution rules. Every engine instance is initialized with a corresponding Quorum instance that serves to coordinate activities with other engines in the network. It is purposefully kept separate from the engine which is focused on workflow processes.
+The engine is the core of the PubSubDB system and is responsible for running activities according to the YAML execution rules. Every *engine* instance is initialized with a corresponding *quorum* instance which coordinates its activity with all other engines in the network.
 
 ```javascript
 import {

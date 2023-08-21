@@ -1,7 +1,9 @@
+import { matchesStatus, matchesStatusCode } from "../../modules/utils";
 import { Pipe } from "../pipe";
 import { JobState } from "../../types/job";
 import { Pipe as PipeType } from "../../types/pipe";
 import { TransitionMatch, TransitionRule } from "../../types/transition";
+import { StreamCode, StreamStatus } from "../../types";
 
 type RuleType = null | undefined | boolean | string | number | Date | Record<string, any>;
 
@@ -54,24 +56,27 @@ class MapperService {
     return pipe.process();
   }
 
-  static evaluate(transitionRule: TransitionRule|boolean, context: JobState): boolean {
+  static evaluate(transitionRule: TransitionRule | boolean, context: JobState, code: StreamCode): boolean {
     if (typeof transitionRule === 'boolean') {
       return transitionRule;
     }
-    const orGate = transitionRule.gate === 'or';
-    let allAreTrue = true;
-    let someAreTrue = false;
-    transitionRule.match.forEach(({ expected, actual }: TransitionMatch) => {
-      if ((orGate && !someAreTrue) || (!orGate && allAreTrue)) {
-        const result = Pipe.resolve(actual, context) === expected;
-        if (orGate && result) {
-          someAreTrue = true;
-        } else if(!orGate && !result) {
-          allAreTrue = false;
+    if (code.toString() === (transitionRule.code || 200).toString()) {
+      const orGate = transitionRule.gate === 'or';
+      let allAreTrue = true;
+      let someAreTrue = false;
+      transitionRule.match.forEach(({ expected, actual }: TransitionMatch) => {
+        if ((orGate && !someAreTrue) || (!orGate && allAreTrue)) {
+          const result = Pipe.resolve(actual, context) === expected;
+          if (orGate && result) {
+            someAreTrue = true;
+          } else if(!orGate && !result) {
+            allAreTrue = false;
+          }
         }
-      }
-    });
-    return orGate ? someAreTrue : allAreTrue;
+      });
+      return orGate ? someAreTrue : allAreTrue;
+    }
+    return false;
   }
 }
 

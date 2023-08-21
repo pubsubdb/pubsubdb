@@ -71,7 +71,7 @@ class StreamSignaler {
   }
 
   async consumeMessages(stream: string, group: string, consumer: string, callback: (streamData: StreamData) => Promise<StreamDataResponse|void>): Promise<void> {
-    this.logger.info(`stream-consume-message-starting`, { group, consumer, stream });
+    this.logger.info(`stream-consumer-starting`, { group, consumer, stream });
     StreamSignaler.signalers.add(this);
     this.shouldConsume = true;
     await this.createGroup(stream, group);
@@ -122,7 +122,7 @@ class StreamSignaler {
   }
 
   async consumeOne(stream: string, group: string, id: string, message: string[], callback: (streamData: StreamData) => Promise<StreamDataResponse|void>) {
-    this.logger.debug(`stream-consume-one-message-starting`, { id, stream, group });
+    this.logger.debug(`stream-consume-one`, { group, stream, id });
     const [err, input] = this.parseStreamData(message[1]);
     let output: StreamDataResponse | void;
     let telemetry: TelemetryService;
@@ -135,13 +135,14 @@ class StreamSignaler {
       }
       this.errorCount = 0;
     } catch (err) {
-      this.logger.error(`stream-consume-one-message-error`, { err, id, stream, group });
+      this.logger.error(`stream-consume-one-error`, { group, stream, id, err });
       telemetry.setStreamError(err.message);
     }
     const messageId = await this.publishResponse(input, output);
     telemetry.setStreamAttributes({ 'app.worker.mid': messageId });
     await this.ackAndDelete(stream, group, id);
     telemetry.endStreamSpan();
+    this.logger.debug(`stream-consume-one-end`, { group, stream, id });
   }
 
   async execStreamLeg(input: StreamData, stream: string, id: string, callback: (streamData: StreamData) => Promise<StreamDataResponse|void>) {
@@ -149,7 +150,7 @@ class StreamSignaler {
     try {
       output = await callback(input);
     } catch (err) {
-      this.logger.error(`stream-call-function-error`, { err, id, stream });
+      this.logger.error(`stream-call-function-error`, { stream, id, err });
       output = this.structureUnhandledError(input, err);
     }
     return output as StreamDataResponse;
@@ -255,7 +256,7 @@ class StreamSignaler {
   
   async stopConsuming() {
     this.shouldConsume = false;
-    this.logger.info(`stream-consumer-starting`, this.topic ? { topic: this.topic } : undefined);
+    this.logger.info(`stream-consumer-stopping`, this.topic ? { topic: this.topic } : undefined);
     this.cancelThrottle();
     await sleepFor(BLOCK_TIME_MS);
   }

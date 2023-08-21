@@ -2,12 +2,13 @@ import { Pipe } from "./pipe";
 
 //TransitionMatch type: { expected: false, actual: '{a2.output.data.approved}' }
 export type TransitionMatch = {
-  expected: boolean|string|number|null;
-  actual: boolean|string|number|null|{ '@pipe': Pipe };
+  expected: boolean | string | number | null;
+  actual: boolean | string | number | null | { '@pipe': Pipe };
 }
 
 export type TransitionRule = {
-  gate?: 'and'|'or'; //and is default
+  gate?: 'and'|'or'; //`and` is default
+  code?: string; //200 is default; must be an eplicit 3-digit code and must have an associated output schema matching this value to compile
   match: Array<TransitionMatch>;
 }
 
