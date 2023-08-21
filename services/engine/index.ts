@@ -280,7 +280,7 @@ class EngineService {
 
   // ****************** STREAM RE-ENTRY POINT *****************
   async processStreamMessage(streamData: StreamDataResponse): Promise<void> {
-    this.logger.debug('engine-process-stream-message-started', {
+    this.logger.debug('engine-process-stream-message', {
       jid: streamData.metadata.jid,
       aid: streamData.metadata.aid,
       status: streamData.status || StreamStatus.SUCCESS,
@@ -314,12 +314,15 @@ class EngineService {
       await activityHandler.process();
     } else if (streamData.type === StreamDataType.RESULT) {
       const activityHandler = await this.initActivity(`.${context.metadata.aid}`, streamData.data, context as JobState) as Await;
-      await activityHandler.resolveAwait(streamData.status, streamData.code);
+      await activityHandler.processEvent(streamData.status, streamData.code);
     } else {
-      const activityHandler = await this.initActivity(`.${streamData.metadata.aid}`, context.data, context as JobState) as Worker;
-      await activityHandler.processWorkerEvent(streamData.status, streamData.code);
+      const activityHandler = await this.initActivity(`.${streamData.metadata.aid}`, streamData.data, context as JobState) as Worker;
+      await activityHandler.processEvent(streamData.status, streamData.code);
     }
-    this.logger.debug('engine-process-stream-message-stopped');
+    this.logger.debug('engine-process-stream-message-end', {
+      jid: streamData.metadata.jid,
+      aid: streamData.metadata.aid
+    });
   }
 
   // ***************** `AWAIT` ACTIVITY RETURN RESPONSE ****************

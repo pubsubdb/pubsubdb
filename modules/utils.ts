@@ -2,6 +2,7 @@ import { StoreService } from "../services/store";
 import { AppSubscriptions, AppTransitions, AppVID } from "../types/app";
 import { RedisClient, RedisMulti } from "../types/redis";
 import { StringAnyType } from "../types/serializer";
+import { StreamCode, StreamStatus } from "../types/stream";
 
 export function getGuid() {
   const randomTenDigitNumber = Math.floor(Math.random() * 1e10);
@@ -10,6 +11,19 @@ export function getGuid() {
 
 export async function sleepFor(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export function matchesStatusCode(code: StreamCode, pattern: string | RegExp): boolean {
+  if (typeof pattern === 'string') {
+    // Convert '*' wildcard to its regex equivalent (\d)
+    const regexPattern = `^${pattern.replace(/\*/g, "\\d")}$`;
+    return new RegExp(regexPattern).test(code.toString());
+  }
+  return pattern.test(code.toString());
+}
+
+export function matchesStatus(status: StreamStatus, targetStatus: StreamStatus): boolean {
+  return status === targetStatus;
 }
 
 export function XSleepFor(ms: number): { promise: Promise<unknown>, timerId: NodeJS.Timeout } {

@@ -87,14 +87,14 @@ class Worker extends Activity {
   }
 
 
-  //********  RE-ENTRY POINT (DUPLEX LEG 2 of 2)  ********//
-  async processWorkerEvent(status: StreamStatus = StreamStatus.SUCCESS, code: StreamCode = 200): Promise<void> {
+  //********  SIGNAL RE-ENTRY POINT (DUPLEX LEG 2 of 2)  ********//
+  async processEvent(status: StreamStatus = StreamStatus.SUCCESS, code: StreamCode = 200): Promise<void> {
     this.setLeg(2);
     const jid = this.context.metadata.jid;
     const aid = this.metadata.aid;
     this.status = status;
     this.code = code;
-    this.logger.debug('engine-process-worker-event', { jid, aid, topic: this.config.subtype });
+    this.logger.debug('worker-process-event', { topic: this.config.subtype, jid, aid, status, code });
     let telemetry: TelemetryService;
     try {
       await this.getState();
@@ -102,9 +102,9 @@ class Worker extends Activity {
       telemetry.startActivitySpan(this.leg);
       let isComplete = CollatorService.isActivityComplete(this.context.metadata.js, this.config.collationInt as number);
       if (isComplete) {
-        this.logger.warn('worker-onresponse-duplicate', { jid, aid, status, code });
-        this.logger.debug('worker-onresponse-duplicate-resolution', { resolution: 'Increase PubSubDB config `reclaimDelay` timeout.' });
-        return; //ok to return early here (due to xclaimed claimaint completing first)
+        this.logger.warn('worker-process-event-duplicate', { jid, aid });
+        this.logger.debug('worker-process-event-duplicate-resolution', { resolution: 'Increase PubSubDB config `reclaimDelay` timeout.' });
+        return;
       }
 
       if (status === StreamStatus.PENDING) {
@@ -122,11 +122,12 @@ class Worker extends Activity {
         this.transition(isComplete);
       }
     } catch (error) {
-      this.logger.error('worker-process-worker-event-error', error);
+      this.logger.error('worker-process-event-error', error);
       telemetry.setActivityError(error.message);
       throw error;
     } finally {
       telemetry.endActivitySpan();
+      this.logger.debug('worker-process-event-end', { jid, aid });
     }
   }
 

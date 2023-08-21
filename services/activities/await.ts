@@ -90,14 +90,14 @@ class Await extends Activity {
   //********  `RESOLVE` ENTRY POINT (B)  ********//
   //this method is invoked when the job spawned by this job ends;
   //`this.data` is the job data produced by the spawned job
-  async resolveAwait(status: StreamStatus = StreamStatus.SUCCESS, code: StreamCode = 200): Promise<void> {
+  async processEvent(status: StreamStatus = StreamStatus.SUCCESS, code: StreamCode = 200): Promise<void> {
     this.setLeg(2);
     const jid = this.context.metadata.jid;
     const aid = this.metadata.aid;
     if (!jid) {
-      throw new Error('service/activities/await:resolveAwait: missing jid in job context');
+      throw new Error('await-process-event-error');
     }
-    this.logger.debug('await-onresponse-started', { jid, aid, status, code });
+    this.logger.debug('await-resolve-await', { jid, aid, status, code });
     this.status = status;
     this.code = code;
     let telemetry: TelemetryService;
@@ -123,6 +123,7 @@ class Await extends Activity {
       throw error;
     } finally {
       telemetry.endActivitySpan();
+      this.logger.debug('await-resolve-await-end', { jid, aid, status, code });
     }
   }
 

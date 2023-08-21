@@ -393,8 +393,8 @@ class Activity {
       const transition = transitions[`.${this.metadata.aid}`];
       if (transition) {
         for (const toActivityId in transition) {
-          const transitionRule: boolean|TransitionRule = transition[toActivityId];
-          if (MapperService.evaluate(transitionRule, this.context)) {
+          const transitionRule: boolean | TransitionRule = transition[toActivityId];
+          if (MapperService.evaluate(transitionRule, this.context, this.code)) {
             await this.execAdjacent(toActivityId);
           } else {
             //cancelled transitions cascade
