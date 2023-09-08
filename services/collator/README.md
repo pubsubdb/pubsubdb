@@ -1,110 +1,102 @@
-# Collation Service
+# Activity State Tracking
 
-The Collation Service tracks the state of all activities in a running graph (i.e., "Job"), using a multi-digit collation key. Each digit in the collation key represents the status of a single activity in the graph.
+This document explains how PubSubDB guarantees activity state management using a 15-digit integer. This mechanism is crucial for monitoring and controlling the activity's lifecycle across two legs (Leg1 and Leg2) and ensures that activities are never processed. The process further ensures that catastrophic, in-process failures will be automatically resolved with respect to idempotency, makig it possible to build 100% fault-tolerant workflows.
 
-- 9: Pending
-- 8: Started
-- 7: Errored
-- 6: Completed
-- 5: Paused
-- 4: Released
-- 3: Skipped
-- 2: `Await` Right Parentheses
-- 1: `Await` Left Parentheses
-- 0: N/A (the flow has fewer activities than the collation key)
+## Overview
 
-### Compositional Status
-The 2 and 1 digits serve to bookend subordinated workflows and can be used to communicate compositional job state. For example, a compositional state of `99996146636629` reveals that **two** separate workflows were successfully completed. The first flow (Flow A) called the second flow (Flow B). Specifically, activity 5 in Flow A invoked Flow B. Activity A was suspended until Activity B successfully returned its response. The final state for both flows is:
+The 15-digit integer serves as a semaphore, starting with the value `999000000000000`. Each digit has a specific purpose:
 
-* Flow A: `999969000000000`
-* Flow B: `466366000000000`
+- The first three digits track the lifecycle status for Legs 1 and 2.
+- The last 12 digits represent 1 million possible dimensional threads that can be spawned by this activity.
 
-## Examples
- Consider a flow with this activity sequence:
- 
- `quick => brown => fox => (jumped|(slept => ate))`
- 
- Because a DAG doesn't guarantee sibling node order, ascending string sorting was chosen. The sorted ids for this sequence of activities would be:
- 
- `["ate", "brown", "fox", "jumped", "quick", "slept"]`
- 
- Even though the trigger (quick) is **first** in the graph, it is alphabetically  **fifth**. This means that once the trigger completes, the value of the collation key will be `999969000000000`.
+### Digit Details
 
-### Example 1: 968969000000000
+    999000000000000
+    ^-------------- Leg1 Entry Status
+     ^------------- Leg1 Exit Status
+       ^^^^^^------ Leg2 Dimensional Thread Entry Count
+             ^^^^^^ Leg2 Dimensional Thread Exit Count
+      ^------------ Leg2 Exit Status
 
-The `quick` and `brown` activities have *completed* and `fox` is currently *started*.
+>*Dimensional Threads* isolate and track those activities in the workflow that run in a *cycle*. They ensure that no naming collisions occur, even if the same activity is run multiple times.
 
-| Activity | State   | Numeric Value |
-| -------- | ------- | ------------- |
-| quick    | Completed | 6           |
-| brown    | Completed | 6           |
-| fox      | Started   | 8           |
-| jumped   | Pending   | 9           |
-| slept    | Pending   | 9           |
-| ate      | Pending   | 9           |
+## Leg1 Lifecycle
 
-### Example 2: 366863000000000
-The `quick`, `brown`, and `fox` activities have *completed* and `jumped` is currently *started*. The `slept` activity was *skipped* and its child activity, `ate` is *unreachable*.
+### Initialization
 
-| Activity | State   | Numeric Value |
-| -------- | ------- | ------------- |
-| quick    | Completed | 6           |
-| brown    | Completed | 6           |
-| fox      | Completed | 6           |
-| jumped   | Started   | 8           |
-| slept    | Skipped   | 3           |
-| ate      | Skipped   | 3           |
+The parent activity initializes the integer value (`999000000000000`) and saves it to Redis upon saving its own state. The parent then adds the child activity to the proper stream channel for eventual processing.
 
-### Example 3: 366663000000000
-The `quick`, `brown`, `fox`, and `jumped` activities have *completed*. The `slept` activity was *skipped* and its child activity, `ate` is *unreachable*.
+>Streams are used when executing an activity (such as transitioning to a child activity) as they guarantee that the child activity will be fully created and initialized before the request is marked for deletion. Even if the system has a catastrophic failure, the chain of custody can be guaranteed through the use of streams when the system comes online.
 
->NOTE: This flow is considered 'complete' as no activities are active (6, 3). At execution time, one can assume that the `jumped` activity likely decremented its value by '2' units upon completion of the activity, resulting in a final integer of `366663000000000`. The engine would know based upon this value that no other activity is possibly active or otherwise pending and would complete the job.
+### Beginning of Leg1
 
-| Activity | State   | Numeric Value |
-| -------- | ------- | ------------- |
-| quick    | Completed     | 6       |
-| brown    | Completed     | 6       |
-| fox      | Completed     | 6       |
-| jumped   | Completed     | 6       |
-| slept    | Skipped       | 3       |
-| ate      | Skipped       | 3       |
+When Leg1 begins (when an activity is dequeued from its stream channel), the integer is decremented by 100 trillion:
 
-### Example 4: 566366000000000
-The `quick`, `brown`, `fox`, and `slept` activities have *completed*. The `jumped` activity was *skipped*. The `ate` activity has already completed and is now in a *paused* state, awaiting release.
+    HINCRBY -100000000000000
 
-| Activity | State     | Numeric Value |
-| -------- | --------- | ------------- |
-| quick    | Completed | 6             |
-| brown    | Completed | 6             |
-| fox      | Completed | 6             |
-| jumped   | Skipped   | 3             |
-| slept    | Completed | 6             |
-| ate      | Paused    | 5             |
+Result:
 
-### Example 5: 466366000000000
-The `quick`, `brown`, `fox`, and `slept` activities have *completed*. The `jumped` activity was *skipped*. The `ate` activity was paused and has now been *released* (4).
+    899000000000000
 
->NOTE: This flow is considered 'complete' as no activities are active (6, 4, 3). At execution time, one can assume that the `ate` activity would have decremented its value by '1' unit upon resumption of the paused activity state (5 => 4), resulting in a final integer of `466366000000000`. The engine would know based upon this value that no other activity is possibly active and would complete the job.
+### Conclusion of Leg1
 
-| Activity | State     | Numeric Value |
-| -------- | --------- | ------------- |
-| quick    | Completed | 6             |
-| brown    | Completed | 6             |
-| fox      | Completed | 6             |
-| jumped   | Skipped   | 3             |
-| slept    | Completed | 6             |
-| ate      | Released  | 4             |
+At the conclusion of Leg1, the integer is decremented by 10 trillion:
 
-### ERROR Example: 766366000000000
-The `ate` activity returned an *error* and the `jumped` activity was *skipped*. All other activities *completed* normally.
+    HINCRBY -10000000000000
 
->NOTE: This flow is considered 'complete' as no activities are active (7, 6, 3). At execution time, one can assume that the `ate` activity would decrement its value by '1' unit after an unsuccessful execution (8 => 7), resulting in a final integer of `766366000000000`. The engine would know based upon this value that no other activity is possibly active and would complete the job in an error state.
+Result:
 
-| Activity | State     | Numeric Value |
-| -------- | --------- | ------------- |
-| quick    | Completed | 6             |
-| brown    | Completed | 6             |
-| fox      | Completed | 6             |
-| jumped   | Skipped   | 3             |
-| slept    | Completed | 6             |
-| *ate*    | *Errored* | *7*           |
+    889000000000000
+
+### Error Handling
+
+- If the value upon entering is `799############` (after decrementing the integer), Leg1 began but crashed before completion. The activity will perform the necessary cleanup and re-run the activity.
+- If the value upon entering is `789############` (after decrementing the integer), Leg1 completed successfully and the activity should end. It is likely that the system crashed last time before acking and deleting. Verify transitions succeeded and resolve as necessary.
+
+## Leg2 Lifecycle
+
+Leg2 supports multiple inputs and repeated responses. A worker can respond with a 'pending' status, allowing multiple inputs.
+
+### Beginning of Leg2
+
+On the first Leg2 input, the integer is incremented by 1 million:
+
+    HINCRBY 1000000
+
+Result:
+
+    889000001000000
+
+### Pending Status
+
+If the call status is 'pending', the digit is updated to reflect the successful completion of Leg2 but the third digit from the left will be untouched as the activity is pending and Leg2 should not end quite yet:
+
+    HINCRBY 1
+
+Result:
+
+    889000001000001
+
+### Success Status
+
+If the next message call to Leg2 entry is 'success', the process will begin as before, and the integer will be incremented by 1 million:
+
+    HINCRBY 1000000
+
+Result:
+
+    889000002000001
+
+ But because this is not a 'pending' message, the integer should be updated differently, targeting both the dimensional thread counter as well as the third digit from the left that tracks Leg2 status (e.g., `1 - 1000000000 = -999999999`).
+
+    HINCRBY -999999999999
+
+Result:
+
+    888000002000002
+
+>If an additional Leg2 call were to be received after this point, the result would be `888000003000002`. However, becuase the third digit is `8`, Leg2 access is not allowed and the system will conclude by decrementing the value it just set and returning immediately, so that the calling worker can mark and delete the stream entry.
+
+## Conclusion
+
+This 15-digit integer allows sophisticated tracking of complex activities across two legs, with error handling and support for multiple dimensional threads.

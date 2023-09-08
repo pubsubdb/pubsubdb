@@ -1,15 +1,25 @@
 import { KeyType } from "../../modules/key";
 import { ILogger } from "../logger";
 import { StreamSignaler } from "../signaler/stream";
-import { StreamService } from "../stream";
-import { StoreService } from "../store";
-import { SubService } from "../sub";
+import { StoreService } from '../store';
+import { RedisStoreService as RedisStore } from '../store/clients/redis';
+import { IORedisStoreService as IORedisStore } from '../store/clients/ioredis';
+import { StreamService } from '../stream';
+import { RedisStreamService as RedisStream } from '../stream/clients/redis';
+import { IORedisStreamService as IORedisStream } from '../stream/clients/ioredis';
+import { SubService } from '../sub';
+import { IORedisSubService as IORedisSub } from '../sub/clients/ioredis';
+import { RedisSubService as RedisSub } from '../sub/clients/redis';
+import { RedisClientType as IORedisClientType } from '../../types/ioredisclient';
 import { PubSubDBConfig, PubSubDBWorker } from "../../types/pubsubdb";
 import {
   QuorumMessage,
   SubscriptionCallback } from "../../types/quorum";
 import { RedisClient, RedisMulti } from "../../types/redis";
+import { RedisClientType } from '../../types/redisclient';
 import { StreamRole } from "../../types/stream";
+import { identifyRedisType } from "../../modules/utils";
+import { ConnectorService } from "../connector";
 
 class WorkerService {
   namespace: string;
@@ -34,7 +44,13 @@ class WorkerService {
     const services: WorkerService[] = [];
     if (Array.isArray(config.workers)) {
       for (const worker of config.workers) {
-        //initialize and verify worker config
+
+        await ConnectorService.initRedisClients(
+          worker.redis?.class,
+          worker.redis?.options,
+          worker,
+        );
+  
         const service = new WorkerService();
         service.verifyWorkerFields(worker);
         service.namespace = namespace;
@@ -43,50 +59,16 @@ class WorkerService {
         service.topic = worker.topic;
         service.config = config;
         service.logger = logger;
-        //init `store` interface (for publishing responses to the buffer)
-        service.store = worker.store;
-        await worker.store.init(
-          service.namespace,
-          service.appId,
-          logger
-        );
-        //initialize the `sub` client (only types in subscriptionHandler are reacted to)
-        service.subscribe = worker.sub;
-        await worker.sub.init(
-          service.namespace,
-          service.appId,
-          service.guid,
-          service.logger
-        );
-        //general quorum subscription (to receive all quorum messages)
+
+        await service.initStoreChannel(service, worker.store);
+        await service.initSubChannel(service, worker.sub);
         await service.subscribe.subscribe(KeyType.QUORUM, service.subscriptionHandler(), appId);
-        //worker-specific targeting (for quorum messages targeting this worker's topic)
         await service.subscribe.subscribe(KeyType.QUORUM, service.subscriptionHandler(), appId, service.topic);
-        //app-specific quorum subscription (used for pubsub one-time request/response)
         await service.subscribe.subscribe(KeyType.QUORUM, service.subscriptionHandler(), appId, service.guid);
-        //init `stream` interface (for consuming buffered messages)
-        service.stream = worker.stream;
-        await worker.stream.init(
-          service.namespace,
-          service.appId,
-          logger
-        );
-        //start consuming messages (this is a blocking call; never use worker.stream for anything else!)
-        const key = worker.stream.mintKey(KeyType.STREAMS, { appId: service.appId, topic: worker.topic });
-        service.streamSignaler = new StreamSignaler(
-          {
-            namespace: service.namespace,
-            appId: service.appId,
-            guid: service.guid,
-            role: StreamRole.WORKER,
-            topic: worker.topic,
-            reclaimDelay: worker.reclaimDelay,
-            reclaimCount: worker.reclaimCount,
-          },
-          worker.stream,
-          worker.store,
-          logger
-        );
+        await service.initStreamChannel(service, worker.stream);
+        service.streamSignaler = service.initStreamSignaler(worker, logger);
+
+        const key = service.stream.mintKey(KeyType.STREAMS, { appId: service.appId, topic: worker.topic });
         await service.streamSignaler.consumeMessages(
           key,
           'WORKER',
@@ -100,12 +82,69 @@ class WorkerService {
   }
 
   verifyWorkerFields(worker: PubSubDBWorker) {
-    if (!(worker.store instanceof StoreService) || 
-      !(worker.stream instanceof StreamService) ||
-      !(worker.sub instanceof SubService) ||
+    if ((!identifyRedisType(worker.store) || 
+      !identifyRedisType(worker.stream)||
+      !identifyRedisType(worker.sub)) ||
       !(worker.topic && worker.callback)) {
       throw new Error('worker must include `store`, `stream`, and `sub` fields along with a callback function and topic.');
     }
+  }
+
+  async initStoreChannel(service: WorkerService, store: RedisClient) {
+    if (identifyRedisType(store) === 'redis') {
+      service.store = new RedisStore(store as RedisClientType);
+    } else {
+      service.store = new IORedisStore(store as IORedisClientType);
+    }
+    await service.store.init(
+      service.namespace,
+      service.appId,
+      service.logger
+    );
+  }
+
+  async initSubChannel(service: WorkerService, sub: RedisClient) {
+    if (identifyRedisType(sub) === 'redis') {
+      service.subscribe = new RedisSub(sub as RedisClientType);
+    } else {
+      service.subscribe = new IORedisSub(sub as IORedisClientType);
+    }
+    await service.subscribe.init(
+      service.namespace,
+      service.appId,
+      service.guid,
+      service.logger
+    );
+  }
+
+  async initStreamChannel(service: WorkerService, stream: RedisClient) {
+    if (identifyRedisType(stream) === 'redis') {
+      service.stream = new RedisStream(stream as RedisClientType);
+    } else {
+      service.stream = new IORedisStream(stream as IORedisClientType);
+    }
+    await service.stream.init(
+      service.namespace,
+      service.appId,
+      service.logger
+    );
+  }
+
+  initStreamSignaler(worker: PubSubDBWorker, logger: ILogger): StreamSignaler {
+    return new StreamSignaler(
+      {
+        namespace: this.namespace,
+        appId: this.appId,
+        guid: this.guid,
+        role: StreamRole.WORKER,
+        topic: worker.topic,
+        reclaimDelay: worker.reclaimDelay,
+        reclaimCount: worker.reclaimCount,
+      },
+      this.stream,
+      this.store,
+      logger,
+    );
   }
 
   subscriptionHandler(): SubscriptionCallback {

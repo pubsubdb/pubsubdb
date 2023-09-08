@@ -2,13 +2,13 @@ import { KeyType } from '../../modules/key';
 import {
   formatISODate,
   getSubscriptionTopic,
+  identifyRedisType,
   restoreHierarchy } from '../../modules/utils';
 import Activities from '../activities';
 import { Activity } from '../activities/activity';
 import { Await } from '../activities/await';
 import { Worker } from '../activities/worker';
 import { Trigger } from '../activities/trigger';
-import { CollatorService } from '../collator';
 import { CompilerService } from '../compiler';
 import { ILogger } from '../logger';
 import { ReporterService } from '../reporter';
@@ -16,8 +16,14 @@ import { SerializerService } from '../serializer';
 import { StoreSignaler } from '../signaler/store';
 import { StreamSignaler } from '../signaler/stream';
 import { StoreService } from '../store';
+import { RedisStoreService as RedisStore } from '../store/clients/redis';
+import { IORedisStoreService as IORedisStore } from '../store/clients/ioredis';
 import { StreamService } from '../stream';
+import { RedisStreamService as RedisStream } from '../stream/clients/redis';
+import { IORedisStreamService as IORedisStream } from '../stream/clients/ioredis';
 import { SubService } from '../sub';
+import { IORedisSubService as IORedisSub } from '../sub/clients/ioredis';
+import { RedisSubService as RedisSub } from '../sub/clients/redis';
 import { TaskService } from '../task';
 import { AppVID } from '../../types/app';
 import {
@@ -25,6 +31,7 @@ import {
   ActivityType,
   Consumes } from '../../types/activity';
 import { CacheMode } from '../../types/cache';
+import { RedisClientType as IORedisClientType } from '../../types/ioredisclient';
 import {
   JobState,
   JobData,
@@ -42,6 +49,7 @@ import {
   JobMessageCallback,
   SubscriptionCallback } from '../../types/quorum';
 import { RedisClient, RedisMulti } from '../../types/redis';
+import { RedisClientType } from '../../types/redisclient';
 import {
   GetStatsOptions,
   IdsResponse,
@@ -89,58 +97,26 @@ class EngineService {
       instance.guid = guid;
       instance.logger = logger;
 
-      //initialize the `store` client (read/write data access)
-      instance.store = config.engine.store;
-      instance.apps = await instance.store.init(
-        instance.namespace,
-        instance.appId,
-        instance.logger,
-      );
+      await instance.initStoreChannel(config.engine.store);
+      await instance.initSubChannel(config.engine.sub);
+      await instance.initStreamChannel(config.engine.stream);
+      instance.streamSignaler = instance.initStreamSignaler(config);
 
-      //initialize the `subscribe` client (allows global user subscriptions to topics)
-      instance.subscribe = config.engine.sub;
-      await instance.subscribe.init(
-        instance.namespace,
-        instance.appId,
-        instance.guid,
-        instance.logger
-      );
-
-      //initialize the `stream` client (get buffered engine tasks)
-      instance.stream = config.engine.stream;
-      instance.stream.init(
-        instance.namespace,
-        instance.appId,
-        instance.logger,
-      );
-      const key = instance.stream.mintKey(
-        KeyType.STREAMS,
-        { appId: instance.appId },
-      );
-      instance.streamSignaler = new StreamSignaler(
-        {
-          namespace: instance.namespace,
-          appId: instance.appId,
-          guid: instance.guid,
-          role: StreamRole.ENGINE,
-          reclaimDelay: config.engine.reclaimDelay,
-          reclaimCount: config.engine.reclaimCount,
-        },
-        instance.stream,
-        instance.store,
-        instance.logger,
-      );
       instance.streamSignaler.consumeMessages(
-        key,
+        instance.stream.mintKey(
+          KeyType.STREAMS,
+          { appId: instance.appId },
+        ),
         'ENGINE',
         instance.guid,
         instance.processStreamMessage.bind(instance)
       );
 
-      //the storeSignaler sets and resolves external webhooks
+      //the storeSignaler service is used by the engine to create `webhooks`
+      //todo: unify/move to the task service (it manages all `signal` types)
       instance.storeSignaler = new StoreSignaler(instance.store, logger);
 
-      //task service handles the execution of activities
+      //the task service is used by the engine to process `webhooks` and `timehooks`
       instance.task = new TaskService(instance.store, logger);
 
       return instance;
@@ -148,11 +124,67 @@ class EngineService {
   }
 
   verifyEngineFields(config: PubSubDBConfig) {
-    if (!(config.engine.store instanceof StoreService) || 
-      !(config.engine.stream instanceof StreamService) ||
-      !(config.engine.sub instanceof SubService)) {
-      throw new Error('engine config must include `store`, `stream`, and `sub` fields.');
+    if (!identifyRedisType(config.engine.store) || 
+      !identifyRedisType(config.engine.stream) ||
+      !identifyRedisType(config.engine.sub)) {
+      throw new Error('engine config must reference 3 redis client instances');
     }
+  }
+
+  async initStoreChannel(store: RedisClient) {
+    if (identifyRedisType(store) === 'redis') {
+      this.store = new RedisStore(store as RedisClientType);
+    } else {
+      this.store = new IORedisStore(store as IORedisClientType);
+    }
+    await this.store.init(
+      this.namespace,
+      this.appId,
+      this.logger
+    );
+  }
+
+  async initSubChannel(sub: RedisClient) {
+    if (identifyRedisType(sub) === 'redis') {
+      this.subscribe = new RedisSub(sub as RedisClientType);
+    } else {
+      this.subscribe = new IORedisSub(sub as IORedisClientType);
+    }
+    await this.subscribe.init(
+      this.namespace,
+      this.appId,
+      this.guid,
+      this.logger
+    );
+  }
+
+  async initStreamChannel(stream: RedisClient) {
+    if (identifyRedisType(stream) === 'redis') {
+      this.stream = new RedisStream(stream as RedisClientType);
+    } else {
+      this.stream = new IORedisStream(stream as IORedisClientType);
+    }
+    await this.stream.init(
+      this.namespace,
+      this.appId,
+      this.logger
+    );
+  }
+
+  initStreamSignaler(config: PubSubDBConfig): StreamSignaler {
+    return new StreamSignaler(
+      {
+        namespace: this.namespace,
+        appId: this.appId,
+        guid: this.guid,
+        role: StreamRole.ENGINE,
+        reclaimDelay: config.engine.reclaimDelay,
+        reclaimCount: config.engine.reclaimCount,
+      },
+      this.stream,
+      this.store,
+      this.logger,
+    );
   }
 
   async getVID(): Promise<AppVID> {
@@ -282,6 +314,7 @@ class EngineService {
   async processStreamMessage(streamData: StreamDataResponse): Promise<void> {
     this.logger.debug('engine-process-stream-message', {
       jid: streamData.metadata.jid,
+      dad: streamData.metadata.dad,
       aid: streamData.metadata.aid,
       status: streamData.status || StreamStatus.SUCCESS,
       code: streamData.code || 200,
@@ -289,6 +322,7 @@ class EngineService {
     const context: PartialJobState = {
       metadata: {
         jid: streamData.metadata.jid,
+        dad: streamData.metadata.dad,
         aid: streamData.metadata.aid,
       },
       data: streamData.data,
@@ -306,6 +340,7 @@ class EngineService {
       context.metadata = {
         ...context.metadata,
         pj: streamData.metadata.jid,
+        pd: streamData.metadata.dad,
         pa: streamData.metadata.aid,
         trc: streamData.metadata.trc,
         spn: streamData.metadata.spn,
@@ -334,6 +369,7 @@ class EngineService {
       const streamData: StreamData = {
         metadata: {
           jid: context.metadata.pj,
+          dad: context.metadata.pd,
           aid: context.metadata.pa,
           trc: context.metadata.trc,
           spn,
@@ -349,10 +385,11 @@ class EngineService {
         streamData.status = StreamStatus.SUCCESS;
         streamData.code = STATUS_CODE_SUCCESS;
       }
-      return await this.streamSignaler?.publishMessage(null, streamData);
+      return (await this.streamSignaler?.publishMessage(null, streamData)) as string;
     }
   }
   hasParentJob(context: JobState): boolean {
+    //todo: include the dimensional address (pd)
     return Boolean(context.metadata.pj && context.metadata.pa);
   }
   resolveError(metadata: JobMetadata): StreamError | undefined {
@@ -371,10 +408,7 @@ class EngineService {
     const hookRule = await this.storeSignaler.getHookRule(topic);
     const streamData: StreamData = {
       type: StreamDataType.WEBHOOK,
-      metadata: {
-        aid: `${hookRule.to}`,
-        topic,
-      },
+      metadata: { aid: `${hookRule.to}`, topic },
       data,
     };
     await this.streamSignaler.publishMessage(null, streamData);
@@ -436,6 +470,17 @@ class EngineService {
   async unsub(topic: string): Promise<void> {
     return await this.subscribe.unsubscribe(KeyType.QUORUM, this.appId, topic);
   }
+  //subscribe to all jobs for a wildcard topic
+  async psub(wild: string, callback: JobMessageCallback): Promise<void> {
+    const subscriptionCallback: SubscriptionCallback = async (topic: string, message: {topic: string, job: JobOutput}) => {
+      callback(message.topic, message.job);
+    };
+    return await this.subscribe.psubscribe(KeyType.QUORUM, subscriptionCallback, this.appId, wild);
+  }
+  //unsubscribe to all jobs for a wildcard topic
+  async punsub(wild: string): Promise<void> {
+    return await this.subscribe.punsubscribe(KeyType.QUORUM, this.appId, wild);
+  }
   //publish and await (returns the job and data (if ready)); throws error with jobid if not
   async pubsub(topic: string, data: JobData, timeout = OTT_WAIT_TIME): Promise<JobOutput> {
     const context = { metadata: { ngn: this.guid } } as JobState;
@@ -473,21 +518,21 @@ class EngineService {
       this.store.publish(KeyType.QUORUM, message, this.appId, context.metadata.ngn);
     }
   }
-  async getSubscriptionsTopic(context: JobState): Promise<string> {
+  async getPublishesTopic(context: JobState): Promise<string> {
     const config = await this.getVID();
     const activityId = context.metadata.aid || context['$self']?.output?.metadata?.aid;
     const schema = await this.store.getSchema(activityId, config);
     return schema.publishes;
   }
   async resolvePersistentSubscriptions(context: JobState, jobOutput: JobOutput) {
-    const topic = await this.getSubscriptionsTopic(context);
+    const topic = await this.getPublishesTopic(context);
     if (topic) {
       const message: JobMessage = {
         type: 'job',
         topic,
         job: restoreHierarchy(jobOutput) as JobOutput,
       };
-      this.store.publish(KeyType.QUORUM, message, this.appId, topic);
+      this.store.publish(KeyType.QUORUM, message, this.appId, `${topic}.${context.metadata.jid}`);
     }
   }
   registerJobCallback(jobId: string, jobCallback: JobMessageCallback) {
@@ -502,23 +547,10 @@ class EngineService {
 
 
   // ***************** JOB COMPLETION/CLEANUP *****************
-  async setStatus(context: JobState, toDecrement: number): Promise<void> {
-    if (toDecrement) {
-      const { id: appId } = await this.getVID();
-      const activityStatus = await this.store.setStatus(
-        toDecrement,
-        context.metadata.jid,
-        appId
-      );
-      if (CollatorService.isJobComplete(activityStatus)) {
-        this.runJobCompletionTasks(context);
-      }
-    }
-  }
   async runJobCompletionTasks(context: JobState) {
     const isAwait = this.hasParentJob(context);
     const isOneTimeSubscription = this.hasOneTimeSubscription(context);
-    const topic = await this.getSubscriptionsTopic(context);
+    const topic = await this.getPublishesTopic(context);
     if (isAwait || isOneTimeSubscription || topic) {
       const jobOutput = await this.getState(context.metadata.tpc, context.metadata.jid);
       //always wait for stream pub/sub

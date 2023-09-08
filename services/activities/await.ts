@@ -1,6 +1,5 @@
 import { GetStateError } from '../../modules/errors';
 import { Activity } from './activity';
-import { CollatorService } from '../collator';
 import { EngineService } from '../engine';
 import {
   ActivityData,
@@ -9,7 +8,12 @@ import {
   ActivityType } from '../../types/activity';
 import { JobState } from '../../types/job';
 import { MultiResponseFlags } from '../../types/redis';
-import { StreamCode, StreamData, StreamDataType, StreamStatus } from '../../types/stream';
+import { StringScalarType } from '../../types/serializer';
+import {
+  StreamCode,
+  StreamData,
+  StreamDataType,
+  StreamStatus } from '../../types/stream';
 import { TelemetryService } from '../telemetry';
 
 class Await extends Activity {
@@ -39,15 +43,15 @@ class Await extends Activity {
       const multi = this.store.getMulti();
       //await this.registerTimeout();
       await this.setState(multi);
-      await this.setStatus(1, multi);
+      await this.setStatus(0, multi);
       const multiResponse = await multi.exec() as MultiResponseFlags;
 
       telemetry.mapActivityAttributes();
-      const activityStatus = this.resolveStatus(multiResponse);
+      const jobStatus = this.resolveStatus(multiResponse);
       const messageId = await this.execActivity();
       telemetry.setActivityAttributes({
         'app.activity.mid': messageId,
-        'app.job.jss': activityStatus
+        'app.job.jss': jobStatus
       });
       return this.context.metadata.aid;
     } catch (error) {
@@ -59,7 +63,6 @@ class Await extends Activity {
       }
       throw error;
     } finally {
-      //todo: inject attribute with the spawned job id
       telemetry.endActivitySpan();
       this.logger.debug('await-process-end', { jid: this.context.metadata.jid, aid: this.metadata.aid });
     }
@@ -70,6 +73,7 @@ class Await extends Activity {
     const streamData: StreamData = {
       metadata: {
         jid: this.context.metadata.jid,
+        dad: this.context['$self'].output.metadata?.dad,
         aid: this.metadata.aid,
         topic: this.config.subtype,
         spn: this.context['$self'].output.metadata?.l1s,
@@ -83,7 +87,7 @@ class Await extends Activity {
         retry: this.config.retry
       };
     }
-    return await this.engine.streamSignaler?.publishMessage(null, streamData);
+    return (await this.engine.streamSignaler?.publishMessage(null, streamData)) as string;
   }
 
 
@@ -105,18 +109,27 @@ class Await extends Activity {
       await this.getState();
       telemetry = new TelemetryService(this.engine.appId, this.config, this.metadata, this.context);
       telemetry.startActivitySpan(this.leg);
+
+      let adjacencyList: StreamData[];
       let multiResponse: MultiResponseFlags = [];
       if (status === StreamStatus.SUCCESS) {
-        multiResponse = await this.processSuccess();
+        this.bindActivityData('output');
+        adjacencyList = await this.filterAdjacent();
+        multiResponse = await this.processSuccess(adjacencyList);
       } else {
-        multiResponse = await this.processError();
+        this.bindActivityError(this.data);
+        adjacencyList = await this.filterAdjacent();
+        multiResponse = await this.processError(adjacencyList);
       }
 
       telemetry.mapActivityAttributes();
-      const activityStatus = this.resolveStatus(multiResponse);
-      telemetry.setActivityAttributes({ 'app.job.jss': activityStatus });
-      const isComplete = CollatorService.isJobComplete(activityStatus);
-      this.transition(isComplete);
+      const jobStatus = this.resolveStatus(multiResponse);
+      const attrs: StringScalarType = { 'app.job.jss': jobStatus };
+      const messageIds = await this.transition(adjacencyList, jobStatus);
+      if (messageIds.length) {
+        attrs['app.activity.mids'] = messageIds.join(',')
+      }
+      telemetry.setActivityAttributes(attrs);
     } catch (error) {
       this.logger.error('await-resolve-await-error', error);
       telemetry.setActivityError(error.message);
@@ -127,20 +140,21 @@ class Await extends Activity {
     }
   }
 
-  async processSuccess(): Promise<MultiResponseFlags> {
-    this.bindActivityData('output');
+  async processSuccess(adjacencyList: StreamData[]): Promise<MultiResponseFlags> {
     this.mapJobData();
     const multi = this.store.getMulti();
     await this.setState(multi);
-    await this.setStatus(2, multi);
+    await this.setStatus(adjacencyList.length - 1, multi);
     return await multi.exec() as MultiResponseFlags;
   }
 
-  async processError(): Promise<MultiResponseFlags> {
-    this.bindActivityError(this.data);
+  async processError(adjacencyList: StreamData[]): Promise<MultiResponseFlags> {
+    //todo: if adjacencyList.length == 0, then map to the job output
+    //      this method would be added to Base activity class 
+    //this.mapJobData();
     const multi = this.store.getMulti();
     await this.setState(multi);
-    await this.setStatus(1, multi);
+    await this.setStatus(adjacencyList.length - 1, multi);
     return await multi.exec() as MultiResponseFlags;
   }
 }

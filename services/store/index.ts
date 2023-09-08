@@ -86,8 +86,9 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
   abstract xadd(
     key: string,
     id: string,
-    ...args: string[]
-  ): Promise<string>;
+    messageId: string,
+    messageValue: string,
+    multi?: U): Promise<string | U>;
   abstract xpending(
     key: string,
     group: string,
@@ -174,8 +175,8 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
     if (settings) {
       return settings;
     } else {
-      if (bCreate) {
-        const packageJson = await import('../../package.json');
+    if (bCreate) {
+    const packageJson = await import('../../package.json');
         const version: string = packageJson.version;
         settings = { namespace: PSNS, version } as PubSubDBSettings;
         await this.setSettings(settings);
@@ -324,7 +325,7 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
     const params: KeyStoreParams = { appId: id };
     const key = this.mintKey(KeyType.APP, params);
     const versionId = `versions/${version}`;
-    const app = await this.getApp(id);
+    const app = await this.getApp(id, true);
     if (app && app[versionId]) {
       const payload: PubSubDBApp = {
         id,

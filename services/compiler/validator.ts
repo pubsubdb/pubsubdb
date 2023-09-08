@@ -1,6 +1,7 @@
 import { Pipe } from "../pipe";
+import { StoreService } from '../store';
 import { MappingStatements } from "../../types/map";
-import { PubSubDBManifest, StoreService } from "../../types/pubsubdb";
+import { PubSubDBManifest } from "../../types/pubsubdb";
 import { RedisClient, RedisMulti } from "../../types/redis";
 
 class Validator {

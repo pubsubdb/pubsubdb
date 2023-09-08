@@ -4,6 +4,8 @@ app:
   graphs:
     - subscribes: abc.test
 
+      expire: 120
+
       input:
         schema:
           type: object

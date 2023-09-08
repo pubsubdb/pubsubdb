@@ -1,78 +1,45 @@
-import {
-  IORedisStore,
-  IORedisStream,
-  IORedisSub,
-  PubSubDB,
-  PubSubDBConfig } from '../../../index';
+import { nanoid } from 'nanoid';
+import Redis from 'ioredis';
+
+import config from '../../$setup/config';
+import { PubSubDB, PubSubDBConfig } from '../../../index';
+import { RedisConnection } from '../../../services/connector/clients/ioredis';
 import { StreamSignaler } from '../../../services/signaler/stream';
-import { RedisConnection } from '../../$setup/cache/ioredis';
-import { RedisClientType } from '../../../types/ioredisclient';
 import {
   StreamData,
   StreamDataResponse,
   StreamStatus } from '../../../types/stream';
 
 describe('FUNCTIONAL | Status Codes', () => {
+  const options = {
+    host: config.REDIS_HOST,
+    port: config.REDIS_PORT,
+    password: config.REDIS_PASSWORD,
+    database: config.REDIS_DATABASE,
+  };
   const REASON = 'the account_id field is missing';
   const appConfig = { id: 'def' };
-  //Redis connection ids (this test uses 4 separate Redis connections)
-  const CONNECTION_KEY = 'manual-test-connection';
-  const SUBSCRIPTION_KEY = 'manual-test-subscription';
-  const STREAM_ENGINE_CONNECTION_KEY = 'manual-test-stream-engine-connection';
-  const STREAM_WORKER_CONNECTION_KEY = 'manual-test-stream-worker-connection';
-  //Redis connections (ioredis)
-  let redisConnection: RedisConnection;
-  let subscriberConnection: RedisConnection;
-  let streamEngineConnection: RedisConnection;
-  let streamWorkerConnection: RedisConnection;
-  //Redis clients (ioredis)
-  let redisStorer: RedisClientType;
-  let redisSubscriber: RedisClientType;
-  let redisEngineStreamer: RedisClientType;
-  let redisWorkerStreamer: RedisClientType;
-  //PubSubDB Redis client wrappers
-  let redisStore: IORedisStore;
-  let redisEngineStream: IORedisStream;
-  let redisWorkerStream: IORedisStream;
-  let redisSub: IORedisSub;
-  //PubSubDB instance
   let pubSubDB: PubSubDB;
 
   beforeAll(async () => {
-    //init Redis connections and clients
-    redisConnection = await RedisConnection.getConnection(CONNECTION_KEY);
-    subscriberConnection = await RedisConnection.getConnection(SUBSCRIPTION_KEY);
-    streamEngineConnection = await RedisConnection.getConnection(STREAM_ENGINE_CONNECTION_KEY);
-    streamWorkerConnection = await RedisConnection.getConnection(STREAM_WORKER_CONNECTION_KEY);
-    redisStorer = await redisConnection.getClient();
-    redisSubscriber = await subscriberConnection.getClient();
-    redisEngineStreamer = await streamEngineConnection.getClient();
-    redisWorkerStreamer = await streamWorkerConnection.getClient();
-    redisStorer.flushdb();
-    //wrap Redis clients in PubSubDB Redis client wrappers
-    redisStore = new IORedisStore(redisStorer);
-    redisEngineStream = new IORedisStream(redisEngineStreamer);
-    redisWorkerStream = new IORedisStream(redisWorkerStreamer);
-    redisSub = new IORedisSub(redisSubscriber);
-    //init/activate PubSubDB (test both `engine` and `worker` roles)
-    const config: PubSubDBConfig = {
+    //init Redis and flush db
+    const redisConnection = await RedisConnection.connect(nanoid(), Redis, options);
+    redisConnection.getClient().flushdb();
+
+    //init PubSubDB
+    const psdbConfig: PubSubDBConfig = {
       appId: appConfig.id,
       logLevel: 'debug',
+
       engine: {
-        store: redisStore,
-        stream: redisEngineStream,
-        sub: redisSub,
+        redis: { class: Redis, options }
       },
+
       workers: [
         {
           topic: 'work.do',
-
-          store: redisStore,
-          stream: redisWorkerStream,
-          sub: redisSub,
-
+          redis: { class: Redis, options },
           callback: async (streamData: StreamData): Promise<StreamDataResponse> => {
-            //this test
             let status: StreamStatus;
             let data: { [key: string]: string | number } = {
               code: streamData.data.code as number
@@ -98,10 +65,11 @@ describe('FUNCTIONAL | Status Codes', () => {
         }
       ]
     };
-    pubSubDB = await PubSubDB.init(config);
+
+    pubSubDB = await PubSubDB.init(psdbConfig);
     await pubSubDB.deploy('/app/tests/$setup/apps/def/v1/pubsubdb.yaml');
     await pubSubDB.activate('1');
-  });
+  }, 10_000);
 
   afterAll(async () => {
     await StreamSignaler.stopConsuming();

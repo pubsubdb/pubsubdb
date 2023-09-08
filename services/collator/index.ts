@@ -28,9 +28,6 @@ class CollatorService {
   
       if (triggerActivityId) {
         const activityIds = Object.keys(activities).sort();
-        //bind id to trigger
-        activities[triggerActivityId].collationKey = CollatorService.createKey(activityIds);
-
         //bind position to each activity
         Object.entries(activities).forEach(([activityId, activity]) => {
           const pos = activityIds.indexOf(activityId);
@@ -51,24 +48,6 @@ class CollatorService {
   }
 
   /**
-   * alphabetically sort the activities by their ID (ascending) ["a1", "a2", "a3", ...]
-   * and then bind the sorted array to the trigger activity. This is used by the trigger
-   * at runtime to create 15-digit collation integer (99999999999) that can be used to track
-   * the status of the job at the level of the individual activity. A collation value of
-   * 899000000000000 means that the first activity (assume 'a1') is running and the others
-   * are still pending. NOTE: sorting is alphabetical, so it is merely coincidence that
-   * the value was `899*` and not `989*` or `998*`.
-   * @param {string[]} sortedActivityIds - an array of activity IDs sorted alphabetically
-   * @returns {number} A number that represents the collation key for the job.
-   */
-  static createKey(sortedActivityIds: string[]): number {
-    const length = sortedActivityIds.length;
-    const val = Math.pow(10, length) - 1; //e.g, 999, 99999, 9999999, etc
-    const paddedNumber = val + '0'.repeat(CollatorService.targetLength - length);
-    return parseInt(paddedNumber, 10);
-  }
-
-  /**
    * helps update the collation key for the job by subtracting the activity's position from
    * the 15-digit collation key. For example, if the collation key is 999999999999900
    * and the activity is the 3rd in the list (and the multipler is 1),
@@ -86,36 +65,12 @@ class CollatorService {
     return Math.pow(10, targetLength - position - 1) * multiplier;
   }
 
-  static isJobComplete(collationKey: number|string): boolean {
-    return CollatorService.isThereAnError(collationKey) ||
-      !CollatorService.isThereAnIncompleteActivity(collationKey);
+  static isJobComplete(status: number, state = 'active'): boolean {
+    return state !== 'active' || (status - 0) <= 0
   }
 
-  static isActivityComplete(collationKey: number, collationInt: number): boolean {
-    const digit = CollatorService.extractDigit(collationKey.toString(), collationInt.toString());
-    return CollatorService.isThereAnError(digit) ||
-      !CollatorService.isThereAnIncompleteActivity(digit);
-  }
-
-  static isThereAnError(collationKey: number|string): boolean {
-    return collationKey.toString().includes(CollationKey.Errored.toString());
-  }
-
-  static isThereAnIncompleteActivity(collationKey: number|string): boolean {
-    const str = collationKey.toString();
-    return str.includes(CollationKey.Pending.toString()) ||
-      str.includes(CollationKey.Started.toString()) || 
-      str.includes(CollationKey.Paused.toString());
-  }
-
-  static extractDigit(collationKey: string, collationInt: string): string {
-    let index: number;
-    if (parseInt(collationInt) === 1) {
-      index = 14; // for 1, the last digit of collationKey is selected
-    } else {
-      index = 15 - collationInt.length;
-    }
-    return collationKey.charAt(index);
+  static isActivityComplete(status: number): boolean {
+    return (status - 0) <= 0;
   }
 }
 

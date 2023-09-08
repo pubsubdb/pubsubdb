@@ -50,10 +50,25 @@ class RedisSubService extends SubService<RedisClientType, RedisMultiType> {
     await this.redisClient.unsubscribe(topic);
   }
 
-  // async publish(keyType: KeyType.QUORUM, message: Record<string, any>, appId: string, engineId?: string): Promise<void> {
-  //   const topic = this.mintKey(keyType, { appId, engineId });
-  //   this.redisClient.publish(topic, JSON.stringify(message));
-  // }
+  async psubscribe(keyType: KeyType.QUORUM, callback: SubscriptionCallback, appId: string, engineId?: string): Promise<void> {
+    if (this.redisClient) {
+      const self = this;
+      const topic = this.mintKey(keyType, { appId, engineId });
+      await this.redisClient.pSubscribe(topic, (message, channel) => {
+        try {
+          const payload = JSON.parse(message);
+          callback(channel, payload);
+        } catch (e) {
+          self.logger.error(`Error parsing message: ${message}`, e);
+        }
+      });
+    }
+  }
+
+  async punsubscribe(keyType: KeyType.QUORUM, appId: string, engineId?: string): Promise<void> {
+    const topic = this.mintKey(keyType, { appId, engineId });
+    await this.redisClient.pUnsubscribe(topic);
+  }
 }
 
 export { RedisSubService };

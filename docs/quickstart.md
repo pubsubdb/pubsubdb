@@ -46,40 +46,25 @@ Configure and initialize 3 Redis clients.
 >The examples in this guide will use the `ioredis` package, but you can use the `redis` package if you prefer. Configure and connect to Redis as is standard for your chosen package.
 
 ```javascript
-import Redis from 'ioredis';
-const config = { host, port, password, db };
-const redis1 = new Redis(config);
-const redis2 = new Redis(config);
-const redis3 = new Redis(config);
+import Redis from 'ioredis'; //OR `import * as Redis from 'redis';`
 ```
 
-> Test a connection using a standard Redis `set` command to confirm things are working (e.g, `redis1.set('key', 'value', 'EX', 10)`).
-
 ### Configure and Initialize PubSubDB
-Now that you have **three** verified Redis instances, pass these to PubSubDB to initialize an engine instance. PubSubDB requires 3 channels when initializing an engine or worker: `store`, `stream`, and `sub`.
-
- * `store` | the store channel reads and writes flow state (HSET, etc)
- * `stream` | the stream channel drives transitions between activities using Redis Streams to coordinate handoffs
- * `sub` | the sub channel coordinates the fleet of engines (the quorum) using Redis Pub/Sub to synchronize behavior. 
+Configure and initialize PubSubDB.
 
 ```javascript
-import {
-  PubSubDB,
-  IORedisStore,
-  IORedisStream,
-  IORedisSub } from '@pubsubdb/pubsubdb';
+import { PubSubDB } from '@pubsubdb/pubsubdb';
 
 const pubSubDB = await PubSubDB.init({
   appId: 'abc',
   engine: {
-    store: new IORedisStore(redis1),
-    stream: new IORedisStream(redis2),
-    sub: new IORedisSub(redis3),
+    redis: {
+      class: Redis,
+      options: { host, port, password, db }
+    }
   }
 });
 ```
-
->Import `RedisStore`, `RedisStream`, and `RedisSub` from `@pubsubdb/pubsubdb` if using the `redis` package instead of `ioredis`.
 
 Before running workflows, the application must be *defined*, *deployed*, and *activated*. This is a *one-time activity* that must be called before calling `pub`, `pubsub` and similar application endpoints.
 
@@ -130,30 +115,30 @@ Here is the entire end-to-end example, including the one-time setup steps to *de
 
 ```javascript
 import Redis from 'ioredis';
-import {
-  PubSubDB,
-  IORedisStore,
-  IORedisStream,
-  IORedisSub } from '@pubsubdb/pubsubdb';
-
-const config = { host, port, password, db };
-const redis1 = new Redis(config);
-const redis2 = new Redis(config);
-const redis3 = new Redis(config);
+import { PubSubDB } from '@pubsubdb/pubsubdb';
 
 const pubSubDB = await PubSubDB.init({
   appId: 'abc',
   engine: {
-    store: new IORedisStore(redis1),
-    stream: new IORedisStream(redis2),
-    sub: new IORedisSub(redis3),
+    redis: {
+      class: Redis,
+      options: { host, port, password, db }
+    }
   }
 });
 
-await pubSubDB.deploy('./abc.1.yaml');
+await pubSubDB.deploy(`
+app:
+  id: abc
+  version: '1'
+  graphs:
+    - subscribes: abc.test
+      activities:
+        t1:
+          type: trigger
+`);
 await pubSubDB.activate('1');
-
-const response1 = await pubSubDB.pubsub('abc.test', {});
+await pubSubDB.pubsub('abc.test');
 ```
 
 ## The Simplest Flow
@@ -266,35 +251,25 @@ When a `worker` activity is defined in the YAML, you must likewise register a `w
 
 ```javascript
 import Redis from 'ioredis';
-import {
-  PubSubDB,
-  IORedisStore,
-  IORedisStream,
-  IORedisSub } from '@pubsubdb/pubsubdb';
-
-const config = { host, port, password, db };
-const redis1 = new Redis(config);
-const redis2 = new Redis(config);
-const redis3 = new Redis(config);
-const redis4 = new Redis(config);
-const redis5 = new Redis(config);
-const redis6 = new Redis(config);
+import { PubSubDB } from '@pubsubdb/pubsubdb';
 
 const pubSubDB = await PubSubDB.init({
   appId: 'abc',
 
   engine: {
-    store: new IORedisStore(redis1),
-    stream: new IORedisStream(redis2),
-    sub: new IORedisSub(redis3),
+    redis: {
+      class: Redis,
+      options: { host, port, password, db }
+    }
   },
 
   workers: [
     { 
       topic: 'work.do',
-      store: new IORedisStore(redis4),
-      stream: new IORedisStream(redis5),
-      sub: new IORedisSub(redis6),
+      redis: {
+        class: Redis,
+        options: { host, port, password, db }
+      }
       callback: async (data: StreamData) => {
         return {
           metadata: { ...data.metadata },
@@ -385,35 +360,25 @@ Here is the updated end-to-end example with the entire evolution of the applicat
 
 ```javascript
 import Redis from 'ioredis';
-import {
-  PubSubDB,
-  IORedisStore,
-  IORedisStream,
-  IORedisSub } from '@pubsubdb/pubsubdb';
-
-const config = { host, port, password, db };
-const redis1 = new Redis(config);
-const redis2 = new Redis(config);
-const redis3 = new Redis(config);
-const redis4 = new Redis(config);
-const redis5 = new Redis(config);
-const redis6 = new Redis(config);
+import { PubSubDB } from '@pubsubdb/pubsubdb';
 
 const pubSubDB = await PubSubDB.init({
   appId: 'abc',
 
   engine: {
-    store: new IORedisStore(redis1),
-    stream: new IORedisStream(redis2),
-    sub: new IORedisSub(redis3),
+    redis: {
+      class: Redis,
+      options: { host, port, password, db }
+    }
   },
 
   workers: [
     { 
       topic: 'work.do',
-      store: new IORedisStore(redis4),
-      stream: new IORedisStream(redis5),
-      sub: new IORedisSub(redis6),
+      redis: {
+        class: Redis,
+        options: { host, port, password, db }
+      }
       callback: async (data: StreamData) => {
         return {
           metadata: { ...data.metadata },
@@ -607,38 +572,25 @@ Here is the updated end-to-end example with the entire evolution of the applicat
 
 ```javascript
 import Redis from 'ioredis';
-import {
-  PubSubDB,
-  IORedisStore,
-  IORedisStream,
-  IORedisSub } from '@pubsubdb/pubsubdb';
-
-const config = { host, port, password, db };
-const redis1 = new Redis(config);
-const redis2 = new Redis(config);
-const redis3 = new Redis(config);
-const redis4 = new Redis(config);
-const redis5 = new Redis(config);
-const redis6 = new Redis(config);
-const redis7 = new Redis(config);
-const redis8 = new Redis(config);
-const redis9 = new Redis(config);
+import { PubSubDB } from '@pubsubdb/pubsubdb';
 
 const pubSubDB = await PubSubDB.init({
   appId: 'abc',
 
   engine: {
-    store: new IORedisStore(redis1),
-    stream: new IORedisStream(redis2),
-    sub: new IORedisSub(redis3),
+    redis: {
+      class: Redis,
+      options: { host, port, password, db }
+    }
   },
 
   workers: [
     { 
       topic: 'work.do',
-      store: new IORedisStore(redis4),
-      stream: new IORedisStream(redis5),
-      sub: new IORedisSub(redis6),
+      redis: {
+        class: Redis,
+        options: { host, port, password, db }
+      }
       callback: async (data: StreamData) => {
         return {
           metadata: { ...data.metadata },
@@ -649,9 +601,10 @@ const pubSubDB = await PubSubDB.init({
 
     { 
       topic: 'work.do.more',
-      store: new IORedisStore(redis7),
-      stream: new IORedisStream(redis8),
-      sub: new IORedisSub(redis9),
+      redis: {
+        class: Redis,
+        options: { host, port, password, db }
+      }
       callback: async (data: StreamData) => {
         return {
           metadata: { ...data.metadata },

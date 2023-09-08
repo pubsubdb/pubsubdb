@@ -12,8 +12,8 @@ The ultimate goal of this approach is to provide a robust, efficient, and reliab
 2. [Event-Condition-Action: The Computational Unit for Event-Driven Architectures](#event-condition-action-the-computational-unit-for-event-driven-architectures)
 3. [Enabling Duplexing for Long-Running Business Processes](#enabling-duplexing-for-long-running-business-processes)
 4. [From ECA Units to Meaningful Business Processes: The Role of Enterprise Application Integration](#from-eca-units-to-meaningful-business-processes-the-role-of-enterprise-application-integration)
-5. [Building Quorum-Based Systems for Activity Collation and Status Tracking](#building-quorum-based-systems-for-activity-collation-and-status-tracking)
-6. [Leveraging CQRS to Enable Self-Perpetuation](#leveraging-cqrs-to-enable-self-perpetuation)
+5. [Leveraging CQRS to Enable Self-Perpetuation](#leveraging-cqrs-to-enable-self-perpetuation)
+6. [Orchestrate through Shared State](#orchestrate-through-shared-state)
 7. [Conclusion](#conclusion)
 
 ## Understanding Asynchronous Activities in Workflow Systems
@@ -82,40 +82,6 @@ The transformation of isolated event-driven operations, or ECA units, into cohes
 
 EAI serves as a principal scheme for unification, amalgamating separate ECA units into a comprehensive network of business processes. It describes the rules for data exchange among these units, fostering their collective participation in executing complex workflows that span across varied services and subsystems. EAI ensures that the transmitted data complies with predetermined schemas and data types, thereby enhancing interoperability and ensuring data consistency across the distributed system.
 
-## Building Quorum-Based Systems for Activity Collation and Status Tracking
-Activity collation forms the nexus of an asynchronous workflow system, bearing the critical responsibility of tracing and managing the state of all activities within an active process or a "Job". This task is accomplished through a multi-digit collation key. Each digit within this key is a symbolic representation of the status of a specific activity in the workflow.
-
-The collation key structure is conceived with explicit numeric values designated for various states an activity might exhibit:
-
-- 9: Pending
-- 8: Started
-- 7: Errored
-- 6: Completed
-- 5: Paused
-- 4: Released
-- 3: Skipped
-- 2: `Await` Right Parentheses
-- 1: `Await` Left Parentheses
-- 0: N/A (the flow has fewer activities than the collation key)
-
-This structured approach empowers a quick understanding of the job's current state from a mere glance at the collation key. Moreover, two special digits, 1 and 2, are designated for 'bookending' subordinated workflows, a design decision that streamlines the expression of a composite job state. For example, a composite state of `36636146636626` tells us that two separate workflows, Flow A and Flow B, have concluded successfully, where Activity 5 in Flow A spawned Flow B, and the latter returned its response successfully.
-
-The Collation Service employs an ascending string sorting methodology to counter the absence of a sibling node order guarantee in a Directed Acyclic Graph (DAG). Despite the trigger being the first element in the graph, it could be placed fifth alphabetically, as seen in the following sequence:
-
- `quick => brown => fox => (jumped|(slept => ate))`
-
-The sorted ids for this chain of activities would translate to:
-
- `["ate", "brown", "fox", "jumped", "quick", "slept"]`
-
-Consequently, the collation key updates to `999969000000000` upon the trigger activity's completion.
-
-With this foundational understanding, we can explore a few examples. Consider the collation key `968969000000000`, which signifies that the `quick` and `brown` activities have *completed* and `fox` is currently *started*. The collation key undergoes continual updates as the job progresses, mirroring the state changes of the activities until the job's completion.
-
-Conversely, a collation key like `766366000000000` symbolizes an *error* state. The `ate` activity returned an error, and the `jumped` activity was *skipped*, with all other activities concluding normally. The system, aware of no other active activity, completes the job, albeit in an error state.
-
-These examples illustrate the capacity of the quorum-based collation and status tracking system to facilitate detailed, real-time monitoring of asynchronous workflow execution. This system, capable of offering both macro and micro insights, empowers the orchestration service to efficiently manage intricate workflows, cater to errors and exceptions, and secure the successful completion of activities within the graph.
-
 ## Leveraging CQRS to Enable Self-Perpetuation
 In the orchestration of business processes, *operational continuity* emerges as a critical aspect. This is where Command Query Responsibility Segregation (CQRS) has a pivotal role to play. CQRS fundamentally decouples the 'write' operations (commands) from the 'read' operations (queries) in a system, thus enabling an operationally resilient and efficient environment.
 
@@ -138,6 +104,17 @@ In this scenario, the producers (tasks) merely inscribe their completion events 
 This dynamic begets a self-perpetuating system where workflows advance uninterruptedly through the simple act of reading from an append-only log. The progress of each task morphs into a self-propelling force for the entire workflow, thereby minimizing dependencies and creating an operationally efficient environment. To that end, CQRS grants quorum-based systems the ability to navigate the process to completion more efficiently than their control-dependent counterparts.
 
 The CQRS strategy not only enhances the system's responsiveness and scalability but also improves its overall resilience by isolating failures. As a result, systems can continue to function and recover gracefully even when individual components encounter issues, proving CQRS to be a strategically beneficial pattern for asynchronous workflow orchestration.
+
+## Orchestrate through Shared State
+Efficiently tracking job state is critical to asynchronous workflow systems and is accomplished through a semaphore that will count down to `0` once all activities have completed for the flow. 
+
+The semaphore is updated via increment/decrement calls to the central server. The value sent to the semaphore will always be the length of the adjacent activity list (the number of child activity nodes that should execute) minus 1.
+
+If the adjacency list has members, each child activity in the adjacency list will be journaled to its designated stream and the pattern will repeat. 
+
+If there are no adjacent children and the incremented/decremented status returned from the server is `0`, then the job is complete (this activity was the last of all activities to complete).
+
+The act of the caller saving individual state triggers a server response with full job semaphore state.
 
 ## Conclusion
 Designing and orchestrating multidimensional workflows in distributed environments can present significant challenges. Nevertheless, these complexities become tractable with a thorough understanding and prudent application of key architectural principles and design patterns. 

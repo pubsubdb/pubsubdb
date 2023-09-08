@@ -119,7 +119,7 @@ describe('FUNCTIONAL | RedisStoreService', () => {
       await redisStoreService.addSymbols(topic, symbols);
 
       //3) set job state/status
-      const jobStatus = 690000000000000;
+      const jobStatus = 1;
       const jobState: StringAnyType = {
         'a1/output/data/some/field': true,
         'a1/output/data/another/field': {'complex': 'object'},

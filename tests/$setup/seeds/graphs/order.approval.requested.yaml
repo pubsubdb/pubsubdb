@@ -1,6 +1,8 @@
 subscribes: order.approval.requested
 publishes: order.approval.responded
 
+expire: 120
+
 input:
   schema:
     $ref: '../schemas/order.approval.requested.yaml#/input'

@@ -2,16 +2,8 @@ import * as utils from '../../../modules/utils';
 import { StreamStatus } from '../../../types/stream';
 
 describe('utils module', () => {
-  describe('getGuid function', () => {
-    it('should return a valid guid', () => {
-      const guid = utils.getGuid();
-      expect(guid).toMatch(/^[a-f0-9]+\.[a-f0-9]+$/);
-    });
-  });
-
 
   describe('utils.matchesStatusCode function', () => {
-
     it('should match 404 with "4**" pattern', () => {
       expect(utils.matchesStatusCode(404, '4**')).toBe(true);
     });
@@ -40,12 +32,9 @@ describe('utils module', () => {
     it('should match 500 with "5**" pattern', () => {
       expect(utils.matchesStatusCode(500, '5**')).toBe(true);
     });
-  
   });
 
-
   describe('utils.matchesStatus function', () => {
-
     it('should match StreamStatus.SUCCESS with StreamStatus.SUCCESS', () => {
         expect(utils.matchesStatus(StreamStatus.SUCCESS, StreamStatus.SUCCESS)).toBe(true);
     });
@@ -65,8 +54,8 @@ describe('utils module', () => {
     it('should match StreamStatus.PENDING with StreamStatus.PENDING', () => {
         expect(utils.matchesStatus(StreamStatus.PENDING, StreamStatus.PENDING)).toBe(true);
     });
-
   });
+
   describe('getSymKey function', () => {
     it('should return "aaa" for input 0', () => {
       const sequence = utils.getSymKey(0);

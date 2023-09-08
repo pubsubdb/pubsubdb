@@ -1,6 +1,6 @@
 # System Lifecycle Guide
 
-This README provides an overview of the `PubSubDB` runtime engine. The document is intended to serve as a resource for operations and infrastructure teams responsible for PubSubDB's monitoring, exception handling, cleanup procedures, and alarm configurations. 
+This README provides an overview of the `PubSubDB` runtime engine from the perspective of the system lifecycle. The lifecycle is comprised of the following steps:
 
 ## Table of Contents
 1. [Init Engine & Quorum](#init-engine-and-quorum)
@@ -14,29 +14,22 @@ This README provides an overview of the `PubSubDB` runtime engine. The document 
 The engine is the core of the PubSubDB system and is responsible for running activities according to the YAML execution rules. Every *engine* instance is initialized with a corresponding *quorum* instance which coordinates its activity with all other engines in the network.
 
 ```javascript
-import {
-  PubSubDB,
-  RedisStore,
-  RedisStream,
-  RedisSub } from '@pubsubdb/pubsubdb';
+import Redis from 'ioredis';
+import { PubSubDB } from '@pubsubdb/pubsubdb';
 
-//init 3 Redis clients using `ioredis` or `redis` NPM packages
-const storeClient = await getRedisClient(...)
-const streamClient = await getRedisClient(...)
-const subClient = await getRedisClient(...)
-
-//init/start PubSubDB
+//start the engine
 const pubSubDB = await PubSubDB.init({
   appId: 'myapp',
   engine: {
-    store: new RedisStore(storeClient),
-    stream: new RedisStream(streamClient),
-    sub: new RedisSub(subClient),
+    redis: {
+      class: Redis,
+      options: { host, port, password, db }
+    }
   }
 });
 ```
 
-The engine initialization process begins with a call to Redis (`HGET`) to get the active app version. The engine and the quorum then subscribe to relevant topics. The third Redis channel (streams) is only enabled if an *active app version* is returned from `HGET`.
+The engine startup process begins with a call to Redis (`HGET`) to get the active app version. The engine and the quorum then subscribe to relevant topics. The third Redis channel (streams) is only enabled if an *active app version* is returned from `HGET`.
 
 <img src="./img/lifecycle/init_engine.png" alt="PubSubDB Engine Initialization" style="max-width:600px;width:600px;">
 
@@ -44,30 +37,17 @@ The engine initialization process begins with a call to Redis (`HGET`) to get th
 Workers are initialized similarly to the engine, using the same call to `init`. Each worker is initialized with a `topic`, `store`, `stream`, `sub`, and `callback` function. The `topic` is the name of the event that the callback function is subscribed to, serving as a link between the YAML rules and the execution runtime.
 
 ```javascript
-import {
-  PubSubDB,
-  PubSubDBConfig,
-  RedisStore
-  RedisStream
-  RedisSub } from '@pubsubdb/pubsubdb';
-
-//init 3 standard Redis clients
-const redisClient1 = getMyRedisClient();
-const redisClient2 = getMyRedisClient();
-const redisClient3 = getMyRedisClient();
+import Redis from 'ioredis';
+import { PubSubDB } from '@pubsubdb/pubsubdb';
 
 const pubSubDB = await PubSubDB.init({
   appId: 'myapp',
   workers: [{
-
-    //specify the worker topic
     topic: 'discounts.enumerate',
-
-    store: new RedisStore(redisClient1),
-    stream: new RedisStream(redisClient2),
-    sub: new RedisSub(redisClient3),
-
-    //register the worker function
+    redis: {
+      class: Redis,
+      options: { host, port, password, db }
+    }
     callback: async (data: StreamData) => { … }
   }]
 });
@@ -78,10 +58,30 @@ The worker initialization process begins with a call to Redis (`HGET`) to get th
 <img src="./img/lifecycle/init_worker.png" alt="PubSubDB Worker Initialization" style="max-width:600px;width:600px;">
 
 ## Deploy Version
-When the app YAML file is ready, the `deploy` function can be called. This function is responsible for merging all referenced YAML source files and writing the JSON output to the file system and to Redis. *The version will not be active until activation is explicitly called.*
+When the app YAML file is ready, the `deploy` function can be called. This function is responsible for merging all referenced YAML source files and writing the JSON output to the file system and to Redis. It is also possible to embed the YAML in-line as a string as shown here.
+
+>*The version will not be active until activation is explicitly called.*
 
 ```javascript
-const deploymentStatus = await pubSubDB.deploy('./pubsubdb.yaml');
+const yaml = `app:
+  id: sandbox
+  version: '1'
+  graphs:
+    - subscribes: sandbox.work.do
+      publishes: sandbox.work.done
+
+      activities:
+        gateway:
+          type: trigger
+        servicec:
+          type: worker
+          subtype: sandbox.work.do.servicec
+        ...
+
+      transitions:
+        gateway:
+          - to: servicec`;
+const deploymentStatus = await pubSubDB.deploy(yaml);
 //returns true|false
 ```
 

@@ -57,9 +57,7 @@ export {
   PubSubDBGraph,
   PubSubDBManifest,
   PubSubDBSettings,
-  PubSubDBWorker,
-  StoreService
-} from './pubsubdb';
+  PubSubDBWorker } from './pubsubdb';
 export {
   ActivateMessage,
   JobMessage,

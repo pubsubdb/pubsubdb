@@ -1,11 +1,16 @@
 import { KeyType } from '../../modules/key';
-import { sleepFor } from '../../modules/utils';
+import { identifyRedisType, sleepFor } from '../../modules/utils';
 import { CompilerService } from '../compiler';
 import { EngineService } from '../engine';
 import { ILogger } from '../logger';
 import { StoreService } from '../store';
+import { RedisStoreService as RedisStore } from '../store/clients/redis';
+import { IORedisStoreService as IORedisStore } from '../store/clients/ioredis';
 import { SubService } from '../sub';
+import { IORedisSubService as IORedisSub } from '../sub/clients/ioredis';
+import { RedisSubService as RedisSub } from '../sub/clients/redis';
 import { CacheMode } from '../../types/cache';
+import { RedisClientType as IORedisClientType } from '../../types/ioredisclient';
 import {
   QuorumMessage,
   QuorumMessageCallback,
@@ -14,6 +19,7 @@ import {
 } from '../../types/quorum';
 import { PubSubDBApps, PubSubDBConfig } from '../../types/pubsubdb';
 import { RedisClient, RedisMulti } from '../../types/redis';
+import { RedisClientType } from '../../types/redisclient';
 
 //wait time to see if quorum is reached
 const QUORUM_DELAY = 250;
@@ -40,48 +46,59 @@ class QuorumService {
     engine: EngineService,
     logger: ILogger
   ): Promise<QuorumService> {
-    //quorum piggybacks on the `engine` config, resusing the `store` and `sub` interfaces
     if (config.engine) {
       const instance = new QuorumService();
-      //verify and set namespace, appId, and guid
       instance.verifyQuorumFields(config);
       instance.namespace = namespace;
       instance.appId = appId;
       instance.guid = guid;
       instance.logger = logger;
       instance.engine = engine;
-      //initialize the `store` client (read/write data)
-      instance.store = config.engine.store;
-      instance.apps = await instance.store.init(
-        instance.namespace,
-        instance.appId,
-        instance.logger,
-      );
-      //initialize the `sub` client
-      instance.subscribe = config.engine.sub;
-      await instance.subscribe.init(
-        instance.namespace,
-        instance.appId,
-        instance.guid,
-        instance.logger
-      );
-      //general quorum subscription
-      await instance.subscribe.subscribe(KeyType.QUORUM, instance.subscriptionHandler(), appId);
-      //app-specific quorum subscription (used for pubsub one-time request/response)
-      await instance.subscribe.subscribe(KeyType.QUORUM, instance.subscriptionHandler(), appId, instance.guid);
-      //tell engine to check for open `hook` tasks
+
+      //note: `quorum` shares/re-uses the engine's `store`/`sub` Redis clients
+      await instance.initStoreChannel(config.engine.store);
+      await instance.initSubChannel(config.engine.sub);
+      await instance.subscribe.subscribe(KeyType.QUORUM, instance.subscriptionHandler(), appId); //general quorum subscription
+      await instance.subscribe.subscribe(KeyType.QUORUM, instance.subscriptionHandler(), appId, instance.guid); //app-specific quorum subscription (used for pubsub one-time request/response)
+      
       instance.engine.processWebHooks();
-      //tell engine to check for time-trigger events (awaken, expire, cron, etc.)
       instance.engine.processTimeHooks();
       return instance;
     }
   }
 
   verifyQuorumFields(config: PubSubDBConfig) {
-    if (!(config.engine.store instanceof StoreService) || 
-      !(config.engine.sub instanceof SubService)) {
+    if (!identifyRedisType(config.engine.store) ||
+    !identifyRedisType(config.engine.sub)) {
       throw new Error('quorum config must include `store` and `sub` fields.');
     }
+  }
+
+  async initStoreChannel(store: RedisClient) {
+    if (identifyRedisType(store) === 'redis') {
+      this.store = new RedisStore(store as RedisClientType);
+    } else {
+      this.store = new IORedisStore(store as IORedisClientType);
+    }
+    await this.store.init(
+      this.namespace,
+      this.appId,
+      this.logger
+    );
+  }
+
+  async initSubChannel(sub: RedisClient) {
+    if (identifyRedisType(sub) === 'redis') {
+      this.subscribe = new RedisSub(sub as RedisClientType);
+    } else {
+      this.subscribe = new IORedisSub(sub as IORedisClientType);
+    }
+    await this.subscribe.init(
+      this.namespace,
+      this.appId,
+      this.guid,
+      this.logger
+    );
   }
 
   subscriptionHandler(): SubscriptionCallback {

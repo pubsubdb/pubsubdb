@@ -1,9 +1,27 @@
-import { RedisClientType as RCT, RedisMultiType as RMT } from './redisclient';
-import { RedisClientType as IORCT, RedisMultiType as IORMT } from './ioredisclient';
+import {
+  RedisClassType,
+  RedisClientType as RCT,
+  RedisMultiType as RMT,
+  RedisClientOptions as RCO
+} from './redisclient';
+import {
+  RedisClassType as IORRedisClassType,
+  RedisClientType as IORCT,
+  RedisMultiType as IORMT,
+  RedisClientOptions as IORCO
+} from './ioredisclient';
 
+type RedisClass = RedisClassType | IORRedisClassType;
 type RedisClient = RCT | IORCT;
 type RedisMulti = RMT | IORMT;
+type RedisOptions = RCO | IORCO;
 
-type MultiResponseFlags = (string | number)[]; // e.g., [3, 2, '968000000000000']
+type MultiResponseFlags = (string | number)[]; // e.g., [3, 2, '0']
 
-export { RedisClient, RedisMulti, MultiResponseFlags }
+export {
+  RedisClass,
+  RedisClient,
+  RedisMulti,
+  RedisOptions,
+  MultiResponseFlags,
+}

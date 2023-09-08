@@ -33,6 +33,7 @@ export interface StreamData {
   metadata: {
     topic?: string;
     jid?: string; //is optonal if type is WEBHOOK
+    dad?: string; //dimensional address
     aid: string;
     trc?: string; //trace id
     spn?: string; //span id

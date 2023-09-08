@@ -35,16 +35,20 @@ class RedisStreamService extends StreamService<RedisClientType, RedisMultiType> 
       return (await this.redisClient.sendCommand(['XGROUP', 'CREATE', key, groupName, id, ...args])) === 1;
     } catch (err) {
       const streamType = mkStream === 'MKSTREAM' ? 'with MKSTREAM' : 'without MKSTREAM';
-      this.logger.error(`Error in creating a consumer group ${streamType} for key: ${key} and group: ${groupName}`, err);
+      this.logger.error(`x-group-error ${streamType} for key: ${key} and group: ${groupName}`, err);
       throw err;
     }
   }
 
-  async xadd(key: string, id: string, ...args: string[]): Promise<string> {
+  async xadd(key: string, id: string, ...args: any[]): Promise<string | RedisMultiType> {
+    let multi: RedisMultiType;
+    if (typeof args[args.length - 1] !== 'string') {
+      multi = args.pop() as RedisMultiType;
+    }
     try {
-      return await this.redisClient.sendCommand(['XADD', key, id, ...args]);
+      return await (multi || this.redisClient).XADD(key, id, { [args[0]]: args[1] });
     } catch (err) {
-      this.logger.error(`Error in adding data to stream with key: ${key}`, err);
+      this.logger.error(`Error publishing 'xadd'; key: ${key}`, err);
       throw err;
     }
   }

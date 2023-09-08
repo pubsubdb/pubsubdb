@@ -1,29 +1,34 @@
 import { ILogger } from "../services/logger";
 import { PubSubDBService } from "../services/pubsubdb";
-import { StoreService } from "../services/store";
 import { HookRules } from "./hook";
-import { RedisClient, RedisMulti } from "./redis";
+import { RedisClass, RedisClient, RedisOptions } from "./redis";
 import { StreamData, StreamDataResponse } from "./stream";
-import { StreamService } from "../services/stream";
-import { SubService } from "../services/sub";
 
 type PubSubDB = typeof PubSubDBService;
 
 type PubSubDBEngine = {
-  store: StoreService<RedisClient, RedisMulti>;
-  stream: StreamService<RedisClient, RedisMulti>;
-  sub: SubService<RedisClient, RedisMulti>;
+  store?: RedisClient;  //set by pubsubdb using instanced `redis` class
+  stream?: RedisClient; //set by pubsubdb using instanced `redis` class
+  sub?: RedisClient;    //set by pubsubdb using instanced `redis` class
+  redis?: {
+    class: RedisClass;
+    options: RedisOptions;
+  };
   reclaimDelay?: number; //milliseconds
   reclaimCount?: number;
 }
 
 type PubSubDBWorker = {
   topic: string;
-  store: StoreService<RedisClient, RedisMulti>;
-  stream: StreamService<RedisClient, RedisMulti>;
-  sub: SubService<RedisClient, RedisMulti>;
+  store?: RedisClient;  //set by pubsubdb using instanced `redis` class
+  stream?: RedisClient; //set by pubsubdb using instanced `redis` class
+  sub?: RedisClient;    //set by pubsubdb using instanced `redis` class
+  redis?: {
+    class: RedisClass;
+    options: RedisOptions;
+  };
   reclaimDelay?: number; //milliseconds
-  reclaimCount?: number;
+  reclaimCount?: number; //max number of times to reclaim a stream
   callback: (payload: StreamData) => Promise<StreamDataResponse|void>;
 }
 
@@ -89,7 +94,6 @@ export {
   PubSubDBApp,    //a single app in the db
   PubSubDBApps,   //object array of all apps in the db
   PubSubDBConfig, //customer config
-  StoreService,
   PubSubDBManifest,
   PubSubDBGraph
 };

@@ -17,7 +17,9 @@ abstract class SubService<T, U> {
   abstract mintKey(type: KeyType, params: KeyStoreParams): string;
   abstract subscribe(keyType: KeyType.QUORUM, callback: SubscriptionCallback, appId: string, engineId?: string): Promise<void>;
   abstract unsubscribe(keyType: KeyType.QUORUM, appId: string, engineId?: string): Promise<void>;
-  //abstract publish(keyType: KeyType.QUORUM, message: Record<string, any>, appId: string, engineId?: string): Promise<void>;
+  abstract psubscribe(keyType: KeyType.QUORUM, callback: SubscriptionCallback, appId: string, engineId?: string): Promise<void>;
+  abstract punsubscribe(keyType: KeyType.QUORUM, appId: string, engineId?: string): Promise<void>;
+  //NOTE: `publish` happens in the 'StoreService' as Redis subscription clients must be read-only
 }
 
 export { SubService };

@@ -1,7 +1,7 @@
+import { nanoid } from 'nanoid';
 import { DuplicateJobError } from '../../modules/errors';
-import { formatISODate, getGuid, getTimeSeries } from '../../modules/utils';
+import { formatISODate, getTimeSeries } from '../../modules/utils';
 import { Activity } from './activity';
-import { CollatorService } from '../collator';
 import { EngineService } from '../engine';
 import { Pipe } from '../pipe';
 import { ReporterService } from '../reporter';
@@ -14,6 +14,7 @@ import {
   TriggerActivity } from '../../types/activity';
 import { JobState } from '../../types/job';
 import { RedisMulti } from '../../types/redis';
+import { StringScalarType } from '../../types/serializer';
 
 class Trigger extends Activity {
   config: TriggerActivity;
@@ -37,20 +38,25 @@ class Trigger extends Activity {
       telemetry = new TelemetryService(this.engine.appId, this.config, this.metadata, this.context);
       telemetry.startJobSpan();
       telemetry.startActivitySpan(this.leg);
-      this.context.metadata.js = this.getJobStatus();
       this.mapJobData();
       await this.setStateNX();
+      const adjacencyList = await this.filterAdjacent();
+      await this.setStatus(adjacencyList.length);
 
       const multi = this.store.getMulti();
       await this.setState(multi);
       await this.setStats(multi);
       await multi.exec();
-      telemetry.mapActivityAttributes();
-      telemetry.setJobAttributes({ 'app.job.jss': Number(this.context.metadata.js) });
-      telemetry.setActivityAttributes({ 'app.job.jss': Number(this.context.metadata.js) });
 
-      const complete = CollatorService.isJobComplete(this.context.metadata.js);
-      await this.transition(complete);
+      telemetry.mapActivityAttributes();
+      const jobStatus = Number(this.context.metadata.js);
+      telemetry.setJobAttributes({ 'app.job.jss': jobStatus });
+      const attrs: StringScalarType = { 'app.job.jss': jobStatus };
+      const messageIds = await this.transition(adjacencyList, jobStatus);
+      if (messageIds.length) {
+        attrs['app.activity.mids'] = messageIds.join(',')
+      }
+      telemetry.setActivityAttributes(attrs);
       return this.context.metadata.jid;
     } catch (error) {
       if (error instanceof DuplicateJobError) {
@@ -65,6 +71,10 @@ class Trigger extends Activity {
       telemetry.endActivitySpan();
       this.logger.debug('trigger-process-end', { subscribes: this.config.subscribes, jid: this.context.metadata.jid });
     }
+  }
+
+  async setStatus(amount: number): Promise<void> {
+    this.context.metadata.js = amount;
   }
 
   createInputContext(): Partial<JobState> {
@@ -87,12 +97,19 @@ class Trigger extends Activity {
 
     const utc = formatISODate(new Date());
     const { id, version } = await this.engine.getVID();
-    const activityMetadata = { ...this.metadata, jid: jobId, key: jobKey };
+    const activityMetadata = {
+      ...this.metadata,
+      jid: jobId,
+      key: jobKey,
+      dad: ',0',
+      as: '9999000000',
+    };
     this.context = {
       metadata: {
         ...this.metadata,
         ngn: this.context.metadata.ngn,
         pj: this.context.metadata.pj,
+        pd: this.context.metadata.pd,
         pa: this.context.metadata.pa,
         app: id,
         vrs: version,
@@ -100,11 +117,12 @@ class Trigger extends Activity {
         trc: this.context.metadata.trc,
         spn: this.context.metadata.spn,
         jid: jobId,
+        dad: ',0',
         key: jobKey,
         jc: utc,
         ju: utc,
         ts: getTimeSeries(this.resolveGranularity()),
-        js: this.config.collationKey,
+        js: 0,
       },
       data: {},
       [this.metadata.aid]: { 
@@ -136,12 +154,12 @@ class Trigger extends Activity {
   }
 
   getJobStatus(): number {
-    return this.config.collationKey - this.config.collationInt * 3;
+    return this.context.metadata.js;
   }
 
   resolveJobId(context: Partial<JobState>): string {
     const jobId = this.config.stats?.id;
-    return jobId ? Pipe.resolve(jobId, context) : getGuid();
+    return jobId ? Pipe.resolve(jobId, context) : nanoid();
   }
 
   resolveJobKey(context: Partial<JobState>): string {

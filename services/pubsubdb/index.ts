@@ -1,5 +1,5 @@
+import { nanoid } from 'nanoid';
 import { PSNS } from '../../modules/key';
-import { getGuid } from '../../modules/utils';
 import { EngineService } from '../engine';
 import { LoggerService, ILogger } from '../logger';
 import { StreamSignaler } from '../signaler/stream';
@@ -19,6 +19,7 @@ import {
   GetStatsOptions,
   IdsResponse,
   StatsResponse } from '../../types/stats';
+import { ConnectorService } from '../connector';
 
 class PubSubDBService {
   namespace: string;
@@ -51,7 +52,7 @@ class PubSubDBService {
 
   static async init(config: PubSubDBConfig) {
     const instance = new PubSubDBService();
-    instance.guid = getGuid();
+    instance.guid = nanoid();
     instance.verifyAndSetNamespace(config.namespace);
     instance.verifyAndSetAppId(config.appId);
     instance.logger = new LoggerService(config.appId, instance.guid, config.name || '', config.logLevel);
@@ -63,12 +64,17 @@ class PubSubDBService {
 
   async initEngine(config: PubSubDBConfig, logger: ILogger): Promise<void> {
     if (config.engine) {
+      await ConnectorService.initRedisClients(
+        config.engine.redis?.class,
+        config.engine.redis?.options,
+        config.engine,
+      );
       this.engine = await EngineService.init(
         this.namespace,
         this.appId,
         this.guid,
         config,
-        logger
+        logger,
       );
     }
   }
@@ -97,7 +103,7 @@ class PubSubDBService {
   }
 
   // ************* PUB/SUB METHODS *************
-  async pub(topic: string, data: JobData, context?: JobState) {
+  async pub(topic: string, data: JobData = {}, context?: JobState) {
     return await this.engine?.pub(topic, data, context);
   }
   async sub(topic: string, callback: JobMessageCallback): Promise<void> {
@@ -106,7 +112,13 @@ class PubSubDBService {
   async unsub(topic: string): Promise<void> {
     return await this.engine?.unsub(topic);
   }
-  async pubsub(topic: string, data: JobData, timeout?: number): Promise<JobOutput> {
+  async psub(wild: string, callback: JobMessageCallback): Promise<void> {
+    return await this.engine?.psub(wild, callback);
+  }
+  async punsub(wild: string): Promise<void> {
+    return await this.engine?.punsub(wild);
+  }
+  async pubsub(topic: string, data: JobData = {}, timeout?: number): Promise<JobOutput> {
     return await this.engine?.pubsub(topic, data, timeout);
   }
 

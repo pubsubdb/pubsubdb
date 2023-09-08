@@ -20,12 +20,12 @@ PubSubDB steps in as a mediator, leveraging all 3 Redis communication channels (
 ## Time to Connect Endpoints
 The approach is now clearer, allowing us to refactor without disrupting legacy processes.
 
-### Bot Design Assistance
+### AI Design Assistance
 An advantage of PubSubDB's model-driven design system is that AI can help you reason through the process. Documentation and User Guides are helpful, but workflows can get complicated--especially when there's data mapping involved.
 
 <img src="./img/refactor/rf4.png" alt="Chatbot exchange creating a workflow execution model" style="max-width:100%;width:600px;">
 
-The bot-produced YAML configuration is now ready for deployment.
+The AI-generated YAML configuration is now ready for deployment.
 
 ```yaml
 app:

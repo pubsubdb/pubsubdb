@@ -1,3 +1,10 @@
-import { Redis, ChainableCommander } from 'ioredis';
+import { Redis, ChainableCommander, RedisOptions } from 'ioredis';
 
-export { Redis as RedisClientType, ChainableCommander as RedisMultiType }
+type RedisClassType = { new (options: RedisOptions): Redis };
+
+export {
+  RedisClassType,
+  Redis as RedisClientType,
+  ChainableCommander as RedisMultiType,
+  RedisOptions as RedisClientOptions,
+}

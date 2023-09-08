@@ -3,7 +3,6 @@ import {
   formatISODate,
   getValueByPath,
   restoreHierarchy } from '../../modules/utils';
-import { CollatorService } from '../collator';
 import { EngineService } from '../engine';
 import { ILogger } from '../logger';
 import { MapperService } from '../mapper';
@@ -23,13 +22,13 @@ import {
   MultiResponseFlags,
   RedisClient,
   RedisMulti } from '../../types/redis';
-import { StringAnyType } from '../../types/serializer';
+import { StringAnyType, StringScalarType } from '../../types/serializer';
 import {
   StreamCode,
   StreamData,
   StreamDataType,
   StreamStatus } from '../../types/stream';
-import { TransitionRule, Transitions } from '../../types/transition';
+import { TransitionRule } from '../../types/transition';
 
 /**
  * The base class for all activities
@@ -74,22 +73,35 @@ class Activity {
       telemetry = new TelemetryService(this.engine.appId, this.config, this.metadata, this.context);
       telemetry.startActivitySpan(this.leg);
 
-      const multi = this.store.getMulti();
-      //await this.registerTimeout();
-      const shouldSleep = await this.registerHook(multi);
-      this.mapJobData();
-      await this.setState(multi);
-      const decrementBy = shouldSleep ? 4 : 3;
-      await this.setStatus(decrementBy, multi);
-      const multiResponse = await multi.exec() as MultiResponseFlags;
+      let adjacencyList: StreamData[];
+      let multiResponse: MultiResponseFlags;
 
-      telemetry.mapActivityAttributes();
-      const activityStatus = this.resolveStatus(multiResponse);
-      telemetry.setActivityAttributes({ 'app.job.jss': activityStatus });
-      const isComplete = CollatorService.isJobComplete(activityStatus);
-      if (!shouldSleep) {
-        await this.transition(isComplete);
+      const multi = this.store.getMulti();
+      if (this.doesHook()) {
+        //sleep and wait to awaken upon a signal
+        await this.registerHook(multi);
+        this.mapJobData();
+        await this.setState(multi);
+        await this.setStatus(0, multi);
+        await multi.exec();
+        telemetry.mapActivityAttributes();
+      } else {
+        //end the activity and transition to its children
+        adjacencyList = await this.filterAdjacent();
+        this.mapJobData();
+        await this.setState(multi);
+        await this.setStatus(adjacencyList.length - 1, multi);
+        multiResponse = await multi.exec() as MultiResponseFlags;
+        telemetry.mapActivityAttributes();
+        const jobStatus = this.resolveStatus(multiResponse);
+        const attrs: StringScalarType = { 'app.job.jss': jobStatus };
+        const messageIds = await this.transition(adjacencyList, jobStatus);
+        if (messageIds.length) {
+          attrs['app.activity.mids'] = messageIds.join(',')
+        }
+        telemetry.setActivityAttributes(attrs);
       }
+
       return this.context.metadata.aid;
     } catch (error) {
       if (error instanceof GetStateError) {
@@ -110,6 +122,10 @@ class Activity {
   }
 
   //********  SIGNALER RE-ENTRY POINT (B)  ********//
+  doesHook(): boolean {
+    return !!(this.config.hook?.topic || this.config.sleep);
+  }
+
   async registerHook(multi?: RedisMulti): Promise<string | void> {
     if (this.config.hook?.topic) {
       const signaler = new StoreSignaler(this.store, this.logger);
@@ -122,6 +138,7 @@ class Activity {
       return jobId;
     }
   }
+
   async processWebHookEvent(): Promise<JobStatus | void> {
     this.logger.debug('engine-process-web-hook-event', {
       topic: this.config.hook.topic,
@@ -135,6 +152,7 @@ class Activity {
       await signaler.deleteWebHookSignal(this.config.hook.topic, data);
     } //else => already resolved
   }
+
   async processTimeHookEvent(jobId: string): Promise<JobStatus | void> {
     this.logger.debug('engine-process-time-hook-event', {
       jid: jobId,
@@ -142,6 +160,7 @@ class Activity {
     });
     return await this.processHookEvent(jobId);
   }
+
   async processHookEvent(jobId: string): Promise<JobStatus | void> {
     this.logger.debug('activity-process-hook-event', { jobId });
     let telemetry: TelemetryService;
@@ -152,18 +171,22 @@ class Activity {
       telemetry.startActivitySpan(this.leg);
       this.bindActivityData('hook');
       this.mapJobData();
+      const adjacencyList = await this.filterAdjacent();
 
       const multi = this.engine.store.getMulti();
       await this.setState(multi);
-      await this.setStatus(1, multi);
+      await this.setStatus(adjacencyList.length - 1, multi);
       const multiResponse = await multi.exec() as MultiResponseFlags;
-      telemetry.mapActivityAttributes();
 
-      const activityStatus = this.resolveStatus(multiResponse);
-      telemetry.setActivityAttributes({ 'app.job.jss': activityStatus });
-      const isComplete = CollatorService.isJobComplete(activityStatus);
-      await this.transition(isComplete);
-      return activityStatus as number - 0;
+      telemetry.mapActivityAttributes();
+      const jobStatus = this.resolveStatus(multiResponse);
+      const attrs: StringScalarType = { 'app.job.jss': jobStatus };
+      const messageIds = await this.transition(adjacencyList, jobStatus);
+      if (messageIds.length) {
+        attrs['app.activity.mids'] = messageIds.join(',')
+      }
+      telemetry.setActivityAttributes(attrs);
+      return jobStatus as number;
     } catch (error) {
       this.logger.error('engine-process-hook-event-error', error);
       telemetry.setActivityError(error.message);
@@ -217,10 +240,10 @@ class Activity {
     return null;
   }
 
-  async setStatus(multiplier = 1, multi?: RedisMulti): Promise<void> {
+  async setStatus(amount: number, multi?: RedisMulti): Promise<void> {
     const { id: appId } = await this.engine.getVID();
     await this.store.setStatus(
-      -this.config.collationInt * multiplier,
+      amount,
       this.context.metadata.jid,
       appId,
       multi
@@ -360,69 +383,46 @@ class Activity {
 
   bindActivityData(type: 'output' | 'hook'): void {
     this.context[this.metadata.aid][type].data = this.data;
-  }  
+  }
 
-  async skipDescendants(activityId: string, transitions: Transitions, toDecrement: number): Promise<number> {
-    const config = await this.engine.getVID();
-    const schema = await this.store.getSchema(activityId, config);
-    toDecrement = toDecrement - (schema.collationInt * 6); // 3 = 'skipped'
-    const transition = transitions[`.${activityId}`];
+  async filterAdjacent(): Promise<StreamData[]> {
+    const adjacencyList: StreamData[] = [];
+    const transitions = await this.store.getTransitions(await this.engine.getVID());
+    const transition = transitions[`.${this.metadata.aid}`];
     if (transition) {
       for (const toActivityId in transition) {
-        toDecrement = await this.skipDescendants(toActivityId, transitions, toDecrement);
-      }
-    }
-    return toDecrement;
-  }
-
-  async transition(isComplete: boolean): Promise<void> {
-    //if any descendant activity is skipped, toDecrement will be negative
-    const toDecrement = await this.transitionActivity(isComplete);
-    //this is an extra call to the db and is job-specific
-    await this.engine.setStatus(this.context, toDecrement);
-  }
-
-  //todo: most efficient path is to count all skipped and decrement with self (just one call to db)
-  async transitionActivity(isComplete: boolean): Promise<number> {
-    if (isComplete) {
-      this.engine.runJobCompletionTasks(this.context);
-      return 0;
-    } else {
-      let toDecrement = 0;
-      const transitions = await this.store.getTransitions(await this.engine.getVID());
-      const transition = transitions[`.${this.metadata.aid}`];
-      if (transition) {
-        for (const toActivityId in transition) {
-          const transitionRule: boolean | TransitionRule = transition[toActivityId];
-          if (MapperService.evaluate(transitionRule, this.context, this.code)) {
-            await this.execAdjacent(toActivityId);
-          } else {
-            //cancelled transitions cascade
-            toDecrement = await this.skipDescendants(toActivityId, transitions, toDecrement);
-          }
+        const transitionRule: boolean | TransitionRule = transition[toActivityId];
+        if (MapperService.evaluate(transitionRule, this.context, this.code)) {
+          const streamData: StreamData = {
+            metadata: {
+              jid: this.context.metadata.jid,
+              dad: this.context['$self'].output.metadata?.dad,
+              aid: toActivityId,
+              spn: this.context['$self'].output.metadata?.l2s,
+              trc: this.context.metadata.trc,
+            },
+            type: StreamDataType.TRANSITION,
+            data: {}
+          };
+          adjacencyList.push(streamData);
         }
       }
-      return toDecrement;
     }
+    return adjacencyList;
   }
 
-  async execAdjacent(aid: string): Promise<string> {
-    const streamData: StreamData = {
-      metadata: {
-        jid: this.context.metadata.jid,
-        aid,
-        spn: this.context['$self'].output.metadata?.l2s,
-        trc: this.context.metadata.trc,
-      },
-      type: StreamDataType.TRANSITION,
-      data: {}
-    };
-    if (this.config.retry) {
-      streamData.policies = {
-        retry: this.config.retry
-      };
+  async transition(adjacencyList: StreamData[], jobStatus: JobStatus): Promise<string[]> {
+    let mIds: string[] = [];
+    if (adjacencyList.length) {
+      const multi = this.store.getMulti();
+      for (const execSignal of adjacencyList) {
+        await this.engine.streamSignaler?.publishMessage(null, execSignal, multi);
+      }
+      mIds = (await multi.exec()) as string[];
+    } else if (jobStatus <= 0) {
+      await this.engine.runJobCompletionTasks(this.context);
     }
-    return await this.engine.streamSignaler?.publishMessage(null, streamData);
+    return mIds;
   }
 }
 
