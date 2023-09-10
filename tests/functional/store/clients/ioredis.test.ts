@@ -67,7 +67,7 @@ describe('FUNCTIONAL | IORedisStoreService', () => {
       expect(Object.keys(savedSymbols).length).toEqual(MDATA_SYMBOLS.ACTIVITY.KEYS.length + 2); //total of meta/data keys
     });
   });
-  
+
   describe('getSymbols', () => {
     it('should retrieve symbols for a given activity', async () => {
       const activityId = 'a2';
@@ -81,7 +81,7 @@ describe('FUNCTIONAL | IORedisStoreService', () => {
       expect(result).toEqual(symbols);
     });
   });
-  
+
   describe('addSymbols', () => {
     it('should store symbols for a given activity', async () => {
       const activityId = 'a3';
