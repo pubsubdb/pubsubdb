@@ -84,7 +84,11 @@ export class WorkerService {
   }
 
   async run() {
-    console.log('WorkerService is running');
+    if (WorkflowService.workflowRunner) {
+      WorkflowService.workflowRunner.engine.logger.info('WorkerService is running');
+    } else {
+      console.log('WorkerService is running');
+    }
   }
 
   async initActivityWorkflow(config: WorkerConfig, activityTopic: string): Promise<PubSubDB> {
@@ -139,7 +143,7 @@ export class WorkerService {
         await pubSubDB.deploy(getActivityYAML(activityTopic, version));
         await pubSubDB.activate(version);
       } catch (err) {
-        console.log('durable-activity-workflow-activation-error', err);
+        console.log('durable-worker-activity-workflow-activation-error', err);
         throw err;
       }
     } else {
@@ -186,12 +190,14 @@ export class WorkerService {
         });
 
         return {
+          code: 200,
+          status: StreamStatus.SUCCESS,
           metadata: { ...data.metadata },
           data: { response: workflowResponse }
         };
       } catch (err) {
         //todo: error types: some are retryable, some are not
-        console.error(err);
+        console.error("ERROR!!!!", err);
         return {
           code: 500,
           status: StreamStatus.PENDING,
@@ -214,8 +220,6 @@ export class WorkerService {
         console.log('durable-worker-workflow-activation-error', err);
         throw err;
       }
-    } else {
-      await pubSubDB.activate(version);
     }
   }
 }

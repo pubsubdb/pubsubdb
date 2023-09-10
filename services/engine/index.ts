@@ -187,7 +187,7 @@ class EngineService {
     );
   }
 
-  async getVID(): Promise<AppVID> {
+  async getVID(vid?: AppVID): Promise<AppVID> {
     if (this.cacheMode === 'nocache') {
       const app = await this.store.getApp(this.appId, true);
       if (app.version.toString() === this.untilVersion.toString()) {
@@ -197,6 +197,10 @@ class EngineService {
         this.setCacheMode('cache', app.version.toString());
       }
       return { id: this.appId, version: app.version };
+    } else if (!this.apps && vid) {
+      this.apps = {};
+      this.apps[this.appId] = vid;
+      return vid;
     } else {
       return { id: this.appId, version: this.apps?.[this.appId].version };
     }
@@ -248,20 +252,20 @@ class EngineService {
     }
   }
   async getSchema(topic: string): Promise<[activityId: string, schema: ActivityType]> {
-    const app = await this.store.getApp(this.appId);
+    const app = await this.store.getApp(this.appId) as AppVID;
     if (!app) {
       throw new Error(`no app found for id ${this.appId}`);
     }
     if (this.isPrivate(topic)) {
       //private subscriptions use the schema id (.activityId)
       const activityId = topic.substring(1)
-      const schema = await this.store.getSchema(activityId, await this.getVID());
+      const schema = await this.store.getSchema(activityId, await this.getVID(app));
       return [activityId, schema];
     } else {
       //public subscriptions use a topic (a.b.c) that is associated with a schema id
-      const activityId = await this.store.getSubscription(topic, await this.getVID());
+      const activityId = await this.store.getSubscription(topic, await this.getVID(app));
       if (activityId) {
-        const schema = await this.store.getSchema(activityId, await this.getVID());
+        const schema = await this.store.getSchema(activityId, await this.getVID(app));
         return [activityId, schema];
       }
     }

@@ -4,7 +4,7 @@ const getWorkflowYAML = (topic: string, version = '1') => {
   version: '${version}'
   graphs:
     - subscribes: ${topic}
-      publishes: ${topic}.response
+      publishes: ${topic}
       expire: 120
       input:
         schema:

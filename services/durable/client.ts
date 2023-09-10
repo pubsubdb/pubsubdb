@@ -97,7 +97,7 @@ export class ClientService {
         await pubSubDB.deploy(getWorkflowYAML(workflowTopic, version));
         await pubSubDB.activate(version);
       } catch (err) {
-        console.log('err activating', err);
+        pubSubDB.engine.logger.error('durable-client-workflow-activation-err', err);
         throw err;
       }
     } else {

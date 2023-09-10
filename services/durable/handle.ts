@@ -15,16 +15,22 @@ export class WorkflowHandleService {
     const status = await this.pubSubDB.getStatus(this.workflowId);
     if (status == 0) {
       const result = await this.pubSubDB.getState(this.workflowTopic, this.workflowId);
-      return result.data?.response; //'response' is defined in the YAML
-    } else {
-      const topic = `${this.workflowTopic}.response.${this.workflowId}`;
-      return new Promise((resolve, reject) => {
-        this.pubSubDB.sub(topic, (topic: string, result: any) => {
-          resolve(result?.data?.response);
-          //todo: unsubscribe
-        });
-        //todo: check the state again in case it resolved while the subscription was setup
-      });
+      return result.data?.response;
     }
+
+    const topic = `${this.workflowTopic}.${this.workflowId}`;
+    return new Promise(async (resolve, reject) => {
+      this.pubSubDB.sub(topic, (topic: string, result: any) => {
+        resolve(result?.data?.response);
+        this.pubSubDB.unsub(topic);
+      });
+      const status = await this.pubSubDB.getStatus(this.workflowId);
+      if (status == 0) {
+        this.pubSubDB.unsub(topic);
+        const result = await this.pubSubDB.getState(this.workflowTopic, this.workflowId);
+        resolve(result.data?.response);
+      }
+    });
+
   }
 }

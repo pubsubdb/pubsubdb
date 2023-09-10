@@ -5,12 +5,30 @@ import { Durable } from '../../../services/durable';
 import * as activities from './src/activities';
 import { nanoid } from 'nanoid';
 import { WorkflowHandleService } from '../../../services/durable/handle';
+import { RedisConnection } from '../../../services/connector/clients/ioredis';
 
 
 const { Connection, Client, NativeConnection, Worker } = Durable;
 
 describe('Durable', () => {
   let handle: WorkflowHandleService;
+  const options = {
+    host: config.REDIS_HOST,
+    port: config.REDIS_PORT,
+    password: config.REDIS_PASSWORD,
+    database: config.REDIS_DATABASE,
+  };
+
+  beforeAll(async () => {
+    //init Redis and flush db
+    const redisConnection = await RedisConnection.connect(nanoid(), Redis, options);
+    redisConnection.getClient().flushdb();
+  });
+
+  afterAll(async () => {
+    //close Redis connection
+    await RedisConnection.disconnectAll();
+  });
 
   describe('Connection', () => {
     describe('connect', () => {
