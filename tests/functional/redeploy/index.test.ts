@@ -34,7 +34,7 @@ describe('FUNCTIONAL | Redeploy', () => {
       },
       workers: [
         {
-          //worker activity in the YAML file declares 'summer' as the subtype
+          //worker activity in the YAML file declares 'summer' as the topic
           topic: 'summer',
           redis: { class: Redis, options },
           callback: async (streamData: StreamData): Promise<StreamDataResponse> => {

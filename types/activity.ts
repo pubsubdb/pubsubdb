@@ -52,7 +52,7 @@ interface AwaitActivity extends BaseActivity {
 
 interface WorkerActivity extends BaseActivity {
   type: 'worker';
-  subtype: string;
+  topic: string;
   timeout: number;
 }
 

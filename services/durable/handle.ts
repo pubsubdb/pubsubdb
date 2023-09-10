@@ -12,25 +12,31 @@ export class WorkflowHandleService {
   }
 
   async result(): Promise<any> {
-    const status = await this.pubSubDB.getStatus(this.workflowId);
-    if (status == 0) {
-      const result = await this.pubSubDB.getState(this.workflowTopic, this.workflowId);
-      return result.data?.response;
-    }
-
+    let status = await this.pubSubDB.getStatus(this.workflowId);
     const topic = `${this.workflowTopic}.${this.workflowId}`;
-    return new Promise(async (resolve, reject) => {
-      this.pubSubDB.sub(topic, (topic: string, result: any) => {
-        resolve(result?.data?.response);
+  
+    if (status == 0) {
+      return (await this.pubSubDB.getState(this.workflowTopic, this.workflowId)).data?.response;
+    }
+  
+    return new Promise((resolve, reject) => {
+      let isResolved = false;
+      //common fulfill/unsubscribe
+      const complete = async () => {
+        if (isResolved) return;
+        isResolved = true;
         this.pubSubDB.unsub(topic);
+        resolve((await this.pubSubDB.getState(this.workflowTopic, this.workflowId)).data?.response);
+      };
+      this.pubSubDB.sub(topic, async () => {
+        await complete();
       });
-      const status = await this.pubSubDB.getStatus(this.workflowId);
-      if (status == 0) {
-        this.pubSubDB.unsub(topic);
-        const result = await this.pubSubDB.getState(this.workflowTopic, this.workflowId);
-        resolve(result.data?.response);
-      }
+      setTimeout(async () => {
+        status = await this.pubSubDB.getStatus(this.workflowId);
+        if (status == 0) {
+          await complete();
+        }
+      }, 0);
     });
-
   }
 }

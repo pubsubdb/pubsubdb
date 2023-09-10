@@ -47,7 +47,7 @@ app:
                   - ['{@number.multiply}']
         shine:
           type: worker
-          subtype: summer
+          topic: summer
           input:
             schema:
               type: object
@@ -67,7 +67,7 @@ app:
               shine: '{$self.output.data.result}'
         graft:
           type: worker
-          subtype: summer
+          topic: summer
           input:
             schema:
               type: object
@@ -87,7 +87,7 @@ app:
               graft: '{$self.output.data.result}'
         water:
           type: worker
-          subtype: summer
+          topic: summer
           input:
             schema:
               type: object
@@ -107,7 +107,7 @@ app:
               water: '{$self.output.data.result}'
         fertilize:
           type: worker
-          subtype: summer
+          topic: summer
           input:
             schema:
               type: object
@@ -127,7 +127,7 @@ app:
               fertilize: '{$self.output.data.result}'
         prune:
           type: worker
-          subtype: summer
+          topic: summer
           input:
             schema:
               type: object

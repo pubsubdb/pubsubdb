@@ -98,10 +98,10 @@ run().catch((err) => {
 });
 ```
 
->If you're curious how PubSubDB emulates the Temporal developer experience, check out the [Durable Class](./services/durable/index.ts).
+>PubSubDB delivers durable function execution using a swarm of [distributed engines](./docs/distributed_orchestration.md). The architecture optimally consumes leftover CPU on your overprovisioned services to durably orchestrate workflows without the cost, complexity and vulnerability of a central server.
 
 ## Advanced Design
-PubSubDB's TypeScript SDK is the easiest way to make your functions durable. But if you need full control over your function lifecycles (including high-volume, high-speed use cases), you can use PubSubDB's YAML models to design and deploy durable workflows. The following model depicts a sequence of activities orchestrated by PubSubDB. Any function referenced in a YAML definition is guaranteed to succeed.
+PubSubDB's TypeScript SDK is the easiest way to make your functions durable. But if you need full control over your function lifecycles (including high-volume, high-speed use cases), you can use PubSubDB's underlying YAML models to design and deploy durable workflows. The following model depicts a sequence of activities orchestrated by PubSubDB. Any function associated with the `topic` in the YAML definition is guaranteed to succeed when run.
 
 ```yaml
 app:
@@ -116,13 +116,13 @@ app:
           type: trigger
         servicec:
           type: worker
-          subtype: sandbox.work.do.servicec
+          topic: sandbox.work.do.servicec
         serviced:
           type: worker
-          subtype: sandbox.work.do.serviced
+          topic: sandbox.work.do.serviced
         sforcecloud:
           type: worker
-          subtype: sandbox.work.do.sforcecloud
+          topic: sandbox.work.do.sforcecloud
 
       transitions:
         gateway:

@@ -35,7 +35,7 @@
           },
           "a1": {
             "type": "worker",
-            "subtype": "work.do",
+            "topic": "work.do",
             "input": {
               "schema": {
                 "type": "object",
@@ -67,7 +67,7 @@
           },
           "a2": {
             "type": "worker",
-            "subtype": "work.do.more",
+            "topic": "work.do.more",
             "input": {
               "schema": {
                 "type": "object",

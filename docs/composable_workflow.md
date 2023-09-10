@@ -14,7 +14,7 @@ activities:
   a2:
     title: Create Asana Task
     type: worker
-    subtype: asana.1.createTask
+    topic: asana.1.createTask
   a3:
     title: Save Task ID
     type: job
@@ -77,7 +77,7 @@ activities:
   a2:
     title: Exec Asana Task
     type: worker
-    subtype: asana.1.createTask
+    topic: asana.1.createTask
     credentials: asana.1.mycreds
     hook:
       schema:
@@ -178,7 +178,7 @@ activities:
   a6:
     title: Get Approval
     type: await
-    subtype: order.approve
+    topic: order.approve
     input:
       schema:
         $ref: ./schemas.yaml#/a6/input

@@ -24,6 +24,7 @@ class Deployer {
   async deploy(store: StoreService<RedisClient, RedisMulti>) {
     this.store = store;
     CollatorService.compile(this.manifest.app.graphs);
+    this.convertTopicsToTypes();
     this.copyJobSchemas();
     this.bindBackRefs();
     this.bindParents();
@@ -126,6 +127,20 @@ class Deployer {
         }
         if (graph.expire) {
           activities[activityKey].expire = graph.expire;
+        }
+      }
+    }
+  }
+
+  //more intuitive for SDK users to use 'topic',
+  //but the compiler is desiged to be generic and uses 'subtypes'
+  convertTopicsToTypes() {
+    for (const graph of this.manifest!.app.graphs) {
+      const activities = graph.activities;
+      for (const activityKey in activities) {
+        const activity = activities[activityKey];
+        if (['worker', 'await'].includes(activity.type) && activity.topic && !activity.subtype) {
+          activity.subtype = activity.topic;
         }
       }
     }

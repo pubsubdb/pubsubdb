@@ -28,7 +28,7 @@ const getWorkflowYAML = (topic: string, version = '1') => {
             id: '{$self.input.data.workflowId}'
         a1:
           type: worker
-          subtype: ${topic}
+          topic: ${topic}
           input:
             schema:
               type: object
@@ -86,7 +86,7 @@ const getActivityYAML = (topic: string, version = '1') => {
             id: '{$self.input.data.workflowId}'
         a1:
           type: worker
-          subtype: ${topic}
+          topic: ${topic}
           input:
             schema:
               type: object

@@ -151,7 +151,7 @@ activities:
   operate:
     title: Operate
     type: await
-    subtype: calculation.execute
+    topic: calculation.execute
     input:
       schema:
         $ref: '../schemas/calculate.yaml#/input'
@@ -241,7 +241,7 @@ activities:
   executor:
     title: Execute Calculation
     type: worker
-    subtype: calculation.execute
+    topic: calculation.execute
     input:
       schema:
         $ref: '../schemas/calculate.yaml#/input'

@@ -327,7 +327,7 @@ Example of an `await` in YAML:
 a2:
   title: "Get Price Approval"
   type: "await"
-  subtype: "order.approval.price.requested"
+  topic: "order.approval.price.requested"
   input:
     schema:
       type: "object"
@@ -356,7 +356,7 @@ Example of a `worker` in YAML:
 my_calculator_activity:
   title: Calculate Something
   type: worker
-  subtype: calculation.execute
+  topic: calculation.execute
   input:
     schema:
       $ref: '../schemas/calculate.yaml#/input'

@@ -326,7 +326,7 @@
           "bundler": {
             "title": "Bundle Routed Order",
             "type": "worker",
-            "subtype": "order.bundle",
+            "topic": "order.bundle",
             "input": {
               "schema": {
                 "type": "object",
@@ -479,7 +479,7 @@
           "a2": {
             "title": "Get Price Approval",
             "type": "await",
-            "subtype": "order.approval.price.requested",
+            "topic": "order.approval.price.requested",
             "input": {
               "schema": {
                 "type": "object",

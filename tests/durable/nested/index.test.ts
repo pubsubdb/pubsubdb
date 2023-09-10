@@ -8,7 +8,6 @@ import { nanoid } from 'nanoid';
 import { WorkflowHandleService } from '../../../services/durable/handle';
 import { RedisConnection } from '../../../services/connector/clients/ioredis';
 
-
 const { Connection, Client, NativeConnection, Worker } = Durable;
 
 describe('DURABLE | nested | `workflow.executeChild`', () => {
@@ -109,7 +108,6 @@ describe('DURABLE | nested | `workflow.executeChild`', () => {
   describe('WorkflowHandle', () => {
     describe('result', () => {
       it('should return the PARENT workflow execution result', async () => {
-        //the parent workflow returns an object with child output
         const expectedOutput = {
           activityOutput: 'parentActivity, PARENT!',
           childWorkflowOutput: 'childActivity, PARENT to CHILD!',

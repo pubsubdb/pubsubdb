@@ -8,7 +8,7 @@ app:
           type: trigger
         a1:
           type: await
-          subtype: fall
+          topic: fall
       transitions:
         t1:
           - to: a1

@@ -195,7 +195,7 @@ app:
           type: trigger
         a1:
           type: await
-          subtype: some.other.topic
+          topic: some.other.topic
       transitions:
         t1:
           - to: a1
@@ -227,7 +227,7 @@ From the outside (from the caller's perspective), this flow doesn't appear much 
 ## The Simplest Executable Flow
 This example shows the simplest *executable flow* possible (where actual work is performed by coordinating and executing functions on your network). Notice how activity, `a1` has been defined as a `worker` type. Save this YAML descriptor as `abc.4.yaml`.
 
->The `work.do` subtype identifies the worker function to execute. This name is arbitrary and should match the semantics of your use case and the topic space you define for your organization.
+>The `work.do` topic identifies the worker function to execute. This name is arbitrary and should match the semantics of your use case and the topic space you define for your organization.
 
 ```yaml
 # abc.4.yaml
@@ -241,7 +241,7 @@ app:
           type: trigger
         a1:
           type: worker
-          subtype: work.do
+          topic: work.do
       transitions:
         t1:
           - to: a1
@@ -333,7 +333,7 @@ app:
           type: trigger
         a1:
           type: worker
-          subtype: work.do
+          topic: work.do
           input:
             schema:
               type: object
@@ -445,7 +445,7 @@ app:
           type: trigger
         a1:
           type: worker
-          subtype: work.do
+          topic: work.do
           input:
             schema:
               type: object
@@ -465,7 +465,7 @@ app:
               b: '{$self.output.data.y}'
         a2:
           type: worker
-          subtype: work.do.more
+          topic: work.do.more
           input:
             schema:
               type: object
@@ -523,7 +523,7 @@ app:
           type: trigger
         a1:
           type: worker
-          subtype: work.do
+          topic: work.do
           input:
             schema:
               type: object
@@ -543,7 +543,7 @@ app:
               b: '{$self.output.data.y}'
         a2:
           type: worker
-          subtype: work.do.more
+          topic: work.do.more
           input:
             schema:
               type: object
@@ -679,7 +679,7 @@ app:
           type: trigger
         a1:
           type: await
-          subtype: some.other.topic
+          topic: some.other.topic
           input:
             schema:
               type: object
@@ -722,7 +722,7 @@ app:
           type: trigger
         a2:
           type: worker
-          subtype: work.do
+          topic: work.do
           input:
             schema:
               type: object
@@ -796,7 +796,7 @@ app:
           type: trigger
         a1:
           type: worker
-          subtype: work.do
+          topic: work.do
           input:
             schema:
               type: object
@@ -816,7 +816,7 @@ app:
               b: '{$self.output.data.y}'
         a2:
           type: worker
-          subtype: work.do.more
+          topic: work.do.more
           input:
             schema:
               type: object

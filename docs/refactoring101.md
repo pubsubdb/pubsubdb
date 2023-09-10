@@ -38,13 +38,13 @@ app:
           type: trigger
         a1:
           type: worker
-          subtype: sandbox.a
+          topic: sandbox.a
         a2:
           type: worker
-          subtype: sandbox.b
+          topic: sandbox.b
         a3:
           type: worker
-          subtype: sandbox.c
+          topic: sandbox.c
       transitions:
         t1:
           - to: a1

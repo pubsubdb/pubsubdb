@@ -11,7 +11,7 @@
           },
           "a1": {
             "type": "await",
-            "subtype": "tests.b"
+            "topic": "tests.b"
           }
         },
         "transitions": {

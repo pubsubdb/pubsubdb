@@ -75,7 +75,7 @@ const yaml = `app:
           type: trigger
         servicec:
           type: worker
-          subtype: sandbox.work.do.servicec
+          topic: sandbox.work.do.servicec
         ...
 
       transitions:
