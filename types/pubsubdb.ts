@@ -6,14 +6,16 @@ import { StreamData, StreamDataResponse } from "./stream";
 
 type PubSubDB = typeof PubSubDBService;
 
+type RedisConfig = {
+  class: RedisClass;
+  options: RedisOptions;
+}
+
 type PubSubDBEngine = {
   store?: RedisClient;  //set by pubsubdb using instanced `redis` class
   stream?: RedisClient; //set by pubsubdb using instanced `redis` class
   sub?: RedisClient;    //set by pubsubdb using instanced `redis` class
-  redis?: {
-    class: RedisClass;
-    options: RedisOptions;
-  };
+  redis?: RedisConfig;
   reclaimDelay?: number; //milliseconds
   reclaimCount?: number;
 }
@@ -89,6 +91,7 @@ type PubSubDBApps = {
 export {
   PubSubDB,
   PubSubDBEngine,
+  RedisConfig,
   PubSubDBWorker,
   PubSubDBSettings,
   PubSubDBApp,    //a single app in the db

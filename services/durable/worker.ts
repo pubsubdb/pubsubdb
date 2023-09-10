@@ -2,8 +2,7 @@ import { asyncLocalStorage } from './asyncLocalStorage';
 import { PubSubDBService as PubSubDB } from '../pubsubdb';
 import { RedisClass, RedisOptions } from '../../types/redis';
 import { StreamData, StreamDataResponse, StreamStatus } from '../../types/stream';
-import { ActivityDataType, Registry, WorkerConfig, WorkflowDataType } from "../../types/durable";
-import { WorkflowService } from "./workflow";
+import { ActivityDataType, Connection, Registry, WorkerConfig, WorkflowDataType } from "../../types/durable";
 import { getWorkflowYAML, getActivityYAML } from './factory';
 
 /*
@@ -41,8 +40,38 @@ run().catch((err) => {
 */
 
 export class WorkerService {
-  //will hold the imported activity functions
-  static activityRegistry: Registry = {};
+  static activityRegistry: Registry = {}; //user's activities
+  static connection: Connection;
+  static instances = new Map<string, PubSubDB | Promise<PubSubDB>>();
+  workflowRunner: PubSubDB;
+
+  static getPubSubDB = async (worflowTopic: string) => {
+    if (WorkerService.instances.has(worflowTopic)) {
+      return await WorkerService.instances.get(worflowTopic);
+    }
+    const pubSubDB = PubSubDB.init({
+      appId: worflowTopic,
+      engine: { redis: { ...WorkerService.connection } }
+    });
+    WorkerService.instances.set(worflowTopic, pubSubDB);
+    await WorkerService.activateWorkflow(await pubSubDB, worflowTopic, getWorkflowYAML);
+    return pubSubDB;
+  }
+
+  static async activateWorkflow(pubSubDB: PubSubDB, topic: string, factory: Function) {
+    const version = '1';
+    const app = await pubSubDB.engine.store.getApp(topic);
+    const appVersion = app?.version;
+    if(!appVersion) {
+      try {
+        await pubSubDB.deploy(factory(topic, version));
+        await pubSubDB.activate(version);
+      } catch (err) {
+        pubSubDB.engine.logger.error('durable-worker-workflow-activation-error', err);
+        throw err;
+      }
+    }
+  }
 
   /**
    * The `worker` calls `registerActivities` immediately BEFORE
@@ -63,6 +92,7 @@ export class WorkerService {
   }
 
   static async create(config: WorkerConfig) {
+    WorkerService.connection = config.connection;
     //pre-cache user activity functions
     WorkerService.registerActivities<typeof config.activities>(config.activities);
     //import the user's workflow file (triggers activity functions to be wrapped)
@@ -74,18 +104,19 @@ export class WorkerService {
     const activityTopic = `${baseTopic}-activity`;
     const workflowTopic = `${baseTopic}`;
 
-    //init activity and worker workflows
+    //initialize supporting workflows
     const worker = new WorkerService();
-    WorkflowService.activityRunner = await worker.initActivityWorkflow(config, activityTopic);
-    await worker.activateActivityWorkflow(WorkflowService.activityRunner, activityTopic);
-    WorkflowService.workflowRunner = await worker.initWorkerWorkflow(config, workflowTopic, workflowFunction);
-    await worker.activateWorkerWorkflow(WorkflowService.workflowRunner, workflowTopic);
+
+    const activityRunner = await worker.initActivityWorkflow(config, activityTopic);
+    await WorkerService.activateWorkflow(activityRunner, activityTopic, getActivityYAML);
+    worker.workflowRunner = await worker.initWorkerWorkflow(config, workflowTopic, workflowFunction);
+    await WorkerService.activateWorkflow(worker.workflowRunner, workflowTopic, getWorkflowYAML);
     return worker;
   }
 
   async run() {
-    if (WorkflowService.workflowRunner) {
-      WorkflowService.workflowRunner.engine.logger.info('WorkerService is running');
+    if (this.workflowRunner) {
+      this.workflowRunner.engine.logger.info('WorkerService is running');
     } else {
       console.log('WorkerService is running');
     }
@@ -96,7 +127,7 @@ export class WorkerService {
       class: config.connection.class as RedisClass,
       options: config.connection.options as RedisOptions
     };
-    return await PubSubDB.init({
+    const psdbInstance = await PubSubDB.init({
       appId: activityTopic,
       engine: { redis: redisConfig },
       workers: [
@@ -106,6 +137,8 @@ export class WorkerService {
         }
       ]
     });
+    WorkerService.instances.set(activityTopic, psdbInstance);
+    return psdbInstance;
   }
 
   wrapActivityFunctions(): Function {
@@ -146,8 +179,6 @@ export class WorkerService {
         console.log('durable-worker-activity-workflow-activation-error', err);
         throw err;
       }
-    } else {
-      await pubSubDB.activate(version);
     }
   }
 
@@ -156,7 +187,7 @@ export class WorkerService {
       class: config.connection.class as RedisClass,
       options: config.connection.options as RedisOptions
     };
-    return await PubSubDB.init({
+    const psdbInstance = await PubSubDB.init({
       appId: workflowTopic,
       engine: { redis: redisConfig },
       workers: [
@@ -166,6 +197,8 @@ export class WorkerService {
         }
       ]
     });
+    WorkerService.instances.set(workflowTopic, psdbInstance);
+    return psdbInstance;
   }
 
   static Context = {
@@ -185,6 +218,7 @@ export class WorkerService {
         const context = new Map();
         context.set('workflowId', workflowInput.workflowId);
         context.set('workflowTopic', workflowTopic);
+        context.set('workflowName', workflowTopic.split('-').pop());
         const workflowResponse = await asyncLocalStorage.run(context, async () => {
           return await workflowFunction.apply(this, workflowInput.arguments);
         });
@@ -196,29 +230,13 @@ export class WorkerService {
           data: { response: workflowResponse }
         };
       } catch (err) {
-        //todo: error types: some are retryable, some are not
-        console.error("ERROR!!!!", err);
+        //todo: (retryable error types)
         return {
           code: 500,
           status: StreamStatus.PENDING,
           metadata: { ...data.metadata },
           data: { error: err }
         } as StreamDataResponse;
-      }
-    }
-  }
-
-  async activateWorkerWorkflow(pubSubDB: PubSubDB, workflowTopic: string) {
-    const version = '1';
-    const app = await pubSubDB.engine.store.getApp(workflowTopic);
-    const appVersion = app?.version as unknown as number;
-    if(isNaN(appVersion)) {
-      try {
-        await pubSubDB.deploy(getWorkflowYAML(workflowTopic, version));
-        await pubSubDB.activate(version);
-      } catch (err) {
-        console.log('durable-worker-workflow-activation-error', err);
-        throw err;
       }
     }
   }

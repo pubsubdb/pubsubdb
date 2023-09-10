@@ -2,19 +2,19 @@ import { WorkflowHandleService } from "./handle";
 import { PubSubDBService as PubSubDB } from "../pubsubdb";
 import { ClientConfig, Connection, WorkflowOptions } from "../../types/durable";
 import { getWorkflowYAML } from "./factory";
+
 /*
 Here is an example of how the methods in this file are used:
 
 ./client.ts
 
-import { Durable: { Connection, Client }} from '@pubsubdb/pubsubdb';
+import { Durable } from '@pubsubdb/pubsubdb';
 import Redis from 'ioredis';
-
 import { example } from './workflows';
 import { nanoid } from 'nanoid';
 
 async function run() {
-  const connection = await Connection.connect({
+  const connection = await Durable.Connection.connect({
     class: Redis,
     options: {
       host: 'localhost',
@@ -22,13 +22,14 @@ async function run() {
     },
   });
 
-  const client = new Client({
+  const client = new Durable.Client({
     connection,
   });
 
-  const handle = await client.workflow.start(example, {
-    taskQueue: 'hello-world',
+  const handle = await client.workflow.start({
     args: ['PubSubDB'],
+    taskQueue: 'hello-world',
+    workflowName: 'example',
     workflowId: 'workflow-' + nanoid(),
   });
 
@@ -47,7 +48,6 @@ export class ClientService {
 
   connection: Connection;
   options: WorkflowOptions;
-  workflowName: string;
   static instances = new Map<string, PubSubDB | Promise<PubSubDB>>();
 
   constructor(config: ClientConfig) {
@@ -100,8 +100,6 @@ export class ClientService {
         pubSubDB.engine.logger.error('durable-client-workflow-activation-err', err);
         throw err;
       }
-    } else {
-      await pubSubDB.activate(version);
     }
   }
 }

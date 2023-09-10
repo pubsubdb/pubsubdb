@@ -10,7 +10,7 @@ import { RedisConnection } from '../../../services/connector/clients/ioredis';
 
 const { Connection, Client, NativeConnection, Worker } = Durable;
 
-describe('Durable', () => {
+describe('DURABLE | hello | `Workflow Sleepy Hello-World`', () => {
   let handle: WorkflowHandleService;
   const options = {
     host: config.REDIS_HOST,
@@ -32,15 +32,10 @@ describe('Durable', () => {
 
   describe('Connection', () => {
     describe('connect', () => {
-      it('should connect to Redis', async () => {
+      it('should echo the Redis config', async () => {
         const connection = await Connection.connect({
           class: Redis,
-          options: {
-            host: config.REDIS_HOST,
-            port: config.REDIS_PORT,
-            password: config.REDIS_PASSWORD,
-            database: config.REDIS_DATABASE,
-          },
+          options,
         });
         expect(connection).toBeDefined();
         expect(connection.options).toBeDefined();
@@ -54,11 +49,7 @@ describe('Durable', () => {
         //connect the client to Redis
         const connection = await Connection.connect({
           class: Redis,
-          options: {
-            host: 'redis',
-            port: 6379,
-            password: 'key_admin',
-          },
+          options,
         });
         const client = new Client({
           connection,
@@ -82,12 +73,7 @@ describe('Durable', () => {
         //connect to redis
         const connection = await NativeConnection.connect({
           class: Redis,
-          options: {
-            host: config.REDIS_HOST,
-            port: config.REDIS_PORT,
-            password: config.REDIS_PASSWORD,
-            database: config.REDIS_DATABASE,
-          },
+          options,
         });
         //create a worker (drains items from the queue/stream)
         const worker = await Worker.create({

@@ -2,14 +2,16 @@ import Redis from 'ioredis';
 
 import config from '../../$setup/config'
 import { Durable } from '../../../services/durable';
-import * as activities from './src/activities';
+import * as parentActivities from './parent/activities';
+import * as childActivities from './child/activities';
 import { nanoid } from 'nanoid';
 import { WorkflowHandleService } from '../../../services/durable/handle';
 import { RedisConnection } from '../../../services/connector/clients/ioredis';
 
+
 const { Connection, Client, NativeConnection, Worker } = Durable;
 
-describe('DURABLE | goodbye | `Workflow Promise.all proxyActivities`', () => {
+describe('DURABLE | nested | `workflow.executeChild`', () => {
   let handle: WorkflowHandleService;
   const options = {
     host: config.REDIS_HOST,
@@ -44,7 +46,7 @@ describe('DURABLE | goodbye | `Workflow Promise.all proxyActivities`', () => {
 
   describe('Client', () => {
     describe('start', () => {
-      it('should connect a client and start a workflow execution', async () => {
+      it('should connect a client and start a PARENT workflow execution', async () => {
         //connect the client to Redis
         const connection = await Connection.connect({
           class: Redis,
@@ -53,12 +55,10 @@ describe('DURABLE | goodbye | `Workflow Promise.all proxyActivities`', () => {
         const client = new Client({
           connection,
         });
-        //`handle` is a global variable.
-        //start a workflow execution (it will remain in the queue until a worker starts up)
         handle = await client.workflow.start({
-          args: ['PubSubDB'],
-          taskQueue: 'goodbye-world',
-          workflowName: 'example',
+          args: ['PARENT'],
+          taskQueue: 'parent-world',
+          workflowName: 'parentExample',
           workflowId: nanoid(),
         });
         expect(handle.workflowId).toBeDefined();
@@ -68,19 +68,37 @@ describe('DURABLE | goodbye | `Workflow Promise.all proxyActivities`', () => {
 
   describe('Worker', () => {
     describe('create', () => {
-      it('should create and run a worker', async () => {
+      it('should create and run the PARENT workflow worker', async () => {
         //connect to redis
         const connection = await NativeConnection.connect({
           class: Redis,
           options,
         });
-        //create a worker (drains items from the queue/stream)
+        //create a worker (drains items added by the client)
         const worker = await Worker.create({
           connection,
           namespace: 'default',
-          taskQueue: 'goodbye-world',
-          workflowsPath: require.resolve('./src/workflows'),
-          activities,
+          taskQueue: 'parent-world',
+          workflowsPath: require.resolve('./parent/workflows'),
+          activities: parentActivities,
+        });
+        await worker.run();
+        expect(worker).toBeDefined();
+      });
+
+      it('should create and run the CHILD workflow worker', async () => {
+        //connect to redis
+        const connection = await NativeConnection.connect({
+          class: Redis,
+          options,
+        });
+        //create a worker (drains items added by the client)
+        const worker = await Worker.create({
+          connection,
+          namespace: 'default',
+          taskQueue: 'child-world',
+          workflowsPath: require.resolve('./child/workflows'),
+          activities: childActivities,
         });
         await worker.run();
         expect(worker).toBeDefined();
@@ -90,10 +108,15 @@ describe('DURABLE | goodbye | `Workflow Promise.all proxyActivities`', () => {
 
   describe('WorkflowHandle', () => {
     describe('result', () => {
-      it('should return the workflow execution result', async () => {
+      it('should return the PARENT workflow execution result', async () => {
+        //the parent workflow returns an object with child output
+        const expectedOutput = {
+          activityOutput: 'parentActivity, PARENT!',
+          childWorkflowOutput: 'childActivity, PARENT to CHILD!',
+        };
         const result = await handle.result();
-        expect(result).toEqual('Hello, PubSubDB! - Goodbye, PubSubDB!');
-      });
+        expect(result).toEqual(expectedOutput);
+      }, 10_000);
     });
   });
 });

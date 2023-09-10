@@ -54,6 +54,7 @@ export {
   PubSubDBApps,
   PubSubDBConfig,
   PubSubDBEngine,
+  RedisConfig,
   PubSubDBGraph,
   PubSubDBManifest,
   PubSubDBSettings,

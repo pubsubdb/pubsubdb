@@ -2,8 +2,9 @@ import ms from 'ms';
 
 import { asyncLocalStorage } from './asyncLocalStorage';
 import { WorkerService } from './worker';
-import { PubSubDBService as PubSubDB } from "../pubsubdb";
-import { ActivityConfig, ContextType, ProxyType } from "../../types/durable";
+import { ClientService as Client } from './client';
+import { ConnectionService as Connection } from './connection';
+import { ActivityConfig, ProxyType, WorkflowOptions } from "../../types/durable";
 import { JobOutput } from '../../types';
 
 /*
@@ -17,11 +18,9 @@ have been registered in order to work properly.
 If the activities are not already registered,
 `proxyActivities` will throw an error. This is OK.
 
-The `client` (client.ts) is equivalent to the PubSubDB
-`engine`, so it will initialize an engine instance and even
-deploy and activate a new workflow if necessary and only then
-will it create jobs. The jobs will be published and
-put in the queue. When the `worker` (worker.ts)
+The `client` (client.ts) is equivalent to the 
+PubSubDB `engine`. The jobs it creates will be
+put in the taskQueue. When the `worker` (worker.ts)
 is eventually initialized (if it happens to be inited later),
 it will see the items in the queue and process them. If it happens
 to already be inited, the jobs will immediately be dequeued and
@@ -31,9 +30,9 @@ Here is an example of how the methods in this file are used:
 
 ./workflows.ts
 
-import { Durable: { workflow }} from '@pubsubdb/pubsubdb';
+import { Durable } from '@pubsubdb/pubsubdb';
 import type * as activities from './activities';
-const { greet } = workflow.proxyActivities<typeof activities>({
+const { greet } = Durable.workflow.proxyActivities<typeof activities>({
   startToCloseTimeout: '1 minute',
   retryPolicy: {
     initialInterval: '5 seconds',  // Initial delay between retries
@@ -49,8 +48,23 @@ export async function example(name: string): Promise<string> {
 */
 
 export class WorkflowService {
-  static activityRunner: PubSubDB;
-  static workflowRunner: PubSubDB;
+  static async executeChild<T>(options: WorkflowOptions): Promise<T> {
+    const store = asyncLocalStorage.getStore();
+    if (!store) {
+      throw new Error('durable-store-not-found');
+    }
+    const workflowId = store.get('workflowId'); //workflowTopic also available
+    const client = new Client({
+      connection: await Connection.connect(WorkerService.connection),
+    });
+    //todo: should I allow-cross/app callback (pj:'@DURABLE@hello-world@<pjid>'/pa: <paid>)
+    const handle = await client.workflow.start({
+      ...options,
+      workflowId: `${workflowId}${options.workflowId}`, //concat
+    });
+    const result = await handle.result();
+    return result as T;
+  }
 
   static proxyActivities<ACT>(options?: ActivityConfig): ProxyType<ACT> {
     const proxy: any = {};
@@ -77,9 +91,11 @@ export class WorkflowService {
 
       let activityState: JobOutput
       try {
-        activityState = await WorkflowService.activityRunner.getState(activityTopic, activityJobId);
+        const psdbInstance = await WorkerService.getPubSubDB(activityTopic);
+        activityState = await psdbInstance.getState(activityTopic, activityJobId);
         return activityState.data as T;
       } catch (e) {
+        //todo: this error is expected; thrown when the job cannot be found
         const duration = ms(options?.startToCloseTimeout || '1 minute');
         const payload = {
           arguments: Array.from(arguments),
@@ -87,7 +103,9 @@ export class WorkflowService {
           workflowTopic,
           activityName,
         };
-        const jobOutput = await WorkflowService.activityRunner.pubsub(activityTopic, payload, duration);
+        //start the job, since it doesn't exist
+        const psdbInstance = await WorkerService.getPubSubDB(activityTopic);
+        const jobOutput = await psdbInstance.pubsub(activityTopic, payload, duration);
         return jobOutput.data.response as T;
       }
     } as T;
