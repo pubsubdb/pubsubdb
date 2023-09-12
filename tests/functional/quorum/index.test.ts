@@ -1,15 +1,14 @@
+import { nanoid } from 'nanoid';
+import Redis from 'ioredis';
+
+import config from '../../$setup/config';
 import { PSNS } from '../../../modules/key';
 import { sleepFor } from '../../../modules/utils';
-import {
-  IORedisStore,
-  IORedisStream,
-  IORedisSub,
-  PubSubDB,
-  PubSubDBConfig } from '../../../index';
+import { PubSubDB, PubSubDBConfig } from '../../../index';
 import { NumberHandler } from '../../../services/pipe/functions/number';
 import { StreamSignaler } from '../../../services/signaler/stream';
-import { RedisConnection } from '../../$setup/cache/ioredis';
-import { RedisClientType } from '../../../types/ioredisclient';
+import { RedisConnection } from '../../../services/connector/clients/ioredis';
+
 import {
   StreamData,
   StreamDataResponse,
@@ -19,61 +18,31 @@ import { QuorumService } from '../../../services/quorum';
 
 describe('FUNCTIONAL | Quorum', () => {
   const appConfig = { id: 'calc', version: '1' };
-  //Redis connection ids (this test uses 4 separate Redis connections)
-  const CONNECTION_KEY = 'manual-test-connection';
-  const SUBSCRIPTION_KEY = 'manual-test-subscription';
-  const STREAM_ENGINE_CONNECTION_KEY = 'manual-test-stream-engine-connection';
-  const STREAM_WORKER_CONNECTION_KEY = 'manual-test-stream-worker-connection';
-  //Redis connections (ioredis)
-  let redisConnection: RedisConnection;
-  let subscriberConnection: RedisConnection;
-  let streamEngineConnection: RedisConnection;
-  let streamWorkerConnection: RedisConnection;
-  //Redis clients (ioredis)
-  let redisStorer: RedisClientType;
-  let redisSubscriber: RedisClientType;
-  let redisEngineStreamer: RedisClientType;
-  let redisWorkerStreamer: RedisClientType;
-  //PubSubDB Redis client wrappers
-  let redisStore: IORedisStore;
-  let redisEngineStream: IORedisStream;
-  let redisWorkerStream: IORedisStream;
-  let redisSub: IORedisSub;
-  //PubSubDB instance
+  const options = {
+    host: config.REDIS_HOST,
+    port: config.REDIS_PORT,
+    password: config.REDIS_PASSWORD,
+    database: config.REDIS_DATABASE,
+  };
   let pubSubDB: PubSubDB;
 
   beforeAll(async () => {
-    //init Redis connections and clients
-    redisConnection = await RedisConnection.getConnection(CONNECTION_KEY);
-    subscriberConnection = await RedisConnection.getConnection(SUBSCRIPTION_KEY);
-    streamEngineConnection = await RedisConnection.getConnection(STREAM_ENGINE_CONNECTION_KEY);
-    streamWorkerConnection = await RedisConnection.getConnection(STREAM_WORKER_CONNECTION_KEY);
-    redisStorer = await redisConnection.getClient();
-    redisSubscriber = await subscriberConnection.getClient();
-    redisEngineStreamer = await streamEngineConnection.getClient();
-    redisWorkerStreamer = await streamWorkerConnection.getClient();
-    redisStorer.flushdb();
-    //wrap Redis clients in PubSubDB Redis client wrappers
-    redisStore = new IORedisStore(redisStorer);
-    redisEngineStream = new IORedisStream(redisEngineStreamer);
-    redisWorkerStream = new IORedisStream(redisWorkerStreamer);
-    redisSub = new IORedisSub(redisSubscriber);
+    //init Redis and flush db
+    const redisConnection = await RedisConnection.connect(nanoid(), Redis, options);
+    redisConnection.getClient().flushdb();
+
     //init/activate PubSubDB (test both `engine` and `worker` roles)
     const config: PubSubDBConfig = {
       appId: appConfig.id,
       namespace: PSNS,
       logLevel: 'debug',
       engine: {
-        store: redisStore,
-        stream: redisEngineStream,
-        sub: redisSub,
+        redis: { class: Redis, options }
       },
       workers: [
         {
           topic: 'calculation.execute',
-          store: redisStore,
-          stream: redisWorkerStream,
-          sub: redisSub,
+          redis: { class: Redis, options },
           callback: async (streamData: StreamData): Promise<StreamDataResponse> => {
             const values = JSON.parse(streamData.data.values as string) as number[];
             const operation = streamData.data.operation as 'add'|'subtract'|'multiply'|'divide';
@@ -110,14 +79,14 @@ describe('FUNCTIONAL | Quorum', () => {
         values: JSON.stringify([200, 4, 5]),
       };
       const [divide, b, c, d, multiply] = await Promise.all([
-        pubSubDB.pubsub('calculate', payload, 5000),
-        pubSubDB.pubsub('calculate', payload, 5000),
-        pubSubDB.pubsub('calculate', payload, 5000),
-        pubSubDB.pubsub('calculate', payload, 5000),
+        pubSubDB.pubsub('calculate', payload, null, 5000),
+        pubSubDB.pubsub('calculate', payload, null, 5000),
+        pubSubDB.pubsub('calculate', payload, null, 5000),
+        pubSubDB.pubsub('calculate', payload, null, 5000),
         pubSubDB.pubsub('calculate', {
           operation: 'multiply',
           values: JSON.stringify([10, 10, 10]),
-        }, 5000),
+        }, null, 7_500),
       ]);
       expect(divide?.data.result).toBe(10);
       expect(multiply?.data.result).toBe(1000);

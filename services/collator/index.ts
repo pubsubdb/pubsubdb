@@ -1,10 +1,130 @@
+import { CollationError } from "../../modules/errors";
+import { RedisMulti } from "../../types/redis";
+import { CollationFaultType, CollationStage } from "../../types/collator";
+import { ActivityDuplex } from "../../types/activity";
 import { PubSubDBGraph } from "../../types/pubsubdb";
-import { CollationKey } from "../../types/collator";
+import { Activity } from "../activities/activity";
 
 class CollatorService {
 
   //max int digit count that supports `hincrby`
   static targetLength = 15; 
+
+  static async notarizeEntry(activity: Activity, multi?: RedisMulti): Promise<number> {
+    //decrement by -100_000_000_000_000
+    const amount = await activity.store.collate(activity.context.metadata.jid, activity.metadata.aid, -100_000_000_000_000, multi);
+    this.verifyInteger(amount, 1, 'enter');
+    return amount;
+  };
+
+  static async authorizeReentry(activity: Activity, multi?: RedisMulti): Promise<number> {
+    //set second digit to 8, allowing for re-entry
+    //decrement by -10_000_000_000_000
+    const amount = await activity.store.collate(activity.context.metadata.jid, activity.metadata.aid, -10_000_000_000_000, multi);
+    //this.verifyInteger(amount, 1, 'exit');
+    return amount;
+  }
+
+  static async notarizeEarlyCompletion(activity: Activity, multi?: RedisMulti): Promise<number> {
+    //initialize both `possible` (1m) and `actualized` (1) zero dimension, while decrementing the 2nd and 3rd digits to deactivate the activity
+    return await activity.store.collate(activity.context.metadata.jid, activity.metadata.aid, 1_000_001 - 11_000_000_000_000, multi);
+  };
+
+  static async notarizeReentry(activity: Activity, multi?: RedisMulti): Promise<number> {
+    //increment by 1_000_000 (indicates re-entry and is used to drive the 'dimensional address' for adjacent activities (minus 1))
+    const amount = await activity.store.collate(activity.context.metadata.jid, activity.metadata.aid, 1_000_000, multi);
+    this.verifyInteger(amount, 2, 'enter');
+    return amount;
+  };
+
+  static async notarizeContinuation(activity: Activity, multi?: RedisMulti): Promise<number> {
+    //keep open; actualize the leg2 dimension (+1)
+    return await activity.store.collate(activity.context.metadata.jid, activity.metadata.aid, 1, multi);
+  };
+
+  static async notarizeCompletion(activity: Activity, multi?: RedisMulti): Promise<number> {
+    //close out; actualize leg2 dimension (+1) and decrement the 3rd digit (-1_000_000_000_000)
+    return await activity.store.collate(activity.context.metadata.jid, activity.metadata.aid, 1 - 1_000_000_000_000, multi);
+  };
+
+  static getDigitAtIndex(num: number, targetDigitIndex: number): number | null {
+    const numStr = num.toString();
+    if (targetDigitIndex < 0 || targetDigitIndex >= numStr.length) {
+      return null;
+    }
+    const digit = parseInt(numStr[targetDigitIndex], 10);
+    return digit;
+  }
+
+  static getDimensionalIndex(num: number): number | null {
+    const numStr = num.toString();
+    if (numStr.length < 9) {
+      return null;
+    }
+    const extractedStr = numStr.substring(3, 9);
+    const extractedInt = parseInt(extractedStr, 10);
+    return extractedInt - 1;
+  }
+
+  static isDuplicate(num: number, targetDigitIndex: number): boolean {
+    return this.getDigitAtIndex(num, targetDigitIndex) < 8;
+  }
+
+  static isInactive(num: number): boolean {
+    return this.getDigitAtIndex(num, 2) < 9;
+  }
+
+  static isPrimed(amount: number, leg: ActivityDuplex): boolean {
+    //activity entry is not allowed if paths not properly pre-set
+    if (leg == 1) {
+      return amount != -100_000_000_000_000;
+    } else {
+      return this.getDigitAtIndex(amount, 0) < 9 &&
+        this.getDigitAtIndex(amount, 1) < 9;
+    }
+  }
+
+  static verifyInteger(amount: number, leg: ActivityDuplex, stage: CollationStage): void {
+    let faultType: CollationFaultType | undefined;
+    if (leg === 1 && stage === 'enter') {
+      if (!this.isPrimed(amount, 1)) {
+        faultType = CollationFaultType.MISSING;
+      } else if (this.isDuplicate(amount, 0)) {
+        faultType = CollationFaultType.DUPLICATE;
+      } else if (amount != 899_000_000_000_000) {
+        faultType = CollationFaultType.INVALID;
+      }
+    } else if (leg === 1 && stage === 'exit') {
+      if (amount === -10_000_000_000_000) {
+        faultType = CollationFaultType.MISSING;
+      } else if (this.isDuplicate(amount, 1)) {
+        faultType = CollationFaultType.DUPLICATE;
+      }
+    } else if (leg === 2 && stage === 'enter') {
+      if (!this.isPrimed(amount, 2)) {
+        faultType = CollationFaultType.FORBIDDEN;
+      } else if (this.isInactive(amount)) {
+        faultType = CollationFaultType.INACTIVE;
+      }
+    }
+    if (faultType) {
+      throw new CollationError(amount, leg, stage, faultType);
+    }
+  }
+
+  /**
+   * All non-trigger activities are assigned a status seed by their parent
+   */
+  static getSeed(): string {
+    return '999000000000000';
+  }
+
+  /**
+   * All trigger activities are assigned a status seed in a completed state
+   */
+  static getTriggerSeed(): string {
+    return '888000001000001';
+  }
 
   /**
    * entry point for compiler-type activities. This is called by the compiler
@@ -13,109 +133,49 @@ class CollatorService {
    * @param graphs
    */
   static compile(graphs: PubSubDBGraph[]) {
-    CollatorService.bindCollationKey(graphs);
+    CollatorService.bindAncestorArray(graphs);
   }
 
   /**
-   * binds the `sorted` activity IDs to the trigger activity and the sort
-   * order position to each activity. (This is used at runtime to track the
-   * status of the job at the level of the individual activity.)
+   * binds the ancestor array to each activity.
+   * Used in conjunction with the dimensional
+   *  address (dad). If dad is `,0,1,0,0` and the
+   * ancestor array is `['t1', 'a1', 'a2']` for
+   * activity 'a3', then the SAVED DAD
+   * will always have the trailing
+   * 0's removed. This ensures that the addressing
+   * remains consistent even if the graph changes.
+   *   id    DAD           SAVED DAD
+   * * t1 => ,0        =>  [empty]
+   * * a1 => ,0,1      =>  ,0,1
+   * * a2 => ,0,1,0    =>  ,0,1
+   * * a3 => ,0,1,0,0  =>  ,0,1
+   * 
    */
-  static bindCollationKey(graphs: PubSubDBGraph[]) {
-    for (const graph of graphs) {
-      const activities = graph.activities;
-      const triggerActivityId = CollatorService.getTriggerActivityId(graph);
-  
-      if (triggerActivityId) {
-        const activityIds = Object.keys(activities).sort();
-        //bind id to trigger
-        activities[triggerActivityId].collationKey = CollatorService.createKey(activityIds);
-
-        //bind position to each activity
-        Object.entries(activities).forEach(([activityId, activity]) => {
-          const pos = activityIds.indexOf(activityId);
-          activity.collationInt = CollatorService.getDecrement(pos);
+  static bindAncestorArray(graphs: PubSubDBGraph[]) {
+    graphs.forEach((graph) => {
+      const ancestors: Record<string, string[]> = {};
+        const startingNode = Object.keys(graph.activities).find(
+        (activity) => graph.activities[activity].type === 'trigger'
+      );
+      if (!startingNode) {
+        throw new Error('collator-trigger-activity-not-found');
+      }
+      const dfs = (node: string, parentList: string[]) => {
+        ancestors[node] = parentList;
+        graph.activities[node]['ancestors'] = parentList;
+        const transitions = graph.transitions?.[node] || [];
+        transitions.forEach((transition) => {
+          dfs(transition.to, [...parentList, node]);
         });
-      }
-    }
-  }
-  
-  static getTriggerActivityId(graph: PubSubDBGraph): string | null {
-    const activities = graph.activities;
-    for (const [activityKey, activity] of Object.entries(activities)) {
-      if (activity.type === "trigger") {
-        return activityKey;
-      }
-    }
-    return null;
+      };
+      // Start the DFS traversal
+      dfs(startingNode, []);
+    });
   }
 
-  /**
-   * alphabetically sort the activities by their ID (ascending) ["a1", "a2", "a3", ...]
-   * and then bind the sorted array to the trigger activity. This is used by the trigger
-   * at runtime to create 15-digit collation integer (99999999999) that can be used to track
-   * the status of the job at the level of the individual activity. A collation value of
-   * 899000000000000 means that the first activity (assume 'a1') is running and the others
-   * are still pending. NOTE: sorting is alphabetical, so it is merely coincidence that
-   * the value was `899*` and not `989*` or `998*`.
-   * @param {string[]} sortedActivityIds - an array of activity IDs sorted alphabetically
-   * @returns {number} A number that represents the collation key for the job.
-   */
-  static createKey(sortedActivityIds: string[]): number {
-    const length = sortedActivityIds.length;
-    const val = Math.pow(10, length) - 1; //e.g, 999, 99999, 9999999, etc
-    const paddedNumber = val + '0'.repeat(CollatorService.targetLength - length);
-    return parseInt(paddedNumber, 10);
-  }
-
-  /**
-   * helps update the collation key for the job by subtracting the activity's position from
-   * the 15-digit collation key. For example, if the collation key is 999999999999900
-   * and the activity is the 3rd in the list (and the multipler is 1),
-   * then the collation key will be updated to 998999999999900.
-   * This means that the activity is running. When an activity completes, 2 will be subtracted.
-   * @param {number} position - between 0 and 14 inclusive
-   * @param {number} multiplier
-   * @returns {number}
-   */
-  static getDecrement(position: number, multiplier: 1|2|3|4|5|6|7|8|9 = 1): number {
-    if (position < 0 || position > 14) {
-      throw new Error('Invalid position. Must be between 0 and 14, inclusive.');
-    }
-    const targetLength = 15;
-    return Math.pow(10, targetLength - position - 1) * multiplier;
-  }
-
-  static isJobComplete(collationKey: number|string): boolean {
-    return CollatorService.isThereAnError(collationKey) ||
-      !CollatorService.isThereAnIncompleteActivity(collationKey);
-  }
-
-  static isActivityComplete(collationKey: number, collationInt: number): boolean {
-    const digit = CollatorService.extractDigit(collationKey.toString(), collationInt.toString());
-    return CollatorService.isThereAnError(digit) ||
-      !CollatorService.isThereAnIncompleteActivity(digit);
-  }
-
-  static isThereAnError(collationKey: number|string): boolean {
-    return collationKey.toString().includes(CollationKey.Errored.toString());
-  }
-
-  static isThereAnIncompleteActivity(collationKey: number|string): boolean {
-    const str = collationKey.toString();
-    return str.includes(CollationKey.Pending.toString()) ||
-      str.includes(CollationKey.Started.toString()) || 
-      str.includes(CollationKey.Paused.toString());
-  }
-
-  static extractDigit(collationKey: string, collationInt: string): string {
-    let index: number;
-    if (parseInt(collationInt) === 1) {
-      index = 14; // for 1, the last digit of collationKey is selected
-    } else {
-      index = 15 - collationInt.length;
-    }
-    return collationKey.charAt(index);
+  static isActivityComplete(status: number): boolean {
+    return (status - 0) <= 0;
   }
 }
 

@@ -79,9 +79,9 @@ There are four primary types of activities in PubSubDB:
       workers: [
         { 
           topic: 'calculation.execute',
-          store: new RedisStore(redisClient1),
-          stream: new RedisStream(redisClient2),
-          sub: new RedisSub(redisClient3),
+          store: redisClient1,
+          stream: redisClient2,
+          sub: redisClient3,
           callback: async (data: StreamData) => {
             //do something with data and return
           }
@@ -151,7 +151,7 @@ activities:
   operate:
     title: Operate
     type: await
-    subtype: calculation.execute
+    topic: calculation.execute
     input:
       schema:
         $ref: '../schemas/calculate.yaml#/input'
@@ -241,7 +241,7 @@ activities:
   executor:
     title: Execute Calculation
     type: worker
-    subtype: calculation.execute
+    topic: calculation.execute
     input:
       schema:
         $ref: '../schemas/calculate.yaml#/input'
@@ -316,16 +316,16 @@ After setting up your PubSubDB application, the next step is to deploy and activ
     const pubSubDB = PubSubDB.init({
       appId: 'myapp',
       engine: {
-        store: new RedisStore(redisClient1),
-        stream: new RedisStream(redisClient2),
-        sub: new RedisSub(redisClient3),
+        store: redisClient1,
+        stream: redisClient2,
+        sub: redisClient3,
       }
       workers: [
         {
           topic: 'calculation.execute',
-          store: new RedisStore(redisClient1),
-          stream: new RedisStream(redisClient4),
-          sub: new RedisSub(redisClient3),
+          store: redisClient1,
+          stream: redisClient4,
+          sub: redisClient3,
           callback: async (streamData: StreamData) => {
             return {
               status: 'success',

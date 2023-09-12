@@ -11,7 +11,7 @@
           },
           "a1": {
             "type": "worker",
-            "subtype": "work.do"
+            "topic": "work.do"
           }
         },
         "transitions": {

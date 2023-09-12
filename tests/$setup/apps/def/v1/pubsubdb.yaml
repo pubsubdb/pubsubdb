@@ -39,7 +39,7 @@ app:
           type: trigger
         a1:
           type: worker
-          subtype: work.do
+          topic: work.do
           input:
             schema:
               type: object

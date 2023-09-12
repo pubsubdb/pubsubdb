@@ -1,15 +1,13 @@
+import { nanoid } from 'nanoid';
+import Redis from 'ioredis';
+
+import config from '../../$setup/config';
 import { PSNS } from '../../../modules/key';
 import { sleepFor } from '../../../modules/utils';
-import {
-  IORedisStore,
-  IORedisStream,
-  IORedisSub,
-  PubSubDB,
-  PubSubDBConfig } from '../../../index';
+import { PubSubDB, PubSubDBConfig } from '../../../index';
+import { RedisConnection } from '../../../services/connector/clients/ioredis';
 import { NumberHandler } from '../../../services/pipe/functions/number';
 import { StreamSignaler } from '../../../services/signaler/stream';
-import { RedisConnection } from '../../$setup/cache/ioredis';
-import { RedisClientType } from '../../../types/ioredisclient';
 import { JobOutput } from '../../../types/job';
 import {
   StreamData,
@@ -18,33 +16,18 @@ import {
 
 describe('FUNCTIONAL | Retry', () => {
   const appConfig = { id: 'calc', version: '1' };
+  const options = {
+    host: config.REDIS_HOST,
+    port: config.REDIS_PORT,
+    password: config.REDIS_PASSWORD,
+    database: config.REDIS_DATABASE,
+  };
   const UNRECOVERABLE_ERROR = {
     message: 'unrecoverable error',
     code: 403,
   };
   let simulateOneTimeError = true;
   let simulateUnrecoverableError = false;
-  //Redis connection ids (this test uses 4 separate Redis connections)
-  const CONNECTION_KEY = 'manual-test-connection';
-  const SUBSCRIPTION_KEY = 'manual-test-subscription';
-  const STREAM_ENGINE_CONNECTION_KEY = 'manual-test-stream-engine-connection';
-  const STREAM_WORKER_CONNECTION_KEY = 'manual-test-stream-worker-connection';
-  //Redis connections (ioredis)
-  let redisConnection: RedisConnection;
-  let subscriberConnection: RedisConnection;
-  let streamEngineConnection: RedisConnection;
-  let streamWorkerConnection: RedisConnection;
-  //Redis clients (ioredis)
-  let redisStorer: RedisClientType;
-  let redisSubscriber: RedisClientType;
-  let redisEngineStreamer: RedisClientType;
-  let redisWorkerStreamer: RedisClientType;
-  //PubSubDB Redis client wrappers
-  let redisStore: IORedisStore;
-  let redisEngineStream: IORedisStream;
-  let redisWorkerStream: IORedisStream;
-  let redisSub: IORedisSub;
-  //PubSubDB instance
   let pubSubDB: PubSubDB;
 
   //worker callback function
@@ -84,40 +67,23 @@ describe('FUNCTIONAL | Retry', () => {
   };
 
   beforeAll(async () => {
-    //init Redis connections and clients
-    redisConnection = await RedisConnection.getConnection(CONNECTION_KEY);
-    subscriberConnection = await RedisConnection.getConnection(SUBSCRIPTION_KEY);
-    streamEngineConnection = await RedisConnection.getConnection(STREAM_ENGINE_CONNECTION_KEY);
-    streamWorkerConnection = await RedisConnection.getConnection(STREAM_WORKER_CONNECTION_KEY);
-    redisStorer = await redisConnection.getClient();
-    redisSubscriber = await subscriberConnection.getClient();
-    redisEngineStreamer = await streamEngineConnection.getClient();
-    redisWorkerStreamer = await streamWorkerConnection.getClient();
-    redisStorer.flushdb();
-
-    //wrap Redis clients in PubSubDB Redis client wrappers
-    redisStore = new IORedisStore(redisStorer);
-    redisEngineStream = new IORedisStream(redisEngineStreamer);
-    redisWorkerStream = new IORedisStream(redisWorkerStreamer);
-    redisSub = new IORedisSub(redisSubscriber);
+    //init Redis and flush db
+    const redisConnection = await RedisConnection.connect(nanoid(), Redis, options);
+    redisConnection.getClient().flushdb();
 
     const config: PubSubDBConfig = {
       appId: appConfig.id,
       namespace: PSNS,
       logLevel: 'debug',
+
       engine: {
-        store: redisStore,
-        stream: redisEngineStream,
-        sub: redisSub,
+        redis: { class: Redis, options }
       },
+
       workers: [
         {
           topic: 'calculation.execute',
-
-          store: redisStore,
-          stream: redisWorkerStream,
-          sub: redisSub,
-
+          redis: { class: Redis, options },
           callback,
         }
       ]
@@ -142,7 +108,7 @@ describe('FUNCTIONAL | Retry', () => {
         operation: 'add',
         values: JSON.stringify([1, 2, 3, 4, 5]),
       };
-      const jobResponse = await pubSubDB.pubsub('calculate', payload, 2500);
+      const jobResponse = await pubSubDB.pubsub('calculate', payload, null, 2500);
       expect(jobResponse?.metadata.jid).not.toBeNull();
       expect(jobResponse?.data.result).toBe(15);
     });
@@ -152,7 +118,7 @@ describe('FUNCTIONAL | Retry', () => {
         operation: 'subtract',
         values: JSON.stringify([5, 4, 3, 2, 1]),
       };
-      const jobResponse = await pubSubDB.pubsub('calculate', payload, 2500);
+      const jobResponse = await pubSubDB.pubsub('calculate', payload, null, 2500);
       expect(jobResponse?.metadata.jid).not.toBeNull();
       expect(jobResponse?.data.result).toBe(-5);
     });
@@ -162,7 +128,7 @@ describe('FUNCTIONAL | Retry', () => {
         operation: 'multiply',
         values: JSON.stringify([5, 4, 3, 2, 1]),
       };
-      const jobResponse = await pubSubDB.pubsub('calculate', payload, 2500);
+      const jobResponse = await pubSubDB.pubsub('calculate', payload, null, 2500);
       expect(jobResponse?.metadata.jid).not.toBeNull();
       expect(jobResponse?.data.result).toBe(120);
     });
@@ -184,7 +150,7 @@ describe('FUNCTIONAL | Retry', () => {
       };
       //force a timeout error (0); resolve by waiting and calling 'get'
       try {
-        await pubSubDB.pubsub('calculate', payload, 0);
+        await pubSubDB.pubsub('calculate', payload, null, 0);
       } catch (error) {
         //just because we got an error doesn't mean the job didn't keep running
         expect(error.message).toBe('timeout');
@@ -195,7 +161,7 @@ describe('FUNCTIONAL | Retry', () => {
         expect(state?.data?.result).toBe(5);
         const status = await pubSubDB.getStatus(error.job_id);
         //this is a two-activity flow. successful termination is '6' for each
-        expect(status).toBe(660000000000000);
+        expect(status).toBe(0);
       }
     });
 
@@ -204,11 +170,11 @@ describe('FUNCTIONAL | Retry', () => {
         pubSubDB.pubsub('calculate', {
           operation: 'divide',
           values: JSON.stringify([200, 4, 5]),
-        }, 1500),
+        }, null, 1500),
         pubSubDB.pubsub('calculate', {
           operation: 'multiply',
           values: JSON.stringify([10, 10, 10]),
-        }, 1500),
+        }, null, 1500),
       ]);
       expect(divide?.data.result).toBe(10);
       expect(multiply?.data.result).toBe(1000);

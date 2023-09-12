@@ -67,7 +67,7 @@ describe('FUNCTIONAL | IORedisStoreService', () => {
       expect(Object.keys(savedSymbols).length).toEqual(MDATA_SYMBOLS.ACTIVITY.KEYS.length + 2); //total of meta/data keys
     });
   });
-  
+
   describe('getSymbols', () => {
     it('should retrieve symbols for a given activity', async () => {
       const activityId = 'a2';
@@ -81,7 +81,7 @@ describe('FUNCTIONAL | IORedisStoreService', () => {
       expect(result).toEqual(symbols);
     });
   });
-  
+
   describe('addSymbols', () => {
     it('should store symbols for a given activity', async () => {
       const activityId = 'a3';
@@ -119,7 +119,7 @@ describe('FUNCTIONAL | IORedisStoreService', () => {
       await redisStoreService.addSymbols(topic, symbols);
 
       //3) set job state
-      const jobStatus = 690000000000000;
+      const jobStatus = 1;
       const jobState: StringAnyType = {
         'a1/output/data/some/field': true,
         'a1/output/data/another/field': {'complex': 'object'},
@@ -147,7 +147,7 @@ describe('FUNCTIONAL | IORedisStoreService', () => {
           'metadata/jid',
         ]
       };
-      const response = await redisStoreService.getState(jobId, appId, consumes);
+      const response = await redisStoreService.getState(jobId, consumes);
       if (response) {
         const [resolvedJobState, resolvedJobStatus] = response;
         expect(resolvedJobState).toEqual(jobState);

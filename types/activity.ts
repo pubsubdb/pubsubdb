@@ -42,7 +42,6 @@ interface TriggerActivityStats {
 interface TriggerActivity extends BaseActivity {
   type: 'trigger';
   stats?: TriggerActivityStats;
-  collationKey?: number;
 }
 
 interface AwaitActivity extends BaseActivity {
@@ -53,7 +52,7 @@ interface AwaitActivity extends BaseActivity {
 
 interface WorkerActivity extends BaseActivity {
   type: 'worker';
-  subtype: string;
+  topic: string;
   timeout: number;
 }
 
@@ -77,6 +76,8 @@ type ActivityMetadata = {
   err?: string; //stringified error json: {message: string, code: number, error?}
   l1s?: string; //open telemetry span context (leg 1)
   l2s?: string; //open telemetry span context (leg 2)
+  dad?: string; //dimensional address
+  as?: string;  //activity status (e.g., 889000001000001)
 };
 
 type ActivityContext = {
@@ -84,6 +85,8 @@ type ActivityContext = {
   metadata: ActivityMetadata;
   hook?: ActivityData
 };
+
+type ActivityDuplex = 1 | 2;
 
 type ActivityDataType = {
   data?: Record<string, unknown>;
@@ -97,6 +100,7 @@ export {
   ActivityContext,
   ActivityData,
   ActivityDataType,
+  ActivityDuplex,
   ActivityLeg,
   ActivityMetadata,
   ActivityType,

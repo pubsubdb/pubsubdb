@@ -1,12 +1,10 @@
-import {
-  IORedisStore,
-  IORedisStream,
-  IORedisSub,
-  PubSubDB,
-  PubSubDBConfig } from '../../../index';
+import { nanoid } from 'nanoid';
+import Redis from 'ioredis';
+
+import config from '../../$setup/config';
+import { PubSubDB, PubSubDBConfig } from '../../../index';
+import { RedisConnection } from '../../../services/connector/clients/ioredis';
 import { StreamSignaler } from '../../../services/signaler/stream';
-import { RedisConnection } from '../../$setup/cache/ioredis';
-import { RedisClientType } from '../../../types/ioredisclient';
 import {
   StreamData,
   StreamDataResponse,
@@ -14,63 +12,31 @@ import {
 
 describe('FUNCTIONAL | Redeploy', () => {
   const appConfig = { id: 'tree' };
-  //Redis connection ids (this test uses 4 separate Redis connections)
-  const CONNECTION_KEY = 'manual-test-connection';
-  const SUBSCRIPTION_KEY = 'manual-test-subscription';
-  const STREAM_ENGINE_CONNECTION_KEY = 'manual-test-stream-engine-connection';
-  const STREAM_WORKER_CONNECTION_KEY = 'manual-test-stream-worker-connection';
-  //Redis connections (ioredis)
-  let redisConnection: RedisConnection;
-  let subscriberConnection: RedisConnection;
-  let streamEngineConnection: RedisConnection;
-  let streamWorkerConnection: RedisConnection;
-  //Redis clients (ioredis)
-  let redisStorer: RedisClientType;
-  let redisSubscriber: RedisClientType;
-  let redisEngineStreamer: RedisClientType;
-  let redisWorkerStreamer: RedisClientType;
-  //PubSubDB Redis client wrappers
-  let redisStore: IORedisStore;
-  let redisEngineStream: IORedisStream;
-  let redisWorkerStream: IORedisStream;
-  let redisSub: IORedisSub;
-  //PubSubDB instance
+  const options = {
+    host: config.REDIS_HOST,
+    port: config.REDIS_PORT,
+    password: config.REDIS_PASSWORD,
+    database: config.REDIS_DATABASE,
+  };
   let pubSubDB: PubSubDB;
 
   beforeAll(async () => {
-    //init Redis connections and clients
-    redisConnection = await RedisConnection.getConnection(CONNECTION_KEY);
-    subscriberConnection = await RedisConnection.getConnection(SUBSCRIPTION_KEY);
-    streamEngineConnection = await RedisConnection.getConnection(STREAM_ENGINE_CONNECTION_KEY);
-    streamWorkerConnection = await RedisConnection.getConnection(STREAM_WORKER_CONNECTION_KEY);
-    redisStorer = await redisConnection.getClient();
-    redisSubscriber = await subscriberConnection.getClient();
-    redisEngineStreamer = await streamEngineConnection.getClient();
-    redisWorkerStreamer = await streamWorkerConnection.getClient();
-    redisStorer.flushdb();
-    //wrap Redis clients in PubSubDB Redis client wrappers
-    redisStore = new IORedisStore(redisStorer);
-    redisEngineStream = new IORedisStream(redisEngineStreamer);
-    redisWorkerStream = new IORedisStream(redisWorkerStreamer);
-    redisSub = new IORedisSub(redisSubscriber);
+    //init Redis and flush db
+    const redisConnection = await RedisConnection.connect(nanoid(), Redis, options);
+    redisConnection.getClient().flushdb();
+
     //init/activate PubSubDB (test both `engine` and `worker` roles)
     const config: PubSubDBConfig = {
       appId: appConfig.id,
       logLevel: 'debug',
       engine: {
-        store: redisStore,
-        stream: redisEngineStream,
-        sub: redisSub,
+        redis: { class: Redis, options }
       },
       workers: [
         {
-          //worker activities in the YAML files declare 'summer' as their subtype
+          //worker activity in the YAML file declares 'summer' as the topic
           topic: 'summer',
-
-          store: redisStore,
-          stream: redisWorkerStream,
-          sub: redisSub,
-
+          redis: { class: Redis, options },
           callback: async (streamData: StreamData): Promise<StreamDataResponse> => {
             return {
               code: 200,
@@ -101,7 +67,7 @@ describe('FUNCTIONAL | Redeploy', () => {
   describe('Run Version', () => {
     it('should run and map activities in parallel', async () => {
       const payload = { seed: 2, speed: 3 };
-      const result = await pubSubDB.pubsub('spring', payload, 1500);
+      const result = await pubSubDB.pubsub('spring', payload, null, 1500);
       const data = result?.data as {
         seed: number;
         speed: number;
@@ -124,7 +90,7 @@ describe('FUNCTIONAL | Redeploy', () => {
   describe('Run Version', () => {
     it('should run and map activities in sequence', async () => {
       const payload = { seed: 5, speed: 7 };
-      const result = await pubSubDB.pubsub('spring', payload, 2_000);
+      const result = await pubSubDB.pubsub('spring', payload, null, 2_000);
       const data = result?.data as {
         seed: number;
         speed: number;
@@ -147,7 +113,7 @@ describe('FUNCTIONAL | Redeploy', () => {
   describe('Run Version', () => {
     it('should run and map activities in parallel and sequence', async () => {
       const payload = { seed: 4, speed: 9 };
-      const result = await pubSubDB.pubsub('spring', payload, 2_000);
+      const result = await pubSubDB.pubsub('spring', payload, null, 2_000);
       const data = result?.data as {
         seed: number;
         speed: number;
@@ -170,7 +136,7 @@ describe('FUNCTIONAL | Redeploy', () => {
   describe('Run Version', () => {
     it('should run one activity with multiple maps', async () => {
       const payload = { seed: 5, speed: 2 };
-      const result = await pubSubDB.pubsub('spring', payload, 2_000);
+      const result = await pubSubDB.pubsub('spring', payload, null, 2_000);
       const data = result?.data as {
         seed: number;
         speed: number;
@@ -193,7 +159,7 @@ describe('FUNCTIONAL | Redeploy', () => {
   describe('Run Version', () => {
     it('should run and map worker activities in parallel', async () => {
       const payload = { seed: 55, speed: 20 };
-      const result = await pubSubDB.pubsub('spring', payload, 2_000);
+      const result = await pubSubDB.pubsub('spring', payload, null, 2_000);
       const data = result?.data as {
         seed: number;
         speed: number;
@@ -216,7 +182,7 @@ describe('FUNCTIONAL | Redeploy', () => {
   describe('Run Version', () => {
     it('should run a one-step flow with no mappings', async () => {
       const result = await pubSubDB.pubsub('spring', {});
-      expect(result.metadata.js).toBe(600000000000000);
+      expect(result.metadata.js).toBe(0);
       expect(result.metadata.tpc).toBe('spring');
       expect(result.metadata.vrs).toBe('6');
     }, 2_500);
@@ -233,7 +199,7 @@ describe('FUNCTIONAL | Redeploy', () => {
   describe('Run Version', () => {
     it('should run a two-step flow with no mappings', async () => {
       const result = await pubSubDB.pubsub('spring', {});
-      expect(result.metadata.js).toBe(660000000000000);
+      expect(result.metadata.js).toBe(0);
       expect(result.metadata.tpc).toBe('spring');
       expect(result.metadata.vrs).toBe('7');
     }, 2_500);
@@ -250,7 +216,7 @@ describe('FUNCTIONAL | Redeploy', () => {
   describe('Run Version', () => {
     it('should run nested flows', async () => {
       const result = await pubSubDB.pubsub('spring', {});
-      expect(result.metadata.js).toBe(660000000000000);
+      expect(result.metadata.js).toBe(0);
       expect(result.metadata.tpc).toBe('spring');
       expect(result.metadata.vrs).toBe('8');
     }, 2_500);
@@ -258,41 +224,17 @@ describe('FUNCTIONAL | Redeploy', () => {
 
   describe('Hot Deploy', () => {
     it('should run, deploy, and activate multiple successive versions', async () => {
-      //NOTE: this is essentially the quick start tutorial run as a functional test
-      //init Redis connections and clients
-      const redisConnection = await RedisConnection.getConnection('a');
-      const subscriberConnection = await RedisConnection.getConnection('b');
-      const streamEngineConnection = await RedisConnection.getConnection('c');
-      const streamWorkerConnection = await RedisConnection.getConnection('d');
-      const streamWorkerConnection2 = await RedisConnection.getConnection('e');
-      const redisStorer = await redisConnection.getClient();
-      const redisSubscriber = await subscriberConnection.getClient();
-      const redisEngineStreamer = await streamEngineConnection.getClient();
-      const redisWorkerStreamer = await streamWorkerConnection.getClient();
-      const redisWorkerStreamer2 = await streamWorkerConnection2.getClient();
-
-      //wrap Redis clients in PubSubDB Redis client wrappers
-      const redisStore = new IORedisStore(redisStorer);
-      const redisEngineStream = new IORedisStream(redisEngineStreamer);
-      const redisWorkerStream = new IORedisStream(redisWorkerStreamer);
-      const redisWorkerStream2 = new IORedisStream(redisWorkerStreamer2);
-      const redisSub = new IORedisSub(redisSubscriber);
-
-      //init/activate PubSubDB (test both `engine` and `worker` roles)
+      //NOTE: this is the quick start tutorial run as a functional test
       const config: PubSubDBConfig = {
         appId: 'abc',
         logLevel: 'debug',
         engine: {
-          store: redisStore,
-          stream: redisEngineStream,
-          sub: redisSub,
+          redis: { class: Redis, options }
         },
         workers: [
           {
             topic: 'work.do',
-            store: redisStore,
-            stream: redisWorkerStream,
-            sub: redisSub,
+            redis: { class: Redis, options },
             callback: async (data: StreamData) => {
               return {
                 metadata: { ...data.metadata },
@@ -302,9 +244,7 @@ describe('FUNCTIONAL | Redeploy', () => {
           },
           {
             topic: 'work.do.more',
-            store: redisStore,
-            stream: redisWorkerStream2,
-            sub: redisSub,
+            redis: { class: Redis, options },
             callback: async (data: StreamData) => {
               return {
                 metadata: { ...data.metadata },

@@ -4,6 +4,8 @@ app:
   graphs:
     - subscribes: abc.test
 
+      expire: 120
+
       input:
         schema:
           type: object
@@ -25,7 +27,7 @@ app:
           type: trigger
         a1:
           type: worker
-          subtype: work.do
+          topic: work.do
           input:
             schema:
               type: object
@@ -45,7 +47,7 @@ app:
               b: '{$self.output.data.y}'
         a2:
           type: worker
-          subtype: work.do.more
+          topic: work.do.more
           input:
             schema:
               type: object

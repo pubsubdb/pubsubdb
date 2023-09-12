@@ -19,7 +19,7 @@ activities:
   executor:
     title: Execute Calculation
     type: worker
-    subtype: calculation.execute
+    topic: calculation.execute
     retry: 
       '404': [2]
       '500': [3]

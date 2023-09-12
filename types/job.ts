@@ -7,19 +7,21 @@ type ActivityData = {
 };
 
 type JobMetadata = {
-  ngn?: string; //engine guid (one time subscriptions)
-  pj?: string;  //parent_job_id
-  pa?: string;  //parent_activity_id
   key?: string; //job_key
+  jid: string;  //job_id (jid+dad+aid) is composite key for activity
+  dad: string;  //dimensional address for the activity (,0,0,1)
+  aid: string;  //activity_id as in the YAML file
+  pj?: string;  //parent_job_id (pj+pd+pa) is composite key for parent activity
+  pd?: string;  //parent_dimensional_address
+  pa?: string;  //parent_activity_id
+  ngn?: string; //engine guid (one time subscriptions)
   app: string;  //app_id
   vrs: string;  //app version
   tpc: string;  //subscription topic
-  jid: string;  //job_id
   ts: string    //201203120005 (slice of time) //time series
   jc: string;   //GMT created //job_created
   ju: string;   //GMT updated //job_updated
   js: JobStatus;
-  aid: string;  //activity_id for trigger the spawned the job
   atp: string;  //activity_type
   stp: string;  //activity_subtype
   spn: string;  //open telemetry span context
@@ -28,7 +30,7 @@ type JobMetadata = {
   expire?: number; //process data expire policy
 };
 
-type JobStatus = number; //job_status 15 digit number used for collation
+type JobStatus = number;       //job_status semaphore 
 
 type JobState = {
   metadata: JobMetadata;
@@ -48,11 +50,10 @@ type JobOutput = {
   data: JobData;
 };
 
-//the minimum info needed to restore/resume a job in context
-//(e.g., a webhook signal needs this to restore the job context)
+//jid+dad+aid is a composite guid; signal in and restore the full job context
 type PartialJobState = {
-  metadata: Partial<JobMetadata> & Pick<JobMetadata, 'aid' | 'jid'>;
+  metadata: JobMetadata | Pick<JobMetadata, 'jid' | 'dad' | 'aid'>;
   data: JobData;
-}
+};
 
 export { JobState, JobStatus, JobData, JobsData, JobMetadata, PartialJobState, JobOutput };

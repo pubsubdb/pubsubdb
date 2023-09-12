@@ -8,7 +8,7 @@ app:
           type: trigger
         a1:
           type: worker
-          subtype: work.do
+          topic: work.do
       transitions:
         t1:
           - to: a1

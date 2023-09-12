@@ -503,7 +503,7 @@ Query the job status for all activities in a workflow.
 
 ```javascript
 const job = await pubSubDB.getStatus('ord123');
-//660000000000000
+//0, 1, 2, etc (the number of active activities)
 ```
 
 ## Get Job Statistics

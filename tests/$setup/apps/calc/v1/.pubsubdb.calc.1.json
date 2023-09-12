@@ -68,7 +68,7 @@
           "operate": {
             "title": "Operate",
             "type": "await",
-            "subtype": "calculation.execute",
+            "topic": "calculation.execute",
             "input": {
               "schema": {
                 "type": "object",
@@ -178,7 +178,7 @@
           "executor": {
             "title": "Execute Calculation",
             "type": "worker",
-            "subtype": "calculation.execute",
+            "topic": "calculation.execute",
             "retry": {
               "404": [
                 2

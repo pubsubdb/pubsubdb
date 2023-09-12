@@ -4,9 +4,10 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 
 import { ILogger } from '../logger';
+import { StoreService } from '../store';
 import { Deployer } from './deployer';
 import { Validator } from './validator';
-import { PubSubDBManifest, StoreService } from '../../types/pubsubdb';
+import { PubSubDBManifest } from '../../types/pubsubdb';
 import { RedisClient, RedisMulti } from '../../types/redis';
 
 /**

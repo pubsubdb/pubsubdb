@@ -17,7 +17,7 @@ activities:
   bundler:
     title: Bundle Routed Order
     type: worker
-    subtype: order.bundle
+    topic: order.bundle
     input:
       schema:
         $ref: '../schemas/order.finalize.yaml#/order'

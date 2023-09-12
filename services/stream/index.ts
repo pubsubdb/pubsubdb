@@ -21,7 +21,12 @@ abstract class StreamService<T, U> {
     groupName: string,
     id: string,
     mkStream?: 'MKSTREAM'): Promise<boolean>;
-  abstract xadd(key: string, id: string, ...args: string[]): Promise<string>;
+  abstract xadd(
+    key: string,
+    id: string,
+    messageId: string,
+    messageValue: string,
+    multi?: U): Promise<string | U>;
   abstract xreadgroup(
     command: 'GROUP',
     groupName: string,

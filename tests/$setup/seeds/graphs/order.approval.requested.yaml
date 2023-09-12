@@ -1,6 +1,8 @@
 subscribes: order.approval.requested
 publishes: order.approval.responded
 
+expire: 120
+
 input:
   schema:
     $ref: '../schemas/order.approval.requested.yaml#/input'
@@ -21,7 +23,7 @@ activities:
   a2:
     title: Get Price Approval
     type: await
-    subtype: order.approval.price.requested
+    topic: order.approval.price.requested
     input:
       schema:
         $ref: '../schemas/order.approval.requested.yaml#/a2/input'

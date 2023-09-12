@@ -1,6 +1,6 @@
 import { ILogger } from '../logger';
 import { Pipe } from '../pipe';
-import { StoreService as Store } from '../store';
+import { StoreService } from '../store';
 import { TriggerActivity } from '../../types/activity';
 import { AppVID } from '../../types/app';
 import { JobState } from '../../types/job';
@@ -23,10 +23,10 @@ import {
 class ReporterService {
   private appVersion: AppVID;
   private logger: ILogger;
-  private store: Store<RedisClient, RedisMulti>;
+  private store: StoreService<RedisClient, RedisMulti>;
   static DEFAULT_GRANULARITY = '5m';
 
-  constructor(appVersion: AppVID, store: Store<RedisClient, RedisMulti>, logger: ILogger) {
+  constructor(appVersion: AppVID, store: StoreService<RedisClient, RedisMulti>, logger: ILogger) {
     this.appVersion = appVersion;
     this.logger = logger;
     this.store = store;

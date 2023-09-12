@@ -326,7 +326,7 @@
           "bundler": {
             "title": "Bundle Routed Order",
             "type": "worker",
-            "subtype": "order.bundle",
+            "topic": "order.bundle",
             "input": {
               "schema": {
                 "type": "object",
@@ -407,6 +407,7 @@
       {
         "subscribes": "order.approval.requested",
         "publishes": "order.approval.responded",
+        "expire": 120,
         "input": {
           "schema": {
             "type": "object",
@@ -478,7 +479,7 @@
           "a2": {
             "title": "Get Price Approval",
             "type": "await",
-            "subtype": "order.approval.price.requested",
+            "topic": "order.approval.price.requested",
             "input": {
               "schema": {
                 "type": "object",
@@ -546,6 +547,8 @@
               "maps": {
                 "id": "{a1.output.data.id}",
                 "price": "{a1.output.data.price}",
+                "pricier": "{a2.output.data.approved}",
+                "priciest": 555.55,
                 "approvals": {
                   "price": "{a2.output.data.approved}"
                 },
@@ -617,6 +620,7 @@
       {
         "subscribes": "order.approval.price.requested",
         "publishes": "order.approval.price.responded",
+        "expire": 120,
         "input": {
           "schema": {
             "type": "object",

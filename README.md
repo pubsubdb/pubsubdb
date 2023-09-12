@@ -1,10 +1,7 @@
 # PubSubDB
 ![alpha release](https://img.shields.io/badge/release-alpha-yellow)
 
-## Overview
-*Take control of your critical business processes.* [[video (50s)]](https://www.loom.com/share/f17c9e856d844176b1014b0ee20c57ce)
-
-PubSubDB orchestrates and monitors distributed, durable workflows. [Refactor your existing microservices](./docs/refactoring101.md) or design processes from scratch. With integrated telemetry, your functions are executed in context of the entire event stream that precedes and follows. Gather real-time insight into your critical business processes and set alarms and alerts on target thresholds.
+Build sophisticated, durable workflows without the overhead of a dedicated server cluster. With PubSubDB, your code remains front and center using [infrastructure](./docs/faq.md#what-is-pubsubdb) you already own.
 
 ## Install
 [![npm version](https://badge.fury.io/js/%40pubsubdb%2Fpubsubdb.svg)](https://badge.fury.io/js/%40pubsubdb%2Fpubsubdb)
@@ -14,7 +11,97 @@ npm install @pubsubdb/pubsubdb
 ```
 
 ## Design
-Use [YAML](./docs/quickstart.md) to define the activity sequences that make up your workflows. By associating any function on your network with a topic in the YAML definition, PubSubDB will trigger your function when the flow runs. With retry and idempotency support baked in, PubSubDB provides durable function execution regardless of legacy network complexity.
+PubSubDB's TypeScript SDK is modeled after [Temporal IO's](https://github.com/temporalio) developer-friendly approach. Design and deploy durable workflows using familiar paradigms that keep your code delightful to maintain. Deploying Temporal's [hello-world tutorial](https://github.com/temporalio/samples-typescript/tree/main/hello-world/src), for example, requires few changes beyond using the PubSubDB SDK and saving to Redis.
+
+**./activities.ts**
+```javascript
+export async function greet(name: string): Promise<string> {
+  return `Hello, ${name}!`;
+}
+```
+
+**./workflows.ts**
+```javascript
+import { Durable } from '@pubsubdb/pubsubdb';
+import type * as activities from './activities';
+
+const { greet } = Durable.workflow.proxyActivities<typeof activities>();
+
+export async function example(name: string): Promise<string> {
+  return await greet(name);
+}
+```
+
+**./worker.ts**
+```javascript
+import { Durable } from '@pubsubdb/pubsubdb';
+import Redis from 'ioredis'; //OR `import * as Redis from 'redis';`
+import * as activities from './activities';
+
+async function run() {
+  const connection = await Durable.NativeConnection.connect({
+    class: Redis,
+    options: {
+      host: 'localhost',
+      port: 6379,
+    },
+  });
+  const worker = await Durable.Worker.create({
+    connection,
+    namespace: 'default',
+    taskQueue: 'hello-world',
+    workflowsPath: require.resolve('./workflows'),
+    activities,
+  });
+  await worker.run();
+}
+
+run().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
+```
+
+**./client.ts**
+```javascript
+import { Durable } from '@pubsubdb/pubsubdb';
+import Redis from 'ioredis';
+import { nanoid } from 'nanoid';
+
+async function run() {
+  const connection = await Durable.Connection.connect({
+    class: Redis,
+    options: {
+      host: 'localhost',
+      port: 6379,
+    },
+  });
+
+  const client = new Durable.Client({
+    connection,
+  });
+
+  const handle = await client.workflow.start({
+    args: ['PubSubDB'],
+    taskQueue: 'hello-world',
+    workflowName: 'example',
+    workflowId: 'workflow-' + nanoid(),
+  });
+
+  console.log(`Started workflow ${handle.workflowId}`);
+  console.log(await handle.result());
+}
+
+run().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
+```
+
+>PubSubDB delivers durable function execution using a swarm of [distributed engines](./docs/distributed_orchestration.md). The design  consumes leftover CPU on your microservices to execute workflows without the cost and complexity of a central server.
+
+## Advanced Design
+PubSubDB's TypeScript SDK is the easiest way to make your functions durable. But if you need full control over your function lifecycles (including high-volume, high-speed use cases), you can use PubSubDB's underlying YAML models to optimize your durable workflows. The following model depicts a sequence of activities orchestrated by PubSubDB. Any function you associate with a `topic` in your YAML definition is guaranteed to be durable.
 
 ```yaml
 app:
@@ -29,13 +116,13 @@ app:
           type: trigger
         servicec:
           type: worker
-          subtype: sandbox.work.do.servicec
+          topic: sandbox.work.do.servicec
         serviced:
           type: worker
-          subtype: sandbox.work.do.serviced
+          topic: sandbox.work.do.serviced
         sforcecloud:
           type: worker
-          subtype: sandbox.work.do.sforcecloud
+          topic: sandbox.work.do.sforcecloud
 
       transitions:
         gateway:
@@ -46,42 +133,27 @@ app:
           - to: sforcecloud
 ```
 
-The activities defined in the YAML are metered in the context of the complete process, offering real-time, unified insights into your legacy functions. Detailed telemetry data includes execution time, run count (and retry count), and the number of errors encountered.
-
-<img src="./docs/img/open_telemetry.png" alt="Open Telemetry" style="width:600px;max-width:600px;">
-
-Designing workflows with PubSubDB is straightforward and effective, especially when dealing with legacy microservice networks. For a deeper dive into how you can transform your microservices and benefit from PubSubDB, see the [Refactoring 101 Guide](./docs/refactoring101.md).
-
-## Initialize
-To initialize PubSubDB, pass in **three** Redis clients. This 3-channel design is crucial for its autonomous operation. PubSubDB utilizes the *store* to maintain the workflow state, the *stream* to guide activity transitions, and the *sub* to synchronize the [quorum](./docs/architecture.md) of engines.
-
->Note: PubSubDB supports both ioredis and redis clients.
+### Initialize
+Provide your chosen Redis instance and configuration options to start a PubSubDB Client. *PubSubDB supports both `ioredis` and `redis` clients interchangeably.*
 
 ```javascript
-import {
-  PubSubDB,
-  IORedisStore,
-  IORedisStream,
-  IORedisSub } from '@pubsubdb/pubsubdb';
-
-//use ioredis OR redis
-import Redis from 'ioredis';
-const config = { host, port, password, db };
-const redis1 = new Redis(config);
-const redis2 = new Redis(config);
-const redis3 = new Redis(config);
+import { PubSubDB } from '@pubsubdb/pubsubdb';
+import Redis from 'ioredis'; //OR `import * as Redis from 'redis';`
 
 const pubSubDB = await PubSubDB.init({
   appId: 'sandbox',
   engine: {
-    store: new IORedisStore(storeClient),
-    stream: new IORedisStream(streamClient),
-    sub: new IORedisSub(subClient),
+    redis: {
+      class: Redis,
+      options: { host, port, password, db } //per your chosen Redis client
+    }
   }
 });
 ```
 
-## Trigger a Workflow
+A PubSubDB Client can be used to trigger worfkows and subscribe to results.
+
+### Trigger a Workflow
 Call `pub` to initiate a workflow. This function returns a job ID that allows you to monitor the progress of the workflow.
 
 ```javascript
@@ -90,7 +162,7 @@ const payload = { };
 const jobId = await pubSubDB.pub(topic, payload);
 ```
 
-## Subscribe to Events
+### Subscribe to Events
 Call `sub` to subscribe to all workflow results for a given topic.
 
 ```javascript
@@ -99,42 +171,31 @@ await pubSubDB.sub('sandbox.work.done', (topic, jobOutput) => {
 });
 ```
 
-## Trigger and Wait
+### Trigger and Wait
 Call `pubsub` to start a workflow and *wait for the response*. PubSubDB establishes a one-time subscription and delivers the job result once the workflow concludes.
 
 ```javascript
 const jobOutput = await pubSubDB.pubsub(topic, payload);
 ```
 
->The `pubsub` method is a convenience function that merges pub and sub into a single call. Opt for PubSubDB's queue-driven engine over fragile HTTP requests to develop resilient, scalable, and high-performance solutions.
+>The `pubsub` method is a convenience function that merges pub and sub into a single call. Opt for PubSubDB's queue-driven engine over fragile HTTP requests to develop resilient solutions.
 
-## Link Worker Functions
-Link worker functions to a topic of your choice. When a workflow activity in the YAML definition with a corresponding topic runs, PubSubDB will invoke your function.
+### Link Worker Functions
+Link worker functions to a topic of your choice. When a workflow activity in the YAML definition with a corresponding topic runs, PubSubDB will invoke your function, retrying as configured until it succeeds.
 
 ```javascript
-//use ioredis OR redis
+import { PubSubDB } from '@pubsubdb/pubsubdb';
 import Redis from 'ioredis';
-import {
-  PubSubDB,
-  IORedisStore
-  IORedisStream
-  IORedisSub } from '@pubsubdb/pubsubdb';
-
-const config = { host, port, password, db };
-const redis1 = new Redis(config);
-const redis2 = new Redis(config);
-const redis3 = new Redis(config);
 
 const pubSubDB = await PubSubDB.init({
   appId: 'sandbox',
   workers: [
     { 
       topic: 'sandbox.work.do.servicec',
-
-      store: new IORedisStore(redis1),
-      stream: new IORedisStream(redis2),
-      sub: new IORedisSub(redis3),
-
+      redis: {
+        class: Redis,
+        options: { host, port, password, db }
+      }
       callback: async (data: StreamData) => {
         return {
           metadata: { ...data.metadata },
@@ -145,6 +206,12 @@ const pubSubDB = await PubSubDB.init({
   ]
 };
 ```
+
+### Observability
+Workflows and activities are run according to the rules you define, offering [Graph-Oriented](./docs/system_lifecycle.md#telemetry) telemetry insights into your legacy function executions.
+
+<img src="./docs/img/open_telemetry.png" alt="Open Telemetry" style="width:600px;max-width:600px;">
+
 
 ## FAQ
 Refer to the [FAQ](./docs/faq.md) for terminology, definitions, and an exploration of how PubSubDB facilitates orchestration use cases.
@@ -172,3 +239,6 @@ PubSubDB is a distributed orchestration engine. Refer to the [Distributed Orches
 
 ## System Lifecycle
 Gain insight into the PubSubDB's monitoring, exception handling, and alarm configurations via the [System Lifecycle Guide](./docs/system_lifecycle.md).
+
+## Alpha Release
+So what exacty is an [alpha release](./docs/alpha.md)?!

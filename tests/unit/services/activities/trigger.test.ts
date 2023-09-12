@@ -1,8 +1,4 @@
-import {
-  PubSubDB,
-  IORedisStore,
-  IORedisStream,
-  IORedisSub } from '../../../../index';
+import { PubSubDB } from '../../../../index';
 import {
   ActivityType,
   ActivityData,
@@ -26,9 +22,9 @@ describe('Trigger class', () => {
     pubSubDB = await PubSubDB.init({
       appId: 'test-app',
       engine: {
-        store: new IORedisStore(await storeConnection.getClient()),
-        stream: new IORedisStream(await subscriberConnection.getClient()),
-        sub: new IORedisSub(await streamerConnection.getClient()),
+        store: await storeConnection.getClient(),
+        stream: await subscriberConnection.getClient(),
+        sub: await streamerConnection.getClient(),
       }
     });
   });

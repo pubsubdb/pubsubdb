@@ -8,7 +8,7 @@ app:
           type: trigger
         a1:
           type: await
-          subtype: tests.b
+          topic: tests.b
       transitions:
         t1:
           - to: a1

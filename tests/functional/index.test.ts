@@ -1,60 +1,32 @@
-import { PSNS } from '../../modules/key';
-import {
-  PubSubDB,
-  PubSubDBConfig,
-  RedisStore,
-  RedisStream,
-  RedisSub } from '../../index';
+import { nanoid } from 'nanoid';
+import Redis from 'ioredis';
+
+import config from '../$setup/config';
+import { PubSubDB, PubSubDBConfig } from '../../index';
 import { JobStatsInput } from '../../types/stats';
 import {
   StreamData,
   StreamDataResponse,
   StreamStatus } from '../../types/stream';
-import { RedisConnection, RedisClientType } from '../$setup/cache/redis';
+import { RedisConnection } from '../../services/connector/clients/ioredis';
 import { StreamSignaler } from '../../services/signaler/stream';
 import { JobOutput } from '../../types/job';
 import { sleepFor } from '../../modules/utils';
 
 describe('FUNCTIONAL | PubSubDB', () => {
+  const options = {
+    host: config.REDIS_HOST,
+    port: config.REDIS_PORT,
+    password: config.REDIS_PASSWORD,
+    database: config.REDIS_DATABASE,
+  };
   const appConfig = { id: 'test-app', version: '1' };
-  const CONNECTION_KEY = 'manual-test-connection';
-  const SUBSCRIPTION_KEY = 'manual-test-subscription';
-  const STREAM_ENGINE_CONNECTION_KEY = 'manual-test-stream-engine-connection';
-  const STREAM_WORKER_CONNECTION_KEY = 'manual-test-stream-worker-connection';
   let pubSubDB: PubSubDB;
-  //Redis connections
-  let redisConnection: RedisConnection;
-  let subscriberConnection: RedisConnection;
-  let streamerEngineConnection: RedisConnection;
-  let streamerWorkerConnection: RedisConnection;
-  //Redis clients
-  let redisStorer: RedisClientType;
-  let redisSubscriber: RedisClientType;
-  let redisEngineStreamer: RedisClientType;
-  let redisWorkerStreamer: RedisClientType;
-  //PubSubDB Redis wrappers
-  let redisStore: RedisStore;
-  let redisEngineStream: RedisStream;
-  let redisWorkerStream: RedisStream;
-  let redisSub: RedisSub;
 
   beforeAll(async () => {
-    //initialize redis connections
-    redisConnection = await RedisConnection.getConnection(CONNECTION_KEY);
-    streamerEngineConnection = await RedisConnection.getConnection(STREAM_ENGINE_CONNECTION_KEY);
-    streamerWorkerConnection = await RedisConnection.getConnection(STREAM_WORKER_CONNECTION_KEY);
-    subscriberConnection = await RedisConnection.getConnection(SUBSCRIPTION_KEY);
-    //initialize redis clients (and flushdb)
-    redisStorer = await redisConnection.getClient();
-    redisEngineStreamer = await streamerEngineConnection.getClient();
-    redisWorkerStreamer = await streamerWorkerConnection.getClient();
-    redisSubscriber = await subscriberConnection.getClient();
-    await redisStorer.flushDb();
-    //initialize psdb wrappers (3 for engine, 1 for worker)
-    redisStore = new RedisStore(redisStorer);
-    redisEngineStream = new RedisStream(redisEngineStreamer);
-    redisWorkerStream = new RedisStream(redisWorkerStreamer);
-    redisSub = new RedisSub(redisSubscriber);
+    //flush db
+    const redisConnection = await RedisConnection.connect(nanoid(), Redis, options);
+    redisConnection.getClient().flushdb();
   });
 
   afterAll(async () => {
@@ -67,19 +39,16 @@ describe('FUNCTIONAL | PubSubDB', () => {
     it('should initialize PubSubDB', async () => {
       const config: PubSubDBConfig = {
         appId: appConfig.id,
-        namespace: PSNS,
         logLevel: 'debug',
+
         engine: {
-          store: redisStore,
-          stream: redisEngineStream,
-          sub: redisSub,
+          redis: { class: Redis, options }
         },
+
         workers: [
           {
             topic: 'order.bundle',
-            store: redisStore, //ok to reuse store
-            stream: redisWorkerStream,
-            sub: redisSub, //ok to reuse sub
+            redis: { class: Redis, options },
             callback: async (streamData: StreamData) => {
               const streamDataResponse: StreamDataResponse = {
                 status: StreamStatus.SUCCESS,
@@ -116,7 +85,7 @@ describe('FUNCTIONAL | PubSubDB', () => {
   describe('run()', () => {
     it('executes an `await` activity that resolves to true', async () => {
       const payload = { 
-        id: `wdg_${parseInt((Math.random()*10000000).toString()).toString()}`,
+        id: `wdg_${parseInt((Math.random() * 10_000_000).toString()).toString()}`,
         price: 49.99,
         object_type: 'widgetA'
       }
@@ -134,7 +103,7 @@ describe('FUNCTIONAL | PubSubDB', () => {
 
     it('executes an `await` activity that resolves to false', async () => {
       const payload = { 
-        id: `wdg_${parseInt((Math.random()*10000000).toString()).toString()}`, 
+        id: `wdg_${parseInt((Math.random() * 10_000_000).toString()).toString()}`, 
         price: 149.99, 
         object_type: 'widgetA'
       }
@@ -213,7 +182,7 @@ describe('FUNCTIONAL | PubSubDB', () => {
           }
         }
       }
-    }, 10_000);
+    }, 15_000);
 
     it('should throw an error when publishing duplicates', async () => {
       try {
@@ -288,14 +257,11 @@ describe('FUNCTIONAL | PubSubDB', () => {
     it('should sleep and awaken an activity', async () => {
       const payload = { duration: 1 };
       const jobId = await pubSubDB.pub('sleep.do', payload);
-      //get the job status
-      await sleepFor(500);
-      await pubSubDB.getStatus(jobId as string);
-      while(await pubSubDB.getStatus(jobId as string) !== 460000000000000) {
+
+      while(await pubSubDB.getStatus(jobId as string) !== 0) {
         await sleepFor(1000);
       }
-      const status2 = await pubSubDB.getStatus(jobId as string);
-      expect(status2).toBe(460000000000000); //awake
+
       const state = await pubSubDB.getState('sleep.do', jobId as string);
       expect(state?.data?.done).toBe(true);
     }, 61_000);
@@ -309,11 +275,11 @@ describe('FUNCTIONAL | PubSubDB', () => {
         actual_release_series: '202304110015',
       };
       await pubSubDB.hook('order.routed', payload);
-      while(await pubSubDB.getStatus(payload.id) !== 646000000000000) {
+      while(await pubSubDB.getStatus(payload.id) !== 0) {
         await sleepFor(1000);
       }
       const status = await pubSubDB.getStatus(payload.id);
-      expect(status).toBe(646000000000000); //fulfill should be done by now
+      expect(status).toBe(0);
     });
   });
 

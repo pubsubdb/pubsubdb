@@ -4,13 +4,32 @@ import { RedisClient, RedisMulti } from "../types/redis";
 import { StringAnyType } from "../types/serializer";
 import { StreamCode, StreamStatus } from "../types/stream";
 
-export function getGuid() {
-  const randomTenDigitNumber = Math.floor(Math.random() * 1e10);
-  return `${Date.now().toString(16)}.${randomTenDigitNumber.toString(16)}`;
-}
-
 export async function sleepFor(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export function identifyRedisType(redisInstance: any): 'redis' | 'ioredis' | null {
+  if (redisInstance.constructor) {
+    if (redisInstance.constructor.name === 'Redis' || redisInstance.constructor.name === 'EventEmitter') {
+      if ('hset' in redisInstance) {
+        return 'ioredis';
+      }
+    } else if (redisInstance.constructor.name === 'RedisClient' || redisInstance.constructor.name === 'Commander') {
+      if ('HSET' in redisInstance) {
+        return 'redis';
+      }
+    }
+  }
+  return null;
+}
+
+export function identifyRedisTypeFromClass(redisClass: any): 'redis' | 'ioredis' | null {
+  if (redisClass && redisClass.name === 'Redis' || redisClass.name === 'EventEmitter') {
+    return 'ioredis';
+  } else if (redisClass && 'createClient' in redisClass) {
+    return 'redis';
+  }
+  return null;
 }
 
 export function matchesStatusCode(code: StreamCode, pattern: string | RegExp): boolean {

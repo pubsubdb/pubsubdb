@@ -50,6 +50,20 @@ describe('FUNCTIONAL | IORedisStreamService', () => {
       const addedMessage = messages.find(([messageId, fields]) => fields.includes(field) && fields.includes(value));
       expect(addedMessage).toBeDefined();
     });
+
+    it('should add data to stream using multi', async () => {
+      const key = 'testKey';
+      const msgId = '*';
+      const field = 'testField';
+      const value = 'testValue';
+      const multi = redisStreamService.getMulti();
+      await redisStreamService.xadd(key, msgId, field, value, multi);
+      await redisStreamService.xadd(key, msgId, field, value, multi);
+      await multi.exec();
+      const messages = await redisClient.xrange(key, '-', '+');
+      const addedMessages = messages.find(([messageId, fields]) => fields.includes(field) && fields.includes(value));
+      expect(addedMessages?.length).toBe(2);
+    });
   });
   
   describe('xreadgroup', () => {
@@ -87,7 +101,7 @@ describe('FUNCTIONAL | IORedisStreamService', () => {
       const field = 'testField';
       const value = 'testValue';
       await redisStreamService.xgroup('CREATE', key, groupName, groupId, 'MKSTREAM');
-      const messageId = await redisStreamService.xadd(key, msgId, field, value);
+      const messageId = await redisStreamService.xadd(key, msgId, field, value) as string;
       await redisStreamService.xreadgroup('GROUP', groupName, 'testConsumer', 'BLOCK', '1000', 'STREAMS', key, '>');
       const ackCount = await redisStreamService.xack(key, groupName, messageId);
       expect(ackCount).toBe(1);
@@ -124,7 +138,7 @@ describe('FUNCTIONAL | IORedisStreamService', () => {
       const value = 'testValue';
       // First, create a group and add a message to the stream
       await redisStreamService.xgroup('CREATE', key, groupName, groupId, 'MKSTREAM');
-      const messageId = await redisStreamService.xadd(key, msgId, field, value);
+      const messageId = await redisStreamService.xadd(key, msgId, field, value) as string;
       // Then, read the message from the group
       await redisStreamService.xreadgroup('GROUP', groupName, initialConsumer, 'BLOCK', '1000', 'STREAMS', key, '>');
       //count pending messages
@@ -162,7 +176,7 @@ describe('FUNCTIONAL | IORedisStreamService', () => {
       const field = 'testField';
       const value = 'testValue';
       await redisStreamService.xgroup('CREATE', key, groupName, groupId, 'MKSTREAM');
-      const messageId = await redisStreamService.xadd(key, msgId, field, value);
+      const messageId = await redisStreamService.xadd(key, msgId, field, value) as string;
       const delCount = await redisStreamService.xdel(key, messageId);
       expect(delCount).toBe(1);
       const messages = await redisStreamService.xreadgroup('GROUP', groupName, 'testConsumer', 'BLOCK', '1000', 'STREAMS', key, messageId);

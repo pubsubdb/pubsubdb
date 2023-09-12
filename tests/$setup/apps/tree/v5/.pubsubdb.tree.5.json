@@ -73,7 +73,7 @@
           },
           "shine": {
             "type": "worker",
-            "subtype": "summer",
+            "topic": "summer",
             "input": {
               "schema": {
                 "type": "object",
@@ -105,7 +105,7 @@
           },
           "graft": {
             "type": "worker",
-            "subtype": "summer",
+            "topic": "summer",
             "input": {
               "schema": {
                 "type": "object",
@@ -137,7 +137,7 @@
           },
           "water": {
             "type": "worker",
-            "subtype": "summer",
+            "topic": "summer",
             "input": {
               "schema": {
                 "type": "object",
@@ -169,7 +169,7 @@
           },
           "fertilize": {
             "type": "worker",
-            "subtype": "summer",
+            "topic": "summer",
             "input": {
               "schema": {
                 "type": "object",
@@ -201,7 +201,7 @@
           },
           "prune": {
             "type": "worker",
-            "subtype": "summer",
+            "topic": "summer",
             "input": {
               "schema": {
                 "type": "object",

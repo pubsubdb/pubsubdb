@@ -12,13 +12,13 @@ const dateReg = /^"\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z)?"$/;
 export const MDATA_SYMBOLS = {
   SLOTS: 26,
   ACTIVITY: {
-    KEYS: ['aid', 'atp', 'stp', 'ac', 'au', 'err','l1s','l2s']
+    KEYS: ['aid', 'dad', 'as', 'atp', 'stp', 'ac', 'au', 'err','l1s','l2s']
   },
   ACTIVITY_UPDATE: {
     KEYS: ['au', 'err', 'l2s']
   },
   JOB: {
-    KEYS: ['ngn', 'tpc', 'pj', 'pa', 'key', 'app', 'vrs', 'jid', 'aid', 'ts', 'jc', 'ju', 'js', 'err', 'trc']
+    KEYS: ['ngn', 'tpc', 'pj', 'pd', 'pa', 'key', 'app', 'vrs', 'jid', 'aid', 'ts', 'jc', 'ju', 'js', 'err', 'trc']
   },
   JOB_UPDATE: {
     KEYS: ['ju', 'err']

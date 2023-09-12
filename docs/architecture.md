@@ -10,7 +10,8 @@ There are a set of architectural first-principles that undergird how state and p
   * [Duplex Activity Execution Calls](#duplex-activity-execution-calls)
   * [Mediate Duplexed Calls With EAI](#mediate-duplexed-calls-with-eai)
   * [Leverage CQRS for Self-Perpetuation](#leverage-cqrs-for-self-perpetuation)
-  * [Orchestrate through Collated State](#orchestrate-through-collated-state)
+  * [Efficiently Track Shared Activity State](#efficiently-track-shared-activity-state)
+  * [Efficiently Track Shared Job State](#efficiently-track-shared-job-state)
 - [Scalability Benefits](#scalability-benefits)
   * [Fan-out Scalability](#fan-out-scalability)
   * [Fan-in Scalability](#fan-in-scalability)
@@ -73,39 +74,32 @@ In this scenario, the producers merely inscribe their completion events onto the
 
 This simple mechanism of reading from one stream and writing to another is the basis for the entire system and how complex workflows are achieved. Every complex workflow is simply a series of singular activities implicitly stitched together by writing to streams in a sequence.
 
-### Orchestrate through Collated State
-Efficiently tracking job state is critical to asynchronous workflow systems and is accomplished through a multi-digit collation key that is emitted back to callers upon saving state. 
+### Efficiently Track Shared Activity State
+Activity state is managed using a 15-digit semaphore initialized by the parent activity (the preceding activity) in the DAG. The value value is saved as `999000000000000`, and only then is the instruction sent to the stream to run the target activity.
 
-<img src="./img/architecture/quorum.png" alt="Orchestrate through Collated State" style="max-width: 100%;max-height:300px;width:280px;">
+The first three digits monitor the lifecycle statuses of Legs 1 and 2, while the remaining 12 digits offer 1 million distinct dimensional threads for activity expansion. *Dimensional Threads* isolate and track those activities in the workflow that run in a *cycle*. They ensure that no naming collisions occur, even if the same activity is run multiple times.
 
-The collation key structure is conceived with explicit numeric values designated for various states an activity might exhibit:
+```
+  999000000000000
+  ^-------------- Leg1 Entry Status
+    ^------------- Leg1 Exit Status
+      ^^^^^^------ Leg2 Dimensional Thread Entry Count
+            ^^^^^^ Leg2 Dimensional Thread Exit Count
+    ^------------ Leg2 Exit Status
+```
 
-- 9: Pending
-- 8: Started
-- 7: Errored
-- 6: Completed
-- 5: Paused
-- 4: Released
-- 3: Skipped
-- 2: `Await` Right Parentheses
-- 1: `Await` Left Parentheses
-- 0: N/A (the flow has fewer activities than the collation key)
+>Streams are used when executing an activity (such as transitioning to a child activity) as they guarantee that the child activity will be fully created and initialized before the request is marked for deletion. Even if the system has a catastrophic failure, the chain of custody can be guaranteed through the use of streams when the system comes online.
 
-This structured approach empowers a quick understanding of the job's current state from a mere glance at the collation key. Moreover, two special digits, 1 and 2, are designated for 'bookending' subordinated workflows, a design decision that streamlines the expression of a composite job state. For example, a composite state of `36636146636626` tells us that two separate workflows, Flow A and Flow B, have concluded successfully, where Activity 5 in Flow A spawned Flow B, and the latter returned its response successfully.
+### Efficiently Track Shared Job State
+Efficiently tracking job state is critical to asynchronous workflow systems and is accomplished through a semaphore that will count down to `0` once all activities have completed for the flow. 
 
-The Collation Service employs an ascending string sorting methodology to counter the absence of a sibling node order guarantee in a Directed Acyclic Graph (DAG). Despite the trigger being the first element in the graph, it could be placed fifth alphabetically, as seen in the following sequence:
+The semaphore is updated via increment/decrement calls to the central server. The value sent to the semaphore will always be the length of the adjacent activity list (the number of child activity nodes that should execute) minus 1.
 
- `quick => brown => fox => (jumped|(slept => ate))`
+If the adjacency list has members, each child activity in the adjacency list will be journaled to its designated stream and the pattern will repeat. 
 
-The sorted ids for this chain of activities would translate to:
+If there are no adjacent children and the incremented/decremented status returned from the server is `0`, then the job is complete (this activity was the last of all activities to complete).
 
- `["ate", "brown", "fox", "jumped", "quick", "slept"]`
-
-Consequently, the collation key updates to `999969000000000` upon the trigger activity's completion.
-
-Consider the collation key `968969000000000`, which signifies that the `quick` and `brown` activities have *completed* and `fox` is currently *started*. Conversely, a collation key like `766366000000000` symbolizes an *error* state. (The `ate` activity returned an error, and the `jumped` activity was *skipped*, with all other activities concluding normally.) 
-
-The act of the caller saving individual state triggers a server response with full job state. This allows the caller to calculate and journal completion state to the correct 'fan-in' stream target without additional computation or network cost.
+The act of the caller saving individual state triggers a server response with full job semaphore state.
 
 ## Scalability Benefits
 ### Fan-out Scalability

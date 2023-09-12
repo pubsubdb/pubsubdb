@@ -65,9 +65,9 @@ class StreamSignaler {
     }
   }
 
-  async publishMessage(topic: string, streamData: StreamData|StreamDataResponse): Promise<string> {
+  async publishMessage(topic: string, streamData: StreamData|StreamDataResponse, multi?: RedisMulti): Promise<string | RedisMulti> {
     const stream = this.store.mintKey(KeyType.STREAMS, { appId: this.store.appId, topic });
-    return await this.store.xadd(stream, '*', 'message', JSON.stringify(streamData));
+    return await this.store.xadd(stream, '*', 'message', JSON.stringify(streamData), multi);
   }
 
   async consumeMessages(stream: string, group: string, consumer: string, callback: (streamData: StreamData) => Promise<StreamDataResponse|void>): Promise<void> {
@@ -173,13 +173,13 @@ class StreamSignaler {
             data: input.data,
             metadata: { ...input.metadata, try: (input.metadata.try || 0) + 1 },
             policies: input.policies,
-          });
+          }) as string;
         } else {
           output = this.structureError(input, output);
         }
       }
       output.type = StreamDataType.RESPONSE;
-      return await this.publishMessage(null, output as StreamDataResponse);
+      return await this.publishMessage(null, output as StreamDataResponse) as string;
     }
   }
 

@@ -6,6 +6,7 @@
       {
         "subscribes": "spring",
         "publishes": "fall",
+        "expire": 120,
         "input": {
           "schema": {
             "type": "object",
