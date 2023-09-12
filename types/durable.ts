@@ -5,6 +5,8 @@ type WorkflowOptions = {
   args: any[];          //input arguments to pass in
   workflowId: string;   //execution id (the job id)
   workflowName?: string; //the name of the user's workflow function
+  workflowTrace?: string;
+  workflowSpan?: string;
 }
 
 type ActivityDataType = {

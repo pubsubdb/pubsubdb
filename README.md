@@ -11,7 +11,7 @@ npm install @pubsubdb/pubsubdb
 ```
 
 ## Design
-PubSubDB's TypeScript SDK is modeled after [Temporal IO's](https://github.com/temporalio) developer-friendly SDK. Design and deploy durable workflows using familiar paradigms that keep your code delightful to maintain. Deploying Temporal's [hello-world tutorial](https://github.com/temporalio/samples-typescript/tree/main/hello-world/src), for example, requires few changes beyond importing from PubSubDB instead.
+PubSubDB's TypeScript SDK is modeled after [Temporal IO's](https://github.com/temporalio) developer-friendly approach. Design and deploy durable workflows using familiar paradigms that keep your code delightful to maintain. Deploying Temporal's [hello-world tutorial](https://github.com/temporalio/samples-typescript/tree/main/hello-world/src), for example, requires few changes beyond using the PubSubDB SDK and saving to Redis.
 
 **./activities.ts**
 ```javascript
@@ -98,10 +98,10 @@ run().catch((err) => {
 });
 ```
 
->PubSubDB delivers durable function execution using a swarm of [distributed engines](./docs/distributed_orchestration.md). The architecture optimally consumes leftover CPU on your overprovisioned services to durably orchestrate workflows without the cost, complexity and vulnerability of a central server.
+>PubSubDB delivers durable function execution using a swarm of [distributed engines](./docs/distributed_orchestration.md). The design  consumes leftover CPU on your microservices to execute workflows without the cost and complexity of a central server.
 
 ## Advanced Design
-PubSubDB's TypeScript SDK is the easiest way to make your functions durable. But if you need full control over your function lifecycles (including high-volume, high-speed use cases), you can use PubSubDB's underlying YAML models to design and deploy durable workflows. The following model depicts a sequence of activities orchestrated by PubSubDB. Any function associated with the `topic` in the YAML definition is guaranteed to succeed when run.
+PubSubDB's TypeScript SDK is the easiest way to make your functions durable. But if you need full control over your function lifecycles (including high-volume, high-speed use cases), you can use PubSubDB's underlying YAML models to optimize your durable workflows. The following model depicts a sequence of activities orchestrated by PubSubDB. Any function you associate with a `topic` in your YAML definition is guaranteed to be durable.
 
 ```yaml
 app:
@@ -181,7 +181,7 @@ const jobOutput = await pubSubDB.pubsub(topic, payload);
 >The `pubsub` method is a convenience function that merges pub and sub into a single call. Opt for PubSubDB's queue-driven engine over fragile HTTP requests to develop resilient solutions.
 
 ### Link Worker Functions
-Link worker functions to a topic of your choice. When a workflow activity in the YAML definition with a corresponding topic runs, PubSubDB will invoke your function.
+Link worker functions to a topic of your choice. When a workflow activity in the YAML definition with a corresponding topic runs, PubSubDB will invoke your function, retrying as configured until it succeeds.
 
 ```javascript
 import { PubSubDB } from '@pubsubdb/pubsubdb';
@@ -239,3 +239,6 @@ PubSubDB is a distributed orchestration engine. Refer to the [Distributed Orches
 
 ## System Lifecycle
 Gain insight into the PubSubDB's monitoring, exception handling, and alarm configurations via the [System Lifecycle Guide](./docs/system_lifecycle.md).
+
+## Alpha Release
+So what exacty is an [alpha release](./docs/alpha.md)?!

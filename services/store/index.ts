@@ -287,6 +287,19 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
     return this.isSuccessful(success);
   }
 
+  async getSymbolKeys(symbolNames: string[]): Promise<SymbolSets> {
+    const symbolLookups = [];
+    for (const symbolName of symbolNames) {
+      symbolLookups.push(this.getSymbols(symbolName));
+    }
+    const symbolSets = await Promise.all(symbolLookups);
+    const symKeys: SymbolSets = {};
+    for (const symbolName of symbolNames) {
+      symKeys[symbolName] = symbolSets.shift();
+    }
+    return symKeys;
+  }
+
   async getApp(id: string, refresh = false): Promise<PubSubDBApp> {
     let app: Partial<PubSubDBApp> = this.cache.getApp(id);
     if (refresh || !(app && Object.keys(app).length > 0)) {
@@ -438,17 +451,10 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
   async setState({ ...state }: StringAnyType, status: number | null, jobId: string, appId: string, symbolNames: string[], multi? : U): Promise<string> {
     delete state['metadata/js'];
     const hashKey = this.mintKey(KeyType.JOB_STATE, { appId, jobId });
-    const symbolLookups = [];
-    for (const symbolName of symbolNames) {
-      symbolLookups.push(this.getSymbols(symbolName));
-    }
-    const symbolSets = await Promise.all(symbolLookups);
-    const symKeys: SymbolSets = {};
-    for (const symbolName of symbolNames) {
-      symKeys[symbolName] = symbolSets.shift();
-    }
+    const symKeys = await this.getSymbolKeys(symbolNames);
     const symVals = await this.getSymbolValues();
     this.serializer.resetSymbols(symKeys, symVals);
+
     const hashData = this.serializer.package(state, symbolNames);
     if (status !== null) {
       hashData[':'] = status.toString();
@@ -459,19 +465,12 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
     return jobId;
   }
 
-  async getState(jobId: string, appId: string, consumes: Consumes): Promise<[StringAnyType, number] | undefined> {
+  async getState(jobId: string, consumes: Consumes): Promise<[StringAnyType, number] | undefined> {
     //todo: refactor into semantic submethods
-    const key = this.mintKey(KeyType.JOB_STATE, { appId, jobId });
+    const key = this.mintKey(KeyType.JOB_STATE, { appId: this.appId, jobId });
     const symbolNames = Object.keys(consumes);
-    const symbolLookups = [];
-    for (const symbolName of symbolNames) {
-      symbolLookups.push(this.getSymbols(symbolName));
-    }
-    const symbolSets = await Promise.all(symbolLookups);
-    const symKeys: SymbolSets = {};
-    for (const symbolName of symbolNames) {
-      symKeys[symbolName] = symbolSets.shift();
-    }
+    const symKeys = await this.getSymbolKeys(symbolNames);
+
     //always fetch the job status (':') when fetching state
     const fields = [':'];
     for (const symbolName of symbolNames) {
@@ -507,6 +506,20 @@ abstract class StoreService<T, U extends AbstractRedisClient> {
       }
       return [state, status];
     }
+  }
+
+  async collate(jobId: string, activityId: string, amount: number, multi? : U): Promise<number> {
+    const jobKey = this.mintKey(KeyType.JOB_STATE, { appId: this.appId, jobId });
+    const collationKey = `${activityId}/output/metadata/as`; //activity state
+    const symbolNames = [activityId];
+    const symKeys = await this.getSymbolKeys(symbolNames);
+    const symVals = await this.getSymbolValues();
+    this.serializer.resetSymbols(symKeys, symVals);
+
+    const payload = { [collationKey]: amount.toString() }
+    const hashData = this.serializer.package(payload, symbolNames);
+    const targetId = Object.keys(hashData)[0];
+    return await (multi || this.redisClient)[this.commands.hincrbyfloat](jobKey, targetId, amount);
   }
 
   async setStateNX(jobId: string, appId: string): Promise<boolean> {

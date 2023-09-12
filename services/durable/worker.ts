@@ -219,6 +219,8 @@ export class WorkerService {
         context.set('workflowId', workflowInput.workflowId);
         context.set('workflowTopic', workflowTopic);
         context.set('workflowName', workflowTopic.split('-').pop());
+        context.set('workflowTrace', data.metadata.trc);
+        context.set('workflowSpan', data.metadata.spn);
         const workflowResponse = await asyncLocalStorage.run(context, async () => {
           return await workflowFunction.apply(this, workflowInput.arguments);
         });

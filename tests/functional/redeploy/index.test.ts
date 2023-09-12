@@ -67,7 +67,7 @@ describe('FUNCTIONAL | Redeploy', () => {
   describe('Run Version', () => {
     it('should run and map activities in parallel', async () => {
       const payload = { seed: 2, speed: 3 };
-      const result = await pubSubDB.pubsub('spring', payload, 1500);
+      const result = await pubSubDB.pubsub('spring', payload, null, 1500);
       const data = result?.data as {
         seed: number;
         speed: number;
@@ -90,7 +90,7 @@ describe('FUNCTIONAL | Redeploy', () => {
   describe('Run Version', () => {
     it('should run and map activities in sequence', async () => {
       const payload = { seed: 5, speed: 7 };
-      const result = await pubSubDB.pubsub('spring', payload, 2_000);
+      const result = await pubSubDB.pubsub('spring', payload, null, 2_000);
       const data = result?.data as {
         seed: number;
         speed: number;
@@ -113,7 +113,7 @@ describe('FUNCTIONAL | Redeploy', () => {
   describe('Run Version', () => {
     it('should run and map activities in parallel and sequence', async () => {
       const payload = { seed: 4, speed: 9 };
-      const result = await pubSubDB.pubsub('spring', payload, 2_000);
+      const result = await pubSubDB.pubsub('spring', payload, null, 2_000);
       const data = result?.data as {
         seed: number;
         speed: number;
@@ -136,7 +136,7 @@ describe('FUNCTIONAL | Redeploy', () => {
   describe('Run Version', () => {
     it('should run one activity with multiple maps', async () => {
       const payload = { seed: 5, speed: 2 };
-      const result = await pubSubDB.pubsub('spring', payload, 2_000);
+      const result = await pubSubDB.pubsub('spring', payload, null, 2_000);
       const data = result?.data as {
         seed: number;
         speed: number;
@@ -159,7 +159,7 @@ describe('FUNCTIONAL | Redeploy', () => {
   describe('Run Version', () => {
     it('should run and map worker activities in parallel', async () => {
       const payload = { seed: 55, speed: 20 };
-      const result = await pubSubDB.pubsub('spring', payload, 2_000);
+      const result = await pubSubDB.pubsub('spring', payload, null, 2_000);
       const data = result?.data as {
         seed: number;
         speed: number;

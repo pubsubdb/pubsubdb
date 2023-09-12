@@ -20,6 +20,7 @@ import {
   IdsResponse,
   StatsResponse } from '../../types/stats';
 import { ConnectorService } from '../connector';
+import { StreamData, StreamDataResponse } from '../../types/stream';
 
 class PubSubDBService {
   namespace: string;
@@ -118,8 +119,11 @@ class PubSubDBService {
   async punsub(wild: string): Promise<void> {
     return await this.engine?.punsub(wild);
   }
-  async pubsub(topic: string, data: JobData = {}, timeout?: number): Promise<JobOutput> {
-    return await this.engine?.pubsub(topic, data, timeout);
+  async pubsub(topic: string, data: JobData = {}, context?: JobState | null, timeout?: number): Promise<JobOutput> {
+    return await this.engine?.pubsub(topic, data, context, timeout);
+  }
+  async add(streamData: StreamData|StreamDataResponse): Promise<string> {
+    return await this.engine.add(streamData) as string;
   }
 
   // ************* COMPILER METHODS *************

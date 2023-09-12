@@ -47,6 +47,18 @@ describe('FUNCTIONAL | Status Codes', () => {
             if (streamData.data.code == 202) {
               data.percentage = 50;
               status = StreamStatus.PENDING;
+
+              //send a second message on a delay;
+              // it's a 'success' message so it will
+              //close the channel
+              setTimeout(function() {
+                pubSubDB.add({
+                  code: 200,
+                  status: StreamStatus.SUCCESS,
+                  metadata: { ...streamData.metadata },
+                  data: { code: 200, percentage: 100 }
+                });
+              }, 250);
             } else if (streamData.data.code == 422) {
               data.message = 'invalid input';
               data.reason = REASON;
@@ -124,18 +136,23 @@ describe('FUNCTIONAL | Status Codes', () => {
       expect(data.code).toBe(payload.code);
       expect(data.message).toBe('success'); //static data in YAML file
     });
+  });
 
-    // it('catches worker 422 and returns a success message', async () => {
-    //   const payload = { code: 422 };
-    //   const result = await pubSubDB.pubsub('def.test', payload);
-    //   const data = result?.data as {
-    //     code: number;
-    //     message: string;
-    //     reason: string;
-    //   };
-    //   expect(data.code).toBe(payload.code);
-    //   expect(data.message).toBe('success'); //static data in YAML file
-    //   expect(data.reason).toBe(REASON);
-    // });
+  describe('Pending', () => {
+    it('should hot deploy version 3', async () => {
+      await pubSubDB.deploy('/app/tests/$setup/apps/def/v3/pubsubdb.yaml');
+      await pubSubDB.activate('3');
+    });
+
+    it('routes worker 202 and returns a success message', async () => {
+      const payload = { code: 202 };
+      const result = await pubSubDB.pubsub('def.test', payload);
+      const data = result?.data as {
+        code: number;
+        percentage: number;
+      };
+      expect(data.code).toBe(200);
+      expect(data.percentage).toBe(100);
+    });
   });
 });

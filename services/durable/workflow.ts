@@ -5,7 +5,7 @@ import { WorkerService } from './worker';
 import { ClientService as Client } from './client';
 import { ConnectionService as Connection } from './connection';
 import { ActivityConfig, ProxyType, WorkflowOptions } from "../../types/durable";
-import { JobOutput } from '../../types';
+import { JobOutput, JobState } from '../../types';
 
 /*
 `proxyActivities` returns a wrapped instance of the 
@@ -53,14 +53,19 @@ export class WorkflowService {
     if (!store) {
       throw new Error('durable-store-not-found');
     }
-    const workflowId = store.get('workflowId'); //workflowTopic also available
+    const workflowId = store.get('workflowId');
+    const workflowTrace = store.get('workflowTrace');
+    const workflowSpan = store.get('workflowSpan');
+
     const client = new Client({
       connection: await Connection.connect(WorkerService.connection),
     });
-    //todo: should I allow-cross/app callback (pj:'@DURABLE@hello-world@<pjid>'/pa: <paid>)
+    //todo: should I allow-cross/app callback (pj:'@DURABLE@hello-world@<pjid>'/pa: <paid>/pd: <pdad>)
     const handle = await client.workflow.start({
       ...options,
       workflowId: `${workflowId}${options.workflowId}`, //concat
+      workflowTrace,
+      workflowSpan,
     });
     const result = await handle.result();
     return result as T;
@@ -86,6 +91,8 @@ export class WorkflowService {
       }
       const workflowId = store.get('workflowId');
       const workflowTopic = store.get('workflowTopic');
+      const trc = store.get('workflowTrace');
+      const spn = store.get('workflowSpan');
       const activityTopic = `${workflowTopic}-activity`;
       const activityJobId = `${workflowId}-${activityName}`;
 
@@ -105,7 +112,8 @@ export class WorkflowService {
         };
         //start the job, since it doesn't exist
         const psdbInstance = await WorkerService.getPubSubDB(activityTopic);
-        const jobOutput = await psdbInstance.pubsub(activityTopic, payload, duration);
+        const context = { metadata: { trc, spn }, data: {}};
+        const jobOutput = await psdbInstance.pubsub(activityTopic, payload, context as JobState, duration);
         return jobOutput.data.response as T;
       }
     } as T;

@@ -147,7 +147,7 @@ describe('FUNCTIONAL | IORedisStoreService', () => {
           'metadata/jid',
         ]
       };
-      const response = await redisStoreService.getState(jobId, appId, consumes);
+      const response = await redisStoreService.getState(jobId, consumes);
       if (response) {
         const [resolvedJobState, resolvedJobStatus] = response;
         expect(resolvedJobState).toEqual(jobState);

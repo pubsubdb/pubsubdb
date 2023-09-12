@@ -486,8 +486,14 @@ class EngineService {
     return await this.subscribe.punsubscribe(KeyType.QUORUM, this.appId, wild);
   }
   //publish and await (returns the job and data (if ready)); throws error with jobid if not
-  async pubsub(topic: string, data: JobData, timeout = OTT_WAIT_TIME): Promise<JobOutput> {
-    const context = { metadata: { ngn: this.guid } } as JobState;
+  async pubsub(topic: string, data: JobData, context?: JobState | null, timeout = OTT_WAIT_TIME): Promise<JobOutput> {
+    context = {
+      metadata: {
+        ngn: this.guid,
+        trc: context?.metadata?.trc,
+        spn: context?.metadata?.spn
+      }
+    } as JobState;
     const jobId = await this.pub(topic, data, context);
     return new Promise((resolve, reject) => {
       this.registerJobCallback(jobId, (topic: string, output: JobOutput) => {
@@ -539,6 +545,10 @@ class EngineService {
       this.store.publish(KeyType.QUORUM, message, this.appId, `${topic}.${context.metadata.jid}`);
     }
   }
+  async add(streamData: StreamData|StreamDataResponse): Promise<string> {
+    return await this.streamSignaler.publishMessage(null, streamData) as string;
+  }
+
   registerJobCallback(jobId: string, jobCallback: JobMessageCallback) {
     this.jobCallbacks[jobId] = jobCallback;
   }
@@ -572,13 +582,16 @@ class EngineService {
     const { id: appId } = await this.getVID();
     return this.store.getStatus(jobId, appId);
   }
+  //todo: add 'options' parameter;
+  //      (e.g, if {dimensions:true}, use hscan to deliver
+  //      the full set of dimensional job data)
   async getState(topic: string, jobId: string): Promise<JobOutput> {
     const { id: appId } = await this.getVID();
     const jobSymbols = await this.store.getSymbols(`$${topic}`);
     const consumes: Consumes = {
       [`$${topic}`]: Object.keys(jobSymbols)
     }
-    const output = await this.store.getState(jobId, appId, consumes);
+    const output = await this.store.getState(jobId, consumes);
     if (!output) {
       throw new Error(`not found ${jobId}`);
     }

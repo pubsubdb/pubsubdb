@@ -3,6 +3,7 @@ export {
   ActivityDataType,
   ActivityContext,
   ActivityData,
+  ActivityDuplex,
   ActivityLeg,
   ActivityMetadata,
   Consumes,
@@ -21,7 +22,9 @@ export {
 } from './app';
 export { AsyncSignal } from './async';
 export { CacheMode } from './cache';
-export { CollationKey } from './collator';
+export {
+  CollationFaultType,
+  CollationStage } from './collator';
 export {
   HookCondition,
   HookConditions,

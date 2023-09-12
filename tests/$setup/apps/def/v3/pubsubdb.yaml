@@ -3,7 +3,7 @@ app:
   version: '3'
   graphs:
     - subscribes: def.test
-
+      expire: 120
       input:
         schema:
           type: object

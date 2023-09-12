@@ -3,6 +3,8 @@ import {
   formatISODate,
   getValueByPath,
   restoreHierarchy } from '../../modules/utils';
+import { CollatorService } from '../collator';
+import { DimensionService } from '../dimension';
 import { EngineService } from '../engine';
 import { ILogger } from '../logger';
 import { MapperService } from '../mapper';
@@ -45,6 +47,8 @@ class Activity {
   status: StreamStatus = StreamStatus.SUCCESS;
   code: StreamCode = 200;
   leg: ActivityLeg;
+  adjacencyList: StreamData[];
+  adjacentIndex = 0; //can be updated by leg2 using 'as' metadata hincrby output
 
   constructor(
     config: ActivityType,
@@ -69,11 +73,11 @@ class Activity {
     let telemetry: TelemetryService;
     try {
       this.setLeg(1);
+      await CollatorService.notarizeEntry(this);
+
       await this.getState();
       telemetry = new TelemetryService(this.engine.appId, this.config, this.metadata, this.context);
       telemetry.startActivitySpan(this.leg);
-
-      let adjacencyList: StreamData[];
       let multiResponse: MultiResponseFlags;
 
       const multi = this.store.getMulti();
@@ -82,20 +86,24 @@ class Activity {
         await this.registerHook(multi);
         this.mapJobData();
         await this.setState(multi);
+        await CollatorService.authorizeReentry(this, multi);
+
         await this.setStatus(0, multi);
         await multi.exec();
         telemetry.mapActivityAttributes();
       } else {
         //end the activity and transition to its children
-        adjacencyList = await this.filterAdjacent();
+        this.adjacencyList = await this.filterAdjacent();
         this.mapJobData();
         await this.setState(multi);
-        await this.setStatus(adjacencyList.length - 1, multi);
+        await CollatorService.notarizeEarlyCompletion(this, multi);
+
+        await this.setStatus(this.adjacencyList.length - 1, multi);
         multiResponse = await multi.exec() as MultiResponseFlags;
         telemetry.mapActivityAttributes();
         const jobStatus = this.resolveStatus(multiResponse);
         const attrs: StringScalarType = { 'app.job.jss': jobStatus };
-        const messageIds = await this.transition(adjacencyList, jobStatus);
+        const messageIds = await this.transition(this.adjacencyList, jobStatus);
         if (messageIds.length) {
           attrs['app.activity.mids'] = messageIds.join(',')
         }
@@ -161,27 +169,37 @@ class Activity {
     return await this.processHookEvent(jobId);
   }
 
+  //todo: hooks are currently singletons. but they can support
+  //      dimensional threads like `await` and `worker` do.
+  //      Copy code from those activities to support cyclical
+  //      timehook and eventhook inputs by adding a 'pending'
+  //      flag to hooks that allows for repeated signals
   async processHookEvent(jobId: string): Promise<JobStatus | void> {
     this.logger.debug('activity-process-hook-event', { jobId });
     let telemetry: TelemetryService;
     try {
       this.setLeg(2);
       await this.getState(jobId);
+      const aState = await CollatorService.notarizeReentry(this);
+      this.adjacentIndex = CollatorService.getDimensionalIndex(aState);
+
       telemetry = new TelemetryService(this.engine.appId, this.config, this.metadata, this.context);
       telemetry.startActivitySpan(this.leg);
       this.bindActivityData('hook');
       this.mapJobData();
-      const adjacencyList = await this.filterAdjacent();
+      this.adjacencyList = await this.filterAdjacent();
 
       const multi = this.engine.store.getMulti();
       await this.setState(multi);
-      await this.setStatus(adjacencyList.length - 1, multi);
+      await CollatorService.notarizeCompletion(this, multi);
+
+      await this.setStatus(this.adjacencyList.length - 1, multi);
       const multiResponse = await multi.exec() as MultiResponseFlags;
 
       telemetry.mapActivityAttributes();
       const jobStatus = this.resolveStatus(multiResponse);
       const attrs: StringScalarType = { 'app.job.jss': jobStatus };
-      const messageIds = await this.transition(adjacencyList, jobStatus);
+      const messageIds = await this.transition(this.adjacencyList, jobStatus);
       if (messageIds.length) {
         attrs['app.activity.mids'] = messageIds.join(',')
       }
@@ -250,6 +268,20 @@ class Activity {
     );
   }
 
+  authorizeEntry(state: StringAnyType): string[] {
+    //pre-authorize activity state to allow entry for adjacent activities
+    return this.adjacencyList?.map((streamData) => {
+      const { metadata: { aid } } = streamData;
+      state[`${aid}/output/metadata/as`] = CollatorService.getSeed();
+      return aid;
+    }) ?? [];
+  }
+
+  bindDimensionalAddress(state: StringAnyType) {
+    const { aid, dad } = this.metadata;
+    state[`${aid}/output/metadata/dad`] = dad;
+  }
+
   async setState(multi?: RedisMulti): Promise<string> {
     const { id: appId } = await this.engine.getVID();
     const jobId = this.context.metadata.jid;
@@ -257,8 +289,15 @@ class Activity {
     this.bindActivityMetadata();
     let state: StringAnyType = {};
     await this.bindJobState(state);
+    const presets = this.authorizeEntry(state);
+    this.bindDimensionalAddress(state);
     this.bindActivityState(state);
-    const symbolNames = [`$${this.config.subscribes}`, this.metadata.aid];
+    //symbolNames holds symkeys
+    const symbolNames = [
+      `$${this.config.subscribes}`,
+      this.metadata.aid,
+      ...presets
+    ];
     return await this.store.setState(state, this.getJobStatus(), jobId, appId, symbolNames, multi);
   }
 
@@ -324,7 +363,7 @@ class Activity {
   }
 
   async getState(jobId?: string) {
-    //assemble list of paths necessary to create 'job state'
+    //assemble list of paths necessary to create 'job state' from the 'symbol hash'
     const jobSymbolHashName = `$${this.config.subscribes}`;
     const consumes: Consumes = {
       [jobSymbolHashName]: MDATA_SYMBOLS.JOB.KEYS.map((key) => `metadata/${key}`)
@@ -347,14 +386,19 @@ class Activity {
       }
     }
     TelemetryService.addTargetTelemetryPaths(consumes, this.config, this.metadata, this.leg);
-    jobId = jobId || this.context.metadata.jid;
-    const { id: appId } = await this.engine.getVID();
+    const { dad, jid } = this.context.metadata;
+    jobId = jobId || jid;
     //`state` is a flat hash
-    const [state, status] = await this.store.getState(jobId, appId, consumes);
+    const [state, status] = await this.store.getState(jobId, consumes);
     //`context` is a tree
     this.context = restoreHierarchy(state) as JobState;
+    this.initDimensionalAddress(dad);
     this.initSelf(this.context);
     this.initPolicies(this.context);
+  }
+
+  initDimensionalAddress(dad: string): void {
+    this.metadata.dad = dad;
   }
 
   initSelf(context: StringAnyType): JobState {
@@ -389,22 +433,22 @@ class Activity {
     const adjacencyList: StreamData[] = [];
     const transitions = await this.store.getTransitions(await this.engine.getVID());
     const transition = transitions[`.${this.metadata.aid}`];
+    const adjacentSuffix = DimensionService.getSeed(this.adjacentIndex);
     if (transition) {
       for (const toActivityId in transition) {
         const transitionRule: boolean | TransitionRule = transition[toActivityId];
         if (MapperService.evaluate(transitionRule, this.context, this.code)) {
-          const streamData: StreamData = {
+          adjacencyList.push({
             metadata: {
               jid: this.context.metadata.jid,
-              dad: this.context['$self'].output.metadata?.dad,
+              dad: `${this.metadata.dad}${adjacentSuffix}`,
               aid: toActivityId,
               spn: this.context['$self'].output.metadata?.l2s,
               trc: this.context.metadata.trc,
             },
             type: StreamDataType.TRANSITION,
             data: {}
-          };
-          adjacencyList.push(streamData);
+          });
         }
       }
     }

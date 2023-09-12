@@ -47,14 +47,14 @@ class IORedisStoreService extends StoreService<RedisClientType, RedisMultiType> 
       try {
         return (await this.redisClient.xgroup(command, key, groupName, id, mkStream)) === 'OK';
       } catch (err) {
-        this.logger.warn(`Consumer group not created with MKSTREAM for key: ${key} and group: ${groupName}`);
+        this.logger.info(`Consumer group not created with MKSTREAM for key: ${key} and group: ${groupName}`);
         throw err;
       }
     } else {
       try {
         return (await this.redisClient.xgroup(command, key, groupName, id)) === 'OK';
       } catch (err) {
-        this.logger.warn(`Consumer group not created for key: ${key} and group: ${groupName}`);
+        this.logger.info(`Consumer group not created for key: ${key} and group: ${groupName}`);
         throw err;
       }
     }

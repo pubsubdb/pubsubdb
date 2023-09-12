@@ -71,7 +71,6 @@ describe('FUNCTIONAL | RedisStoreService', () => {
   describe('getSymbols', () => {
     it('should retrieve symbols for a given activity', async () => {
       const activityId = 'a2';
-      const appId = 'app2';
       const symbols: Symbols = {
         'a2/data/ghi': 'baa',
         'a2/data/jkl': 'bab',
@@ -85,7 +84,6 @@ describe('FUNCTIONAL | RedisStoreService', () => {
   describe('addSymbols', () => {
     it('should store symbols for a given activity', async () => {
       const activityId = 'a3';
-      const appId = 'app3';
       const symbols: Symbols = {
         'a3/data/mno': 'caa',
         'a3/data/pqr': 'cab',
@@ -147,7 +145,7 @@ describe('FUNCTIONAL | RedisStoreService', () => {
           'metadata/jid',
         ]
       };
-      const response = await redisStoreService.getState(jobId, appId, consumes);
+      const response = await redisStoreService.getState(jobId, consumes);
       if (response) {
         const [resolvedJobState, resolvedJobStatus] = response;
         expect(resolvedJobState).toEqual(jobState);

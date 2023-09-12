@@ -6,6 +6,7 @@ import * as activities from './src/activities';
 import { nanoid } from 'nanoid';
 import { WorkflowHandleService } from '../../../services/durable/handle';
 import { RedisConnection } from '../../../services/connector/clients/ioredis';
+import { StreamSignaler } from '../../../services/signaler/stream';
 
 
 const { Connection, Client, NativeConnection, Worker } = Durable;
@@ -26,7 +27,7 @@ describe('DURABLE | hello | `Workflow Sleepy Hello-World`', () => {
   });
 
   afterAll(async () => {
-    //close Redis connection
+    await StreamSignaler.stopConsuming();
     await RedisConnection.disconnectAll();
   });
 

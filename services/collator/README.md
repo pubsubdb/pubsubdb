@@ -1,6 +1,6 @@
 # Activity State Tracking
 
-This document explains how PubSubDB guarantees activity state management using a 15-digit integer. This mechanism is crucial for monitoring and controlling the activity's lifecycle across two legs (Leg1 and Leg2) and ensures that activities are never processed. The process further ensures that catastrophic, in-process failures will be automatically resolved with respect to idempotency, makig it possible to build 100% fault-tolerant workflows.
+This document explains how PubSubDB guarantees activity state management using a 15-digit integer. This mechanism is crucial for monitoring and controlling the activity's lifecycle across two legs (Leg1 and Leg2) and ensures that duplicate activities are never processed. The process further ensures that catastrophic, in-process failures will be automatically resolved with respect to idempotency, makig it possible to build 100% fault-tolerant workflows.
 
 ## Overview
 
@@ -99,4 +99,4 @@ Result:
 
 ## Conclusion
 
-This 15-digit integer allows sophisticated tracking of complex activities across two legs, with error handling and support for multiple dimensional threads.
+This 15-digit integer allows sophisticated tracking of complex activities across two legs, with error handling and support for cycles using multiple dimensional threads.

@@ -2,6 +2,7 @@ import { WorkflowHandleService } from "./handle";
 import { PubSubDBService as PubSubDB } from "../pubsubdb";
 import { ClientConfig, Connection, WorkflowOptions } from "../../types/durable";
 import { getWorkflowYAML } from "./factory";
+import { JobState } from "../../types/job";
 
 /*
 Here is an example of how the methods in this file are used:
@@ -77,13 +78,16 @@ export class ClientService {
     start: async (options: WorkflowOptions): Promise<WorkflowHandleService> => {
       const taskQueueName = options.taskQueue;
       const workflowName = options.workflowName;
+      const trc = options.workflowTrace;
+      const spn = options.workflowSpan;
       const workflowTopic = `${taskQueueName}-${workflowName}`;
       const pubSubDB = await this.getPubSubDB(workflowTopic);
       const payload = {
         arguments: [...options.args],
         workflowId: options.workflowId,
       }
-      const jobId = await pubSubDB.pub(workflowTopic, payload);
+      const context = { metadata: { trc, spn }, data: {}};
+      const jobId = await pubSubDB.pub(workflowTopic, payload, context as JobState);
       return new WorkflowHandleService(pubSubDB, workflowTopic, jobId);
     },
   };

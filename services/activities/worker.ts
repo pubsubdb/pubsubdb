@@ -35,7 +35,8 @@ class Worker extends Activity {
     let telemetry: TelemetryService;
     try {
       this.setLeg(1);
-      //TODO: UPDATE & ASSERT ACTIVITY STATE (LEG 1 ENTRY)
+      await CollatorService.notarizeEntry(this);
+
       await this.getState();
       telemetry = new TelemetryService(this.engine.appId, this.config, this.metadata, this.context);
       telemetry.startActivitySpan(this.leg);
@@ -43,6 +44,7 @@ class Worker extends Activity {
 
       const multi = this.store.getMulti();
       //await this.registerTimeout();
+      await CollatorService.authorizeReentry(this, multi);
       await this.setState(multi);
       await this.setStatus(0, multi);
       const multiResponse = await multi.exec() as MultiResponseFlags;
@@ -74,7 +76,7 @@ class Worker extends Activity {
     const streamData: StreamData = {
       metadata: {
         jid: this.context.metadata.jid,
-        dad: this.context['$self'].output.metadata.dad,
+        dad: this.metadata.dad,
         aid: this.metadata.aid,
         topic: this.config.subtype,
         spn: this.context['$self'].output.metadata.l1s,
@@ -101,8 +103,10 @@ class Worker extends Activity {
     this.logger.debug('worker-process-event', { topic: this.config.subtype, jid, aid, status, code });
     let telemetry: TelemetryService;
     try {
-      //TODO: UPDATE COUNTER & ASSERT STATE (LEG 2 ENTRY)
       await this.getState();
+      const aState = await CollatorService.notarizeReentry(this);
+      this.adjacentIndex = CollatorService.getDimensionalIndex(aState);
+
       telemetry = new TelemetryService(this.engine.appId, this.config, this.metadata, this.context);
       let isComplete = CollatorService.isActivityComplete(this.context.metadata.js);
       if (isComplete) {
@@ -118,7 +122,6 @@ class Worker extends Activity {
       } else {
         await this.processError(telemetry);
       }
-      //TODO: UPDATE COUNTER AND STATE (LEG 2 EXIT)
     } catch (error) {
       this.logger.error('worker-process-event-error', error);
       telemetry.setActivityError(error.message);
@@ -131,10 +134,12 @@ class Worker extends Activity {
 
   async processPending(telemetry: TelemetryService): Promise<void> {
     this.bindActivityData('output');
-    const adjacencyList = await this.filterAdjacent();
+    this.adjacencyList = await this.filterAdjacent();
     this.mapJobData();
     const multi = this.store.getMulti();
     await this.setState(multi);
+    await CollatorService.notarizeContinuation(this, multi);
+
     await this.setStatus(0, multi);
     const multiResponse = await multi.exec() as MultiResponseFlags;
     telemetry.mapActivityAttributes();
@@ -144,16 +149,18 @@ class Worker extends Activity {
 
   async processSuccess(telemetry: TelemetryService): Promise<void> {
     this.bindActivityData('output');
-    const adjacencyList = await this.filterAdjacent();
+    this.adjacencyList = await this.filterAdjacent();
     this.mapJobData();
     const multi = this.store.getMulti();
     await this.setState(multi);
-    await this.setStatus(adjacencyList.length - 1, multi);
+    await CollatorService.notarizeCompletion(this, multi);
+
+    await this.setStatus(this.adjacencyList.length - 1, multi);
     const multiResponse = await multi.exec() as MultiResponseFlags;
     telemetry.mapActivityAttributes();
     const jobStatus = this.resolveStatus(multiResponse);
     const attrs: StringScalarType = { 'app.job.jss': jobStatus };
-    const messageIds = await this.transition(adjacencyList, jobStatus);
+    const messageIds = await this.transition(this.adjacencyList, jobStatus);
     if (messageIds.length) {
       attrs['app.activity.mids'] = messageIds.join(',')
     }
@@ -162,15 +169,17 @@ class Worker extends Activity {
 
   async processError(telemetry: TelemetryService): Promise<void> {
     this.bindActivityError(this.data);
-    const adjacencyList = await this.filterAdjacent();
+    this.adjacencyList = await this.filterAdjacent();
     const multi = this.store.getMulti();
     await this.setState(multi);
-    await this.setStatus(adjacencyList.length - 1, multi);
+    await CollatorService.notarizeCompletion(this, multi);
+
+    await this.setStatus(this.adjacencyList.length - 1, multi);
     const multiResponse = await multi.exec() as MultiResponseFlags;
     telemetry.mapActivityAttributes();
     const jobStatus = this.resolveStatus(multiResponse);
     const attrs: StringScalarType = { 'app.job.jss': jobStatus };
-    const messageIds = await this.transition(adjacencyList, jobStatus);
+    const messageIds = await this.transition(this.adjacencyList, jobStatus);
     if (messageIds.length) {
       attrs['app.activity.mids'] = messageIds.join(',')
     }

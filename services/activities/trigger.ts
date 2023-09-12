@@ -2,6 +2,8 @@ import { nanoid } from 'nanoid';
 import { DuplicateJobError } from '../../modules/errors';
 import { formatISODate, getTimeSeries } from '../../modules/utils';
 import { Activity } from './activity';
+import { CollatorService } from '../collator';
+import { DimensionService } from '../dimension';
 import { EngineService } from '../engine';
 import { Pipe } from '../pipe';
 import { ReporterService } from '../reporter';
@@ -40,8 +42,8 @@ class Trigger extends Activity {
       telemetry.startActivitySpan(this.leg);
       this.mapJobData();
       await this.setStateNX();
-      const adjacencyList = await this.filterAdjacent();
-      await this.setStatus(adjacencyList.length);
+      this.adjacencyList = await this.filterAdjacent();
+      await this.setStatus(this.adjacencyList.length);
 
       const multi = this.store.getMulti();
       await this.setState(multi);
@@ -52,7 +54,7 @@ class Trigger extends Activity {
       const jobStatus = Number(this.context.metadata.js);
       telemetry.setJobAttributes({ 'app.job.jss': jobStatus });
       const attrs: StringScalarType = { 'app.job.jss': jobStatus };
-      const messageIds = await this.transition(adjacencyList, jobStatus);
+      const messageIds = await this.transition(this.adjacencyList, jobStatus);
       if (messageIds.length) {
         attrs['app.activity.mids'] = messageIds.join(',')
       }
@@ -97,12 +99,12 @@ class Trigger extends Activity {
 
     const utc = formatISODate(new Date());
     const { id, version } = await this.engine.getVID();
+    this.initDimensionalAddress(DimensionService.getSeed());
     const activityMetadata = {
       ...this.metadata,
       jid: jobId,
       key: jobKey,
-      dad: ',0',
-      as: '9999000000',
+      as: CollatorService.getTriggerSeed(),
     };
     this.context = {
       metadata: {
@@ -117,7 +119,7 @@ class Trigger extends Activity {
         trc: this.context.metadata.trc,
         spn: this.context.metadata.spn,
         jid: jobId,
-        dad: ',0',
+        dad: DimensionService.getSeed(), //top-level job implicitly uses `,0`
         key: jobKey,
         jc: utc,
         ju: utc,

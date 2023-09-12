@@ -4,9 +4,10 @@ import { RedisClient, RedisMulti } from '../../types/redis';
 import { HookInterface } from '../../types/hook';
 import { XSleepFor, sleepFor } from '../../modules/utils';
 
-//default resolution/fidelity when expiring and awakening
-//system granularity limit
-const FIDELITY_SECONDS = 15;
+//system timer granularity limit (task queues organize)
+const FIDELITY_SECONDS = 15; //note: this can be reduced using 'watch' or scout role
+//default resolution/fidelity when expiring
+const EXPIRATION_FIDELITY_SECONDS = 60;
 
 class TaskService {
   store: StoreService<RedisClient, RedisMulti>;
@@ -42,7 +43,7 @@ class TaskService {
     await this.store.addTaskQueues(keys);
   }
 
-  async registerJobForCleanup(jobId: string, inSeconds = FIDELITY_SECONDS): Promise<void> {
+  async registerJobForCleanup(jobId: string, inSeconds = EXPIRATION_FIDELITY_SECONDS): Promise<void> {
     if (inSeconds > -1) {
       await this.store.expireJob(jobId, inSeconds);
     }

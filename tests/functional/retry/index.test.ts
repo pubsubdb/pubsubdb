@@ -108,7 +108,7 @@ describe('FUNCTIONAL | Retry', () => {
         operation: 'add',
         values: JSON.stringify([1, 2, 3, 4, 5]),
       };
-      const jobResponse = await pubSubDB.pubsub('calculate', payload, 2500);
+      const jobResponse = await pubSubDB.pubsub('calculate', payload, null, 2500);
       expect(jobResponse?.metadata.jid).not.toBeNull();
       expect(jobResponse?.data.result).toBe(15);
     });
@@ -118,7 +118,7 @@ describe('FUNCTIONAL | Retry', () => {
         operation: 'subtract',
         values: JSON.stringify([5, 4, 3, 2, 1]),
       };
-      const jobResponse = await pubSubDB.pubsub('calculate', payload, 2500);
+      const jobResponse = await pubSubDB.pubsub('calculate', payload, null, 2500);
       expect(jobResponse?.metadata.jid).not.toBeNull();
       expect(jobResponse?.data.result).toBe(-5);
     });
@@ -128,7 +128,7 @@ describe('FUNCTIONAL | Retry', () => {
         operation: 'multiply',
         values: JSON.stringify([5, 4, 3, 2, 1]),
       };
-      const jobResponse = await pubSubDB.pubsub('calculate', payload, 2500);
+      const jobResponse = await pubSubDB.pubsub('calculate', payload, null, 2500);
       expect(jobResponse?.metadata.jid).not.toBeNull();
       expect(jobResponse?.data.result).toBe(120);
     });
@@ -150,7 +150,7 @@ describe('FUNCTIONAL | Retry', () => {
       };
       //force a timeout error (0); resolve by waiting and calling 'get'
       try {
-        await pubSubDB.pubsub('calculate', payload, 0);
+        await pubSubDB.pubsub('calculate', payload, null, 0);
       } catch (error) {
         //just because we got an error doesn't mean the job didn't keep running
         expect(error.message).toBe('timeout');
@@ -170,11 +170,11 @@ describe('FUNCTIONAL | Retry', () => {
         pubSubDB.pubsub('calculate', {
           operation: 'divide',
           values: JSON.stringify([200, 4, 5]),
-        }, 1500),
+        }, null, 1500),
         pubSubDB.pubsub('calculate', {
           operation: 'multiply',
           values: JSON.stringify([10, 10, 10]),
-        }, 1500),
+        }, null, 1500),
       ]);
       expect(divide?.data.result).toBe(10);
       expect(multiply?.data.result).toBe(1000);

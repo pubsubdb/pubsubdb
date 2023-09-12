@@ -79,14 +79,14 @@ describe('FUNCTIONAL | Quorum', () => {
         values: JSON.stringify([200, 4, 5]),
       };
       const [divide, b, c, d, multiply] = await Promise.all([
-        pubSubDB.pubsub('calculate', payload, 5000),
-        pubSubDB.pubsub('calculate', payload, 5000),
-        pubSubDB.pubsub('calculate', payload, 5000),
-        pubSubDB.pubsub('calculate', payload, 5000),
+        pubSubDB.pubsub('calculate', payload, null, 5000),
+        pubSubDB.pubsub('calculate', payload, null, 5000),
+        pubSubDB.pubsub('calculate', payload, null, 5000),
+        pubSubDB.pubsub('calculate', payload, null, 5000),
         pubSubDB.pubsub('calculate', {
           operation: 'multiply',
           values: JSON.stringify([10, 10, 10]),
-        }, 5000),
+        }, null, 7_500),
       ]);
       expect(divide?.data.result).toBe(10);
       expect(multiply?.data.result).toBe(1000);

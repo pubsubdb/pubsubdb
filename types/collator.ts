@@ -1,11 +1,9 @@
-export enum CollationKey {
-  Pending = 9,
-  Started = 8,
-  Errored = 7,
-  Completed = 6,
-  Paused = 5,
-  Released = 4,
-  Skipped = 3,
-  AwaitRightParentheses = 2,
-  AwaitLeftParentheses = 1
+export type CollationStage = 'enter' | 'exit' | 'confirm';
+
+export enum CollationFaultType {
+  MISSING = 'missing',      //`as` uninitialized; leg1 entry not allowed
+  DUPLICATE = 'duplicate',  //1st digit < 8
+  INACTIVE = 'inactive',    //3rd digit is 8
+  INVALID = 'invalid',      //unknown value (corrupt for unknown reasons)
+  FORBIDDEN = 'forbidden',  //leg 1 not completed; reentry (leg 2) not allowed
 }
