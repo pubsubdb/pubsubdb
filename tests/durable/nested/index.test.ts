@@ -27,9 +27,11 @@ describe('DURABLE | nested | `workflow.executeChild`', () => {
   });
 
   afterAll(async () => {
+    await Durable.Client.shutdown();
+    await Durable.Worker.shutdown();
     await StreamSignaler.stopConsuming();
     await RedisConnection.disconnectAll();
-  });
+  }, 10_000);
 
   describe('Connection', () => {
     describe('connect', () => {

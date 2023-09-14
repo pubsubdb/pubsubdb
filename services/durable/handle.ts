@@ -1,3 +1,4 @@
+import { JobOutput } from "../../types/job";
 import { PubSubDBService as PubSubDB } from "../pubsubdb";
 
 export class WorkflowHandleService {
@@ -22,14 +23,14 @@ export class WorkflowHandleService {
     return new Promise((resolve, reject) => {
       let isResolved = false;
       //common fulfill/unsubscribe
-      const complete = async () => {
+      const complete = async (response?: any) => {
         if (isResolved) return;
         isResolved = true;
         this.pubSubDB.unsub(topic);
-        resolve((await this.pubSubDB.getState(this.workflowTopic, this.workflowId)).data?.response);
+        resolve(response || (await this.pubSubDB.getState(this.workflowTopic, this.workflowId)).data?.response);
       };
-      this.pubSubDB.sub(topic, async () => {
-        await complete();
+      this.pubSubDB.sub(topic, async (topic: string, message: JobOutput) => {
+        await complete(message.data?.response);
       });
       setTimeout(async () => {
         status = await this.pubSubDB.getStatus(this.workflowId);
