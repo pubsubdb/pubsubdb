@@ -11,7 +11,7 @@ import { StreamSignaler } from '../../../services/signaler/stream';
 
 const { Connection, Client, NativeConnection, Worker } = Durable;
 
-describe('DURABLE | hello | `Workflow Sleepy Hello-World`', () => {
+describe('DURABLE | loopactivity | `Iterate Same Activity`', () => {
   let handle: WorkflowHandleService;
   const options = {
     host: config.REDIS_HOST,
@@ -61,7 +61,7 @@ describe('DURABLE | hello | `Workflow Sleepy Hello-World`', () => {
         //start the workflow (it will be executed by the worker...see below)
         handle = await client.workflow.start({
           args: ['PubSubDB'],
-          taskQueue: 'hello-world',
+          taskQueue: 'loop-world',
           workflowName: 'example',
           workflowId: 'workflow-' + nanoid(),
         });
@@ -82,7 +82,7 @@ describe('DURABLE | hello | `Workflow Sleepy Hello-World`', () => {
         const worker = await Worker.create({
           connection,
           namespace: 'default',
-          taskQueue: 'hello-world',
+          taskQueue: 'loop-world',
           workflowsPath: require.resolve('./src/workflows'),
           activities,
         });
@@ -96,7 +96,7 @@ describe('DURABLE | hello | `Workflow Sleepy Hello-World`', () => {
     describe('result', () => {
       it('should return the workflow execution result', async () => {
         const result = await handle.result();
-        expect(result).toEqual('Hello, PubSubDB!');
+        expect(result).toEqual(['Hello, 1!', 'Hello, 2!', 'Hello, 3!']);
       }, 10_000);
     });
   });

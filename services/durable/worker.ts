@@ -216,6 +216,8 @@ export class WorkerService {
         //incoming data payload has arguments and workflowId
         const workflowInput = data.data as unknown as WorkflowDataType;
         const context = new Map();
+        const counter = { counter: 0 };
+        context.set('counter', counter);
         context.set('workflowId', workflowInput.workflowId);
         context.set('workflowTopic', workflowTopic);
         context.set('workflowName', workflowTopic.split('-').pop());
@@ -240,6 +242,13 @@ export class WorkerService {
           data: { error: err }
         } as StreamDataResponse;
       }
+    }
+  }
+
+  static async shutdown(): Promise<void> {
+    for (const [key, value] of WorkerService.instances) {
+      const pubSubDB = await value;
+      await pubSubDB.stop();
     }
   }
 }

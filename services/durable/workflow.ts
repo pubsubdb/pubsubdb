@@ -89,20 +89,35 @@ export class WorkflowService {
       if (!store) {
         throw new Error('durable-store-not-found');
       }
+      const COUNTER = store.get('counter');
+      //increment by state (not value) to avoid race conditions
+      const execIndex = COUNTER.counter = COUNTER.counter + 1;
       const workflowId = store.get('workflowId');
       const workflowTopic = store.get('workflowTopic');
       const trc = store.get('workflowTrace');
       const spn = store.get('workflowSpan');
       const activityTopic = `${workflowTopic}-activity`;
-      const activityJobId = `${workflowId}-${activityName}`;
+      const activityJobId = `${workflowId}-${activityName}-${execIndex}`;
 
       let activityState: JobOutput
       try {
         const psdbInstance = await WorkerService.getPubSubDB(activityTopic);
         activityState = await psdbInstance.getState(activityTopic, activityJobId);
-        return activityState.data as T;
+        if (activityState.metadata.js == 1) {
+          //return immediately
+          return activityState.data?.response as T;
+        }
+        //one time subscription
+        return await new Promise((resolve, reject) => {
+          psdbInstance.sub(activityTopic, async (topic, message) => {
+            const response = message.data?.response;
+            psdbInstance.unsub(activityTopic);
+            // Resolve the Promise when the callback is triggered with a message
+            resolve(response);
+          });
+        });
       } catch (e) {
-        //todo: this error is expected; thrown when the job cannot be found
+        //expected; thrown by `getState` when the job cannot be found
         const duration = ms(options?.startToCloseTimeout || '1 minute');
         const payload = {
           arguments: Array.from(arguments),
@@ -110,7 +125,7 @@ export class WorkflowService {
           workflowTopic,
           activityName,
         };
-        //start the job, since it doesn't exist
+        //start the job
         const psdbInstance = await WorkerService.getPubSubDB(activityTopic);
         const context = { metadata: { trc, spn }, data: {}};
         const jobOutput = await psdbInstance.pubsub(activityTopic, payload, context as JobState, duration);

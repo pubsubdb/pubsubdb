@@ -106,4 +106,11 @@ export class ClientService {
       }
     }
   }
+
+  static async shutdown(): Promise<void> {
+    for (const [key, value] of ClientService.instances) {
+      const pubSubDB = await value;
+      await pubSubDB.stop();
+    }
+  }
 }
